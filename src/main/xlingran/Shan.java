@@ -12,6 +12,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
 
     private final Map<String, String> chatFormats = new HashMap<>();
     private final Map<String, String> variableColors = new HashMap<>();
+    private final Map<String, String> playerTitles = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -32,6 +34,8 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         loadChatFormats();
         // 从配置文件读取变量颜色配置
         loadVariableColors();
+        // 从配置文件读取玩家称号配置
+        loadPlayerTitles();
 
         // 注册事件监听器
         getServer().getPluginManager().registerEvents(this, this);
@@ -117,6 +121,9 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
 
         // 重新加载变量颜色配置
         loadVariableColors();
+        
+        // 重新加载玩家称号配置
+        loadPlayerTitles();
     }
 
     private void loadChatFormats() {
@@ -150,9 +157,24 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         }
     }
 
+    private void loadPlayerTitles() {
+        playerTitles.clear();
+
+        ConfigurationSection titleSection = getConfig().getConfigurationSection("PlayerTitle");
+        if (titleSection != null) {
+            for (String id : titleSection.getKeys(false)) {
+                String title = titleSection.getString(id);
+                if (title != null && !title.isEmpty()) {
+                    playerTitles.put(id, title);
+                }
+            }
+        }
+    }
+
     @EventHandler
     public void onPlayerChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
+        String matchedFormat = null;
 
         // 遍历所有聊天格式，找到玩家有权限的第一个格式
         for (Map.Entry<String, String> entry : chatFormats.entrySet()) {
@@ -160,25 +182,38 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             String permission = "xlr.chat." + entry.getKey();
 
             if (player.hasPermission(permission)) {
-                String format = entry.getValue();
-
-                // 先替换玩家名称
-                format = format.replace("%player%", player.getDisplayName());
-
-                // 处理自定义变量和消息
-                String result = processFormat(format, event.getMessage());
-
-                // 取消默认聊天事件
-                event.setCancelled(true);
-                
-                // 直接广播格式化后的消息
-                // Spigot 1.16+ 原生支持 16 进制颜色，ChatColor.of() 返回的对象可以直接使用
-                // 只需要转换 & 颜色代码即可
-                String finalMessage = ChatColor.translateAlternateColorCodes('&', result);
-                Bukkit.broadcastMessage(finalMessage);
-                
-                return; // 找到匹配的格式后直接返回
+                matchedFormat = entry.getValue();
+                break; // 找到匹配的格式后立即退出
             }
+        }
+
+        // 如果没有找到任何匹配的格式，使用 default 格式（如果存在）
+        if (matchedFormat == null && chatFormats.containsKey("default")) {
+            matchedFormat = chatFormats.get("default");
+        }
+
+        // 如果找到了格式，处理并广播消息
+        if (matchedFormat != null) {
+            String format = matchedFormat;
+
+            // 先替换玩家称号（%ChatPrefix%）
+            String playerTitle = getPlayerTitle(player);
+            format = format.replace("%ChatPrefix%", playerTitle);
+
+            // 再替换玩家名称
+            format = format.replace("%player%", player.getDisplayName());
+
+            // 处理自定义变量和消息
+            String result = processFormat(format, event.getMessage());
+
+            // 取消默认聊天事件
+            event.setCancelled(true);
+            
+            // 直接广播格式化后的消息
+            // Spigot 1.16+ 原生支持 16 进制颜色，ChatColor.of() 返回的对象可以直接使用
+            // 只需要转换 & 颜色代码即可
+            String finalMessage = ChatColor.translateAlternateColorCodes('&', result);
+            Bukkit.broadcastMessage(finalMessage);
         }
     }
 
@@ -292,5 +327,35 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         int g = Integer.parseInt(hex.substring(2, 4), 16);
         int b = Integer.parseInt(hex.substring(4, 6), 16);
         return new java.awt.Color(r, g, b);
+    }
+
+    private String getPlayerTitle(Player player) {
+        // 从最高 ID 开始检查，找到玩家拥有的最高权限称号
+        // 将 ID 按数字大小降序排序
+        List<String> sortedIds = new ArrayList<>(playerTitles.keySet());
+        sortedIds.sort((a, b) -> {
+            try {
+                return Integer.compare(Integer.parseInt(b), Integer.parseInt(a));
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        });
+
+        // 遍历排序后的 ID，找到玩家拥有的第一个称号
+        for (String id : sortedIds) {
+            String permission = "xlr.chat.playertitle." + id;
+            if (player.hasPermission(permission)) {
+                String title = playerTitles.get(id);
+                return ChatColor.translateAlternateColorCodes('&', title);
+            }
+        }
+
+        // 默认称号（ID 1）
+        String defaultTitle = playerTitles.get("1");
+        if (defaultTitle != null) {
+            return ChatColor.translateAlternateColorCodes('&', defaultTitle);
+        }
+        
+        return "";
     }
 }
