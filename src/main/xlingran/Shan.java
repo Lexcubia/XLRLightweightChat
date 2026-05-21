@@ -345,6 +345,40 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
     }
 
     @EventHandler
+    public void onPlayerJoin(org.bukkit.event.player.PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        // 初始化玩家的当前称号（使用 getPlayerTitle 获取默认称号）
+        String defaultTitleId = getDefaultTitleId(player);
+        if (defaultTitleId != null) {
+            playerCurrentTitle.put(player.getUniqueId().toString(), defaultTitleId);
+        }
+    }
+    
+    /**
+     * 获取玩家的默认称号 ID（最低权限的称号）
+     */
+    private String getDefaultTitleId(Player player) {
+        // 从最低 ID 开始检查，找到玩家拥有的第一个称号
+        List<String> sortedIds = new ArrayList<>(playerTitles.keySet());
+        sortedIds.sort((a, b) -> {
+            try {
+                return Integer.compare(Integer.parseInt(a), Integer.parseInt(b));
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        });
+        
+        for (String id : sortedIds) {
+            String permission = "xlr.chat.playertitle." + id;
+            if (player.hasPermission(permission)) {
+                return id;
+            }
+        }
+        
+        return null;
+    }
+    
+    @EventHandler
     public void onPlayerChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
         String matchedFormat = null;
