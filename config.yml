@@ -18,11 +18,12 @@ Variable:
 # 需要权限 xlr.chat.playertitle.1
 # 称号，格式 ID: "称号"
 # ID会从高往下检测权限
+# 最高可以拥有56称号，最少得有一个默认
 PlayerTitle:
-  1: "&7[居民]"
+  1: "%color2%[居民]"
   2: "&c[管理员]"
   3: "&6[VIP]"
-  4: "&c[SVIP]"
+  4: "%color3%[SVIP]"
 
 # 输入命令，命令输出提示
 Command:
@@ -35,6 +36,5 @@ Command:
 Message:
   # 没有权限时输出提示
   NoPermission: "&c你没有权限执行此命令"
-  #
+  # 输入未知子命令时输出提示
   UnknownSubCmd: "&c未知的子命令"
-  NoArgs: "&e用法: /xlrchat reload"
