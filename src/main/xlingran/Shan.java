@@ -110,7 +110,9 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             for (String variable : variableSection.getKeys(false)) {
                 String colorConfig = variableSection.getString(variable);
                 if (colorConfig != null && !colorConfig.isEmpty()) {
-                    variableColors.put(variable, colorConfig);
+                    // 自动添加 % 包裹，使 color1 变成 %color1%
+                    String formattedVariable = "%" + variable + "%";
+                    variableColors.put(formattedVariable, colorConfig);
                 }
             }
         }
