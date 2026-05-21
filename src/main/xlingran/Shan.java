@@ -107,14 +107,20 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
 
         ConfigurationSection variableSection = getConfig().getConfigurationSection("Variable");
         if (variableSection != null) {
+            Bukkit.getConsoleSender().sendMessage("§e[DEBUG] 找到 Variable 配置段");
             for (String variable : variableSection.getKeys(false)) {
                 String colorConfig = variableSection.getString(variable);
                 if (colorConfig != null && !colorConfig.isEmpty()) {
                     // 自动添加 % 包裹，使 color1 变成 %color1%
                     String formattedVariable = "%" + variable + "%";
                     variableColors.put(formattedVariable, colorConfig);
+                    Bukkit.getConsoleSender().sendMessage("§e[DEBUG] 已加载: " + formattedVariable + " -> " + colorConfig);
                 }
             }
+            Bukkit.getConsoleSender().sendMessage("§e[DEBUG] 总共加载了 " + variableColors.size() + " 个变量颜色");
+            Bukkit.getConsoleSender().sendMessage("§e[DEBUG] 所有变量键名: " + variableColors.keySet());
+        } else {
+            Bukkit.getConsoleSender().sendMessage("§c[DEBUG] 没有找到 Variable 配置段！");
         }
     }
 
@@ -175,32 +181,44 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         // 查找%message%之前的颜色变量
         // 例如：%messageop%%message%中的%messageop%
         int messageIndex = format.indexOf("%message%");
+        Bukkit.getConsoleSender().sendMessage("§e[DEBUG] 格式: " + format);
+        Bukkit.getConsoleSender().sendMessage("§e[DEBUG] %message% 位置: " + messageIndex);
 
         if (messageIndex == -1) {
+            Bukkit.getConsoleSender().sendMessage("§c[DEBUG] 没有找到 %message%");
             return null;
         }
 
         // 查找%message%之前的最后一个%...%
         String beforeMessage = format.substring(0, messageIndex);
+        Bukkit.getConsoleSender().sendMessage("§e[DEBUG] %message% 前的内容: " + beforeMessage);
 
         // 查找最后一个完整的变量
         int lastPercent = beforeMessage.lastIndexOf("%");
+        Bukkit.getConsoleSender().sendMessage("§e[DEBUG] 最后一个 % 的位置: " + lastPercent);
 
         if (lastPercent != -1) {
             int nextPercent = beforeMessage.indexOf("%", lastPercent + 1);
+            Bukkit.getConsoleSender().sendMessage("§e[DEBUG] 下一个 % 的位置: " + nextPercent);
 
             if (nextPercent != -1) {
                 String variable = beforeMessage.substring(lastPercent, nextPercent + 1);
+                Bukkit.getConsoleSender().sendMessage("§e[DEBUG] 提取的变量: " + variable);
+                Bukkit.getConsoleSender().sendMessage("§e[DEBUG] variableColors 键名: " + variableColors.keySet());
 
                 // 检查是否是颜色变量（在Variable中定义且不是%player%或%message%）
                 if (variableColors.containsKey(variable) &&
                     !variable.equals("%player%") &&
                     !variable.equals("%message%")) {
+                    Bukkit.getConsoleSender().sendMessage("§a[DEBUG] 成功找到颜色变量: " + variable);
                     return variable;
+                } else {
+                    Bukkit.getConsoleSender().sendMessage("§c[DEBUG] 变量不在 variableColors 中，或为 %player%/%message%");
                 }
             }
         }
 
+        Bukkit.getConsoleSender().sendMessage("§c[DEBUG] 没有找到颜色变量");
         return null;
     }
 
