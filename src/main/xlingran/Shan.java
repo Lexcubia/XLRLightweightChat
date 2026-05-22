@@ -699,7 +699,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             if (colorConfig != null && itemComponents != null && itemPosition >= 0) {
                 // 有渐变颜色且有物品：分别处理物品前后的文本，保持渐变连续性
                 String beforeItem = message.substring(0, itemPosition);
-                String afterItem = message.substring(itemPosition + "__ITEM_PLACEHOLDER__".length());
+                String afterItem = message.substring(itemPosition + 20); // "__ITEM_PLACEHOLDER__".length() = 20
                 
                 // 计算总可见字符数（不包括物品）
                 int totalVisibleChars = beforeItem.length() + afterItem.length();
@@ -750,7 +750,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                 if (itemComponents != null) {
                     // 有物品但没有渐变颜色
                     String beforeItem = message.substring(0, itemPosition);
-                    String afterItem = message.substring(itemPosition + "__ITEM_PLACEHOLDER__".length());
+                    String afterItem = message.substring(itemPosition + 20); // "__ITEM_PLACEHOLDER__".length() = 20
                     
                     // 使用 BaseComponent 拼接
                     List<BaseComponent> componentList = new ArrayList<>();
@@ -915,11 +915,30 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
             
-            // 跳过颜色代码
+            // 跳过 § 颜色代码
             if (c == '§' && i + 1 < text.length()) {
                 result.append(c).append(text.charAt(i + 1));
                 i++;
                 continue;
+            }
+            
+            // 跳过 & 颜色代码
+            if (c == '&' && i + 1 < text.length()) {
+                char nextChar = text.charAt(i + 1);
+                // 检查是否是有效的颜色代码（0-9, a-f, k-o, r）
+                if ((nextChar >= '0' && nextChar <= '9') || 
+                    (nextChar >= 'a' && nextChar <= 'f') ||
+                    (nextChar >= 'A' && nextChar <= 'F') ||
+                    nextChar == 'r' || nextChar == 'R' ||
+                    nextChar == 'k' || nextChar == 'K' ||
+                    nextChar == 'l' || nextChar == 'L' ||
+                    nextChar == 'm' || nextChar == 'M' ||
+                    nextChar == 'n' || nextChar == 'N' ||
+                    nextChar == 'o' || nextChar == 'O') {
+                    result.append(c).append(nextChar);
+                    i++;
+                    continue;
+                }
             }
             
             // 计算在整个消息中的全局位置

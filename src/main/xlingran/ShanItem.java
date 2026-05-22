@@ -469,14 +469,18 @@ public class ShanItem {
             return new BaseComponent[]{new TextComponent("§r[空手]§r")};
         }
         
-        // 获取物品显示名称
+        // 获取物品显示名称（已经是 § 格式）
         String displayName = getItemDisplayName(item);
         
         // 创建悬浮提示的 JSON 内容
         BaseComponent[] hoverComponents = createItemTooltipComponents(item);
         
         // 创建文本组件 - 将 & 格式的颜色代码转换为 § 格式
-        TextComponent itemComponent = new TextComponent(ChatColor.translateAlternateColorCodes('&', displayName));
+        // 注意：TextComponent 的构造函数会直接解析 § 颜色代码
+        String coloredDisplayName = ChatColor.translateAlternateColorCodes('&', displayName);
+        
+        // 在开头添加 §r 重置符，清除前面的样式影响
+        TextComponent itemComponent = new TextComponent("§r" + coloredDisplayName + "§r");
         
         // 设置悬浮事件 - 使用 SHOW_TEXT 显示完整的物品信息
         itemComponent.setHoverEvent(new HoverEvent(
@@ -522,12 +526,12 @@ public class ShanItem {
         }
         
         // 标题行：物品名称
-        TextComponent nameComponent = new TextComponent(displayName);
+        TextComponent nameComponent = new TextComponent(displayName + "\n");
         nameComponent.setItalic(true); // 斜体
         tooltip.add(nameComponent);
         
         // 添加空行
-        tooltip.add(new TextComponent(""));
+        tooltip.add(new TextComponent("\n"));
         
         // 添加 Lore（描述）- 按照第二张图的格式
         if (meta != null && meta.hasLore()) {
@@ -536,7 +540,7 @@ public class ShanItem {
                 // 显示 "描述: " + Lore 内容
                 for (String loreLine : lore) {
                     String coloredLore = ChatColor.translateAlternateColorCodes('&', loreLine);
-                    TextComponent loreComponent = new TextComponent(coloredLore);
+                    TextComponent loreComponent = new TextComponent(coloredLore + "\n");
                     loreComponent.setItalic(false); // 不斜体，直接显示
                     tooltip.add(loreComponent);
                 }
@@ -547,13 +551,13 @@ public class ShanItem {
         if (meta != null && meta.hasEnchants()) {
             // 在 Lore 和附魔之间添加空行
             if (meta.hasLore()) {
-                tooltip.add(new TextComponent(""));
+                tooltip.add(new TextComponent("\n"));
             }
             
             for (Map.Entry<Enchantment, Integer> enchant : meta.getEnchants().entrySet()) {
                 String enchantName = getEnchantmentChineseName(enchant.getKey());
                 String level = getRomanNumber(enchant.getValue());
-                String enchantLine = "§7" + enchantName + " " + level;
+                String enchantLine = "§7" + enchantName + " " + level + "\n";
                 tooltip.add(new TextComponent(enchantLine));
             }
         }
@@ -574,10 +578,10 @@ public class ShanItem {
             
             if (!extraInfo.isEmpty()) {
                 // 添加空行
-                tooltip.add(new TextComponent(""));
+                tooltip.add(new TextComponent("\n"));
                 
                 for (String info : extraInfo) {
-                    tooltip.add(new TextComponent(info));
+                    tooltip.add(new TextComponent(info + "\n"));
                 }
             }
         }
