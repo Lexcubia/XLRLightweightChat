@@ -75,12 +75,6 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                 return true;
             }
 
-            // 检查参数
-            if (args.length == 0) {
-                sender.sendMessage(ChatColor.YELLOW + "用法: /xlrchat reload/cp");
-                return true;
-            }
-
             // 处理 cp 子命令（称号仓库）
             if (args[0].equalsIgnoreCase("cp")) {
                 if (!(sender instanceof Player)) {
@@ -347,22 +341,22 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
     @EventHandler
     public void onPlayerJoin(org.bukkit.event.player.PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        // 初始化玩家的当前称号（使用 getPlayerTitle 获取默认称号）
-        String defaultTitleId = getDefaultTitleId(player);
+        // 初始化玩家的当前称号（使用与 getPlayerTitle 相同的逻辑，获取最高等级称号）
+        String defaultTitleId = getHighestTitleId(player);
         if (defaultTitleId != null) {
             playerCurrentTitle.put(player.getUniqueId().toString(), defaultTitleId);
         }
     }
     
     /**
-     * 获取玩家的默认称号 ID（最低权限的称号）
+     * 获取玩家的最高等级称号 ID（与 getPlayerTitle 逻辑一致）
      */
-    private String getDefaultTitleId(Player player) {
-        // 从最低 ID 开始检查，找到玩家拥有的第一个称号
+    private String getHighestTitleId(Player player) {
+        // 从最高 ID 开始检查，找到玩家拥有的第一个称号
         List<String> sortedIds = new ArrayList<>(playerTitles.keySet());
         sortedIds.sort((a, b) -> {
             try {
-                return Integer.compare(Integer.parseInt(a), Integer.parseInt(b));
+                return Integer.compare(Integer.parseInt(b), Integer.parseInt(a)); // 降序排序
             } catch (NumberFormatException e) {
                 return 0;
             }
@@ -383,14 +377,10 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         Player player = event.getPlayer();
         String matchedFormat = null;
 
-        // 从下往上遍历所有聊天格式，找到玩家有权限的第一个格式
-        // 将 LinkedHashMap 转换为 ArrayList 以支持逆序遍历
-        List<Map.Entry<String, String>> formatList = new ArrayList<>(chatFormats.entrySet());
-        
-        // 逆序遍历（从配置文件的底部开始）
-        for (int i = formatList.size() - 1; i >= 0; i--) {
-            Map.Entry<String, String> entry = formatList.get(i);
-            // 权限格式：xlr.chat.配置文件中的键名（如 xlr.chat.svip）
+        // 从上往下遍历所有聊天格式，找到玩家有权限的第一个格式
+        // LinkedHashMap 保持插入顺序，直接遍历即可（从配置文件顶部开始）
+        for (Map.Entry<String, String> entry : chatFormats.entrySet()) {
+            // 权限格式：xlr.chat.配置文件中的键名（如 xlr.chat.default）
             String permission = "xlr.chat." + entry.getKey();
 
             if (player.hasPermission(permission)) {
@@ -529,6 +519,9 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
 
         StringBuilder result = new StringBuilder();
         int length = text.length();
+        
+        // 设置最小渐变长度，确保短文本也能看到明显的渐变效果
+        int minGradientLength = Math.max(length, 8); // 至少8个字符完成一次渐变
 
         // 解析起始和结束颜色
         java.awt.Color startColor = parseHexColor(startHex);
@@ -536,7 +529,12 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
 
         // 为每个字符应用渐变色
         for (int i = 0; i < length; i++) {
-            float ratio = (float) i / (length - 1);
+            // 使用 minGradientLength 计算渐变比例，而不是实际文本长度
+            // 这样即使文本很短，也能看到明显的颜色变化
+            float ratio = (float) i / (minGradientLength - 1);
+            // 确保 ratio 不超过 1.0
+            if (ratio > 1.0f) ratio = 1.0f;
+            
             int r = (int) (startColor.getRed() + (endColor.getRed() - startColor.getRed()) * ratio);
             int g = (int) (startColor.getGreen() + (endColor.getGreen() - startColor.getGreen()) * ratio);
             int b = (int) (startColor.getBlue() + (endColor.getBlue() - startColor.getBlue()) * ratio);
