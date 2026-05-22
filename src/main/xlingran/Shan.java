@@ -1181,6 +1181,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
 
     /**
      * 处理字符串中的颜色变量（如 %color1%、%color2%）
+     * 称号等短文本使用起始颜色，与 GUI 保持一致
      */
     private String processColorVariables(String text) {
         if (text == null || text.isEmpty()) {
@@ -1194,22 +1195,17 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
 
             // 如果文本中包含该变量
             if (text.contains(variable)) {
-                // 如果是渐变色
+                // 如果是渐变色 - 称号等短文本使用起始颜色，与 GUI 保持一致
                 if (colorConfig.contains("-")) {
                     String[] colors = colorConfig.split("-");
                     if (colors.length >= 2) {
                         String startColor = colors[0].replace("#", "");
-                        String endColor = colors[1].replace("#", "");
                         
-                        // 找到变量的位置
-                        int varIndex = text.indexOf(variable);
-                        String beforeVar = text.substring(0, varIndex); // 变量前的内容
-                        String afterVar = text.substring(varIndex + variable.length()); // 变量后的内容（需要渐变的部分）
-                        
-                        // 对变量后的文本应用渐变效果
-                        String gradientText = applyGradient(afterVar, startColor, endColor);
-                        // 重新组合：前面的内容 + 渐变后的文本
-                        text = beforeVar + gradientText;
+                        // 称号等短文本使用起始颜色，不应用逐字符渐变
+                        int r = Integer.parseInt(startColor.substring(0, 2), 16);
+                        int g = Integer.parseInt(startColor.substring(2, 4), 16);
+                        int b = Integer.parseInt(startColor.substring(4, 6), 16);
+                        text = text.replace(variable, toHexString(r, g, b));
                     }
                 }
                 // 如果是单一颜色
