@@ -1016,13 +1016,29 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         int charIndex = 0; // 实际可见字符的索引
         int visibleLength = 0; // 可见字符总数（不包括颜色代码）
         
-        // 先计算可见字符总数（不包括 § 颜色代码）
+        // 先计算可见字符总数（不包括 § 和 & 颜色代码）
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
+            // 跳过 § 颜色代码
             if (c == '§' && i + 1 < text.length()) {
-                // 跳过颜色代码（§ + 1个字符）
                 i++;
                 continue;
+            }
+            // 跳过 & 颜色代码
+            if (c == '&' && i + 1 < text.length()) {
+                char nextChar = text.charAt(i + 1);
+                if ((nextChar >= '0' && nextChar <= '9') || 
+                    (nextChar >= 'a' && nextChar <= 'f') ||
+                    (nextChar >= 'A' && nextChar <= 'F') ||
+                    nextChar == 'r' || nextChar == 'R' ||
+                    nextChar == 'k' || nextChar == 'K' ||
+                    nextChar == 'l' || nextChar == 'L' ||
+                    nextChar == 'm' || nextChar == 'M' ||
+                    nextChar == 'n' || nextChar == 'N' ||
+                    nextChar == 'o' || nextChar == 'O') {
+                    i++;
+                    continue;
+                }
             }
             visibleLength++;
         }
@@ -1036,11 +1052,31 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
             
+            // 跳过 § 颜色代码
             if (c == '§' && i + 1 < text.length()) {
                 // 保留原有颜色代码，不添加渐变
                 result.append(c).append(text.charAt(i + 1));
                 i++; // 跳过下一个字符
                 continue;
+            }
+            
+            // 跳过 & 颜色代码
+            if (c == '&' && i + 1 < text.length()) {
+                char nextChar = text.charAt(i + 1);
+                if ((nextChar >= '0' && nextChar <= '9') || 
+                    (nextChar >= 'a' && nextChar <= 'f') ||
+                    (nextChar >= 'A' && nextChar <= 'F') ||
+                    nextChar == 'r' || nextChar == 'R' ||
+                    nextChar == 'k' || nextChar == 'K' ||
+                    nextChar == 'l' || nextChar == 'L' ||
+                    nextChar == 'm' || nextChar == 'M' ||
+                    nextChar == 'n' || nextChar == 'N' ||
+                    nextChar == 'o' || nextChar == 'O') {
+                    // 保留原有颜色代码，不添加渐变
+                    result.append(c).append(nextChar);
+                    i++; // 跳过下一个字符
+                    continue;
+                }
             }
             
             // 为可见字符应用渐变
