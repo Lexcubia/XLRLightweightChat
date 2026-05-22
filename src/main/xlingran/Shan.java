@@ -50,7 +50,10 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         getServer().getPluginManager().registerEvents(this, this);
 
         // 注册命令执行器
-        getCommand("xlrchat").setExecutor(this);
+        var command = getCommand("xlrchat");
+        if (command != null) {
+            command.setExecutor(this);
+        }
 
         Bukkit.getConsoleSender().sendMessage("§a[XLRLightweightChat] 插件已启用!");
     }
@@ -77,11 +80,10 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
 
             // 处理 cp 子命令（称号仓库）
             if (args[0].equalsIgnoreCase("cp")) {
-                if (!(sender instanceof Player)) {
+                if (!(sender instanceof Player player)) {
                     sender.sendMessage(ChatColor.RED + "此命令只能由玩家执行!");
                     return true;
                 }
-                Player player = (Player) sender;
                 openTitleShopPage1(player);
                 return true;
             }
@@ -92,7 +94,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                 
                 // 从配置读取 reload 输出消息
                 List<String> reloadMessages = getConfig().getStringList("Command.reload");
-                if (reloadMessages != null && !reloadMessages.isEmpty()) {
+                if (!reloadMessages.isEmpty()) {
                     for (String msg : reloadMessages) {
                         // 替换占位符
                         String formattedMsg = msg.replace("%chat_format%", String.valueOf(chatFormats.size()))
@@ -105,7 +107,6 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                     sender.sendMessage(ChatColor.AQUA + "已加载 " + chatFormats.size() + " 个聊天格式");
                     sender.sendMessage(ChatColor.AQUA + "已加载 " + variableColors.size() + " 个变量颜色配置");
                 }
-                return true;
             } else {
                 // 从配置读取未知子命令提示
                 String unknownSubCmdMsg = getConfig().getString("Message.UnknownSubCmd");
@@ -114,8 +115,8 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                 } else {
                     sender.sendMessage(ChatColor.RED + "未知的子命令: " + args[0]);
                 }
-                return true;
             }
+            return true;
         }
         return false;
     }
@@ -129,8 +130,10 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         // 填充黑色玻璃板边框
         ItemStack blackGlass = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
         ItemMeta blackMeta = blackGlass.getItemMeta();
-        blackMeta.setDisplayName(" ");
-        blackGlass.setItemMeta(blackMeta);
+        if (blackMeta != null) {
+            blackMeta.setDisplayName(" ");
+            blackGlass.setItemMeta(blackMeta);
+        }
         
         // 第1行（0-8）和第6行（45-53）
         for (int i = 0; i < 9; i++) {
@@ -143,16 +146,16 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             shop.setItem(row * 9 + 8, blackGlass); // 右侧
         }
         
-        // 称号槽位定义（28个格子：第2-5行的中间7格）
+        // 称号槽位定义（35个格子：第2-5行的中间7格）
         int[] titleSlots = {
             10, 11, 12, 13, 14, 15, 16,  // 第2行
             19, 20, 21, 22, 23, 24, 25,  // 第3行
             28, 29, 30, 31, 32, 33, 34,  // 第4行
-            37, 38, 39                     // 第5行（前3格）
+            37, 38, 39, 40, 41, 42, 43   // 第5行（7格）
         };
         
         // 第6行第5格（索引49）- 根据称号数量决定是否显示下一页按钮
-        // 称号槽位总数为 28 个
+        // 称号槽位总数为 35 个
         // 获取玩家拥有的称号
         List<String> ownedTitles = getPlayerOwnedTitles(player);
         String currentTitle = playerCurrentTitle.get(player.getUniqueId().toString());
@@ -165,8 +168,10 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             // 称号满了，显示品红色玻璃板 - 下一页
             ItemStack magentaGlass = new ItemStack(Material.MAGENTA_STAINED_GLASS_PANE);
             ItemMeta magentaMeta = magentaGlass.getItemMeta();
-            magentaMeta.setDisplayName(ChatColor.RED + "下一页");
-            magentaGlass.setItemMeta(magentaMeta);
+            if (magentaMeta != null) {
+                magentaMeta.setDisplayName(ChatColor.RED + "下一页");
+                magentaGlass.setItemMeta(magentaMeta);
+            }
             shop.setItem(49, magentaGlass);
         }
         
@@ -179,22 +184,24 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                 ItemStack nameTag = new ItemStack(Material.NAME_TAG);
                 ItemMeta meta = nameTag.getItemMeta();
                 
-                // 处理颜色变量
-                String displayName = processColorVariables(titleName);
-                // 先转换传统颜色代码，再添加 16 进制颜色
-                meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', displayName));
-                
-                // Lore
-                List<String> lore = new ArrayList<>();
-                if (titleId.equals(currentTitle)) {
-                    lore.add(ChatColor.YELLOW + "当前穿戴该称号");
-                    // 添加附魔特效
-                    meta.addEnchant(Enchantment.UNBREAKING, 1, true);
-                    meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-                } else {
-                    lore.add(ChatColor.GREEN + "点击穿戴该称号");
+                if (meta != null) {
+                    // 处理颜色变量
+                    String displayName = processColorVariables(titleName);
+                    // 先转换传统颜色代码，再添加 16 进制颜色
+                    meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', displayName));
+                    
+                    // Lore
+                    List<String> lore = new ArrayList<>();
+                    if (titleId.equals(currentTitle)) {
+                        lore.add(ChatColor.YELLOW + "当前穿戴该称号");
+                        // 添加附魔特效
+                        meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+                        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+                    } else {
+                        lore.add(ChatColor.GREEN + "点击穿戴该称号");
+                    }
+                    meta.setLore(lore);
                 }
-                meta.setLore(lore);
                 
                 nameTag.setItemMeta(meta);
                 shop.setItem(titleSlots[i], nameTag);
@@ -213,8 +220,10 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         // 填充黑色玻璃板边框
         ItemStack blackGlass = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
         ItemMeta blackMeta = blackGlass.getItemMeta();
-        blackMeta.setDisplayName(" ");
-        blackGlass.setItemMeta(blackMeta);
+        if (blackMeta != null) {
+            blackMeta.setDisplayName(" ");
+            blackGlass.setItemMeta(blackMeta);
+        }
         
         // 第1行（0-8）和第6行（45-53）
         for (int i = 0; i < 9; i++) {
@@ -227,27 +236,29 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             shop.setItem(row * 9 + 8, blackGlass); // 右侧
         }
         
-        // 称号槽位定义（28个格子：第2-5行的中间7格）
+        // 称号槽位定义（35个格子：第2-5行的中间7格）
         int[] titleSlots = {
             10, 11, 12, 13, 14, 15, 16,  // 第2行
             19, 20, 21, 22, 23, 24, 25,  // 第3行
             28, 29, 30, 31, 32, 33, 34,  // 第4行
-            37, 38, 39                     // 第5行（前3格）
+            37, 38, 39, 40, 41, 42, 43   // 第5行（7格）
         };
         
         // 第6行第5格（索引49）- 第二页始终显示上一页按钮
         ItemStack cyanGlass = new ItemStack(Material.CYAN_STAINED_GLASS_PANE);
         ItemMeta cyanMeta = cyanGlass.getItemMeta();
-        cyanMeta.setDisplayName(ChatColor.YELLOW + "上一页");
-        cyanGlass.setItemMeta(cyanMeta);
+        if (cyanMeta != null) {
+            cyanMeta.setDisplayName(ChatColor.YELLOW + "上一页");
+            cyanGlass.setItemMeta(cyanMeta);
+        }
         shop.setItem(49, cyanGlass);
         
         // 获取玩家拥有的称号
         List<String> ownedTitles = getPlayerOwnedTitles(player);
         String currentTitle = playerCurrentTitle.get(player.getUniqueId().toString());
         
-        // 填充第二页的称号物品（跳过前28个，显示第29-56个）
-        int startIndex = 28; // 从第29个称号开始
+        // 填充第二页的称号物品（跳过前35个，显示第36-70个）
+        int startIndex = 35; // 从第36个称号开始
         
         // 确保有称号可以显示
         if (ownedTitles.size() <= startIndex) {
@@ -263,22 +274,24 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                 ItemStack nameTag = new ItemStack(Material.NAME_TAG);
                 ItemMeta meta = nameTag.getItemMeta();
                 
-                // 处理颜色变量
-                String displayName = processColorVariables(titleName);
-                // 先转换传统颜色代码，再添加 16 进制颜色
-                meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', displayName));
-                
-                // Lore
-                List<String> lore = new ArrayList<>();
-                if (titleId.equals(currentTitle)) {
-                    lore.add(ChatColor.YELLOW + "当前穿戴该称号");
-                    // 添加附魔特效
-                    meta.addEnchant(Enchantment.UNBREAKING, 1, true);
-                    meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-                } else {
-                    lore.add(ChatColor.GREEN + "点击穿戴该称号");
+                if (meta != null) {
+                    // 处理颜色变量
+                    String displayName = processColorVariables(titleName);
+                    // 先转换传统颜色代码，再添加 16 进制颜色
+                    meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', displayName));
+                    
+                    // Lore
+                    List<String> lore = new ArrayList<>();
+                    if (titleId.equals(currentTitle)) {
+                        lore.add(ChatColor.YELLOW + "当前穿戴该称号");
+                        // 添加附魔特效
+                        meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+                        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+                    } else {
+                        lore.add(ChatColor.GREEN + "点击穿戴该称号");
+                    }
+                    meta.setLore(lore);
                 }
-                meta.setLore(lore);
                 
                 nameTag.setItemMeta(meta);
                 shop.setItem(titleSlots[i], nameTag);
@@ -294,15 +307,9 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
     private List<String> getPlayerOwnedTitles(Player player) {
         List<String> ownedTitles = new ArrayList<>();
         
-        for (String id : playerTitles.keySet()) {
-            String permission = "xlr.chat.playertitle." + id;
-            if (player.hasPermission(permission)) {
-                ownedTitles.add(id);
-            }
-        }
-        
-        // 按 ID 数字排序
-        ownedTitles.sort((a, b) -> {
+        // 先将所有称号 ID 按数字排序
+        List<String> sortedIds = new ArrayList<>(playerTitles.keySet());
+        sortedIds.sort((a, b) -> {
             try {
                 return Integer.compare(Integer.parseInt(a), Integer.parseInt(b));
             } catch (NumberFormatException e) {
@@ -310,14 +317,21 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             }
         });
         
+        // 按排序后的顺序检查权限
+        for (String id : sortedIds) {
+            String permission = "xlr.chat.playertitle." + id;
+            if (player.hasPermission(permission)) {
+                ownedTitles.add(id);
+            }
+        }
+        
         return ownedTitles;
     }
     
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player)) return;
+        if (!(event.getWhoClicked() instanceof Player player)) return;
         
-        Player player = (Player) event.getWhoClicked();
         String invTitle = event.getView().getTitle();
         
         // 检查是否是称号仓库界面（第1页或第2页）
@@ -362,7 +376,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             10, 11, 12, 13, 14, 15, 16,  // 第2行
             19, 20, 21, 22, 23, 24, 25,  // 第3行
             28, 29, 30, 31, 32, 33, 34,  // 第4行
-            37, 38, 39                     // 第5行（前3格）
+            37, 38, 39, 40, 41, 42, 43   // 第5行（7格）
         };
         
         // 查找点击的槽位对应的称号
@@ -375,8 +389,8 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                         selectedTitleId = ownedTitles.get(i);
                     }
                 } else {
-                    // 第2页：从第29个开始
-                    int actualIndex = 28 + i;
+                    // 第2页：从第36个开始
+                    int actualIndex = 35 + i;
                     if (actualIndex < ownedTitles.size()) {
                         selectedTitleId = ownedTitles.get(actualIndex);
                     }
@@ -648,8 +662,8 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         int length = text.length();
         
         // 防止除零错误
-        if (length <= 1) {
-            // 如果只有一个字符或空文本，直接应用起始颜色
+        if (length == 1) {
+            // 如果只有一个字符，直接应用起始颜色
             ChatColor chatColor = ChatColor.of("#" + startHex);
             return chatColor + text;
         }
