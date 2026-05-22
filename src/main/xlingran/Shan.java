@@ -7,6 +7,8 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -19,6 +21,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -33,11 +36,17 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
     private final Map<String, String> variableColors = new HashMap<>();
     private final Map<String, String> playerTitles = new HashMap<>();
     private final Map<String, String> playerCurrentTitle = new HashMap<>(); // 存储玩家当前穿戴的称号
+    
+    // GUI 配置
+    private FileConfiguration guiConfig;
 
     @Override
     public void onEnable() {
         // 保存默认配置文件（如果不存在）
         saveDefaultConfig();
+        
+        // 加载 GUI 配置
+        loadGuiConfig();
         
         // 从配置文件读取所有聊天格式
         loadChatFormats();
@@ -125,7 +134,9 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
      * 打开称号仓库第一页界面
      */
     private void openTitleShopPage1(Player player) {
-        Inventory shop = Bukkit.createInventory(null, 54, ChatColor.GREEN + "称号仓库 第1页");
+        // 从配置读取界面标题
+        String pageTitle = guiConfig.getString("Page1.name", "&a称号仓库 第1页");
+        Inventory shop = Bukkit.createInventory(null, 54, ChatColor.translateAlternateColorCodes('&', pageTitle));
         
         // 填充黑色玻璃板边框
         ItemStack blackGlass = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
@@ -169,7 +180,20 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             ItemStack magentaGlass = new ItemStack(Material.MAGENTA_STAINED_GLASS_PANE);
             ItemMeta magentaMeta = magentaGlass.getItemMeta();
             if (magentaMeta != null) {
-                magentaMeta.setDisplayName(ChatColor.RED + "下一页");
+                // 从配置读取下一页按钮名称
+                String nextName = guiConfig.getString("Page1.Next.name", "&c下一页");
+                magentaMeta.setDisplayName(ChatColor.translateAlternateColorCodes('&', nextName));
+                
+                // 从配置读取 Lore
+                List<String> nextLore = guiConfig.getStringList("Page1.Next.Lore");
+                if (!nextLore.isEmpty()) {
+                    List<String> translatedLore = new ArrayList<>();
+                    for (String lore : nextLore) {
+                        translatedLore.add(ChatColor.translateAlternateColorCodes('&', lore));
+                    }
+                    magentaMeta.setLore(translatedLore);
+                }
+                
                 magentaGlass.setItemMeta(magentaMeta);
             }
             shop.setItem(49, magentaGlass);
@@ -190,17 +214,42 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                     // 先转换传统颜色代码，再添加 16 进制颜色
                     meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', displayName));
                     
-                    // Lore
-                    List<String> lore = new ArrayList<>();
+                    // Lore - 从配置读取
                     if (titleId.equals(currentTitle)) {
-                        lore.add(ChatColor.YELLOW + "当前穿戴该称号");
+                        // 已穿戴状态
+                        List<String> onLore = guiConfig.getStringList("Page1.OnPlayerTitle.Lore");
+                        if (!onLore.isEmpty()) {
+                            List<String> translatedLore = new ArrayList<>();
+                            for (String lore : onLore) {
+                                // 替换 %ChatPrefix% 变量
+                                String processedLore = lore.replace("%ChatPrefix%", displayName);
+                                translatedLore.add(ChatColor.translateAlternateColorCodes('&', processedLore));
+                            }
+                            meta.setLore(translatedLore);
+                        } else {
+                            // 默认 Lore
+                            meta.setLore(List.of(ChatColor.YELLOW + "当前穿戴该称号"));
+                        }
+                        
                         // 添加附魔特效
                         meta.addEnchant(Enchantment.UNBREAKING, 1, true);
                         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
                     } else {
-                        lore.add(ChatColor.GREEN + "点击穿戴该称号");
+                        // 未穿戴状态
+                        List<String> offLore = guiConfig.getStringList("Page1.OffPlayerTitle.Lore");
+                        if (!offLore.isEmpty()) {
+                            List<String> translatedLore = new ArrayList<>();
+                            for (String lore : offLore) {
+                                // 替换 %ChatPrefix% 变量
+                                String processedLore = lore.replace("%ChatPrefix%", displayName);
+                                translatedLore.add(ChatColor.translateAlternateColorCodes('&', processedLore));
+                            }
+                            meta.setLore(translatedLore);
+                        } else {
+                            // 默认 Lore
+                            meta.setLore(List.of(ChatColor.GREEN + "点击穿戴该称号"));
+                        }
                     }
-                    meta.setLore(lore);
                 }
                 
                 nameTag.setItemMeta(meta);
@@ -215,7 +264,9 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
      * 打开称号仓库第二页界面
      */
     private void openTitleShopPage2(Player player) {
-        Inventory shop = Bukkit.createInventory(null, 54, ChatColor.GREEN + "称号仓库 第2页");
+        // 从配置读取界面标题
+        String pageTitle = guiConfig.getString("Page2.name", "&a称号仓库 第2页");
+        Inventory shop = Bukkit.createInventory(null, 54, ChatColor.translateAlternateColorCodes('&', pageTitle));
         
         // 填充黑色玻璃板边框
         ItemStack blackGlass = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
@@ -248,7 +299,20 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         ItemStack cyanGlass = new ItemStack(Material.CYAN_STAINED_GLASS_PANE);
         ItemMeta cyanMeta = cyanGlass.getItemMeta();
         if (cyanMeta != null) {
-            cyanMeta.setDisplayName(ChatColor.YELLOW + "上一页");
+            // 从配置读取上一页按钮名称
+            String backName = guiConfig.getString("Page2.Back.name", "&e上一页");
+            cyanMeta.setDisplayName(ChatColor.translateAlternateColorCodes('&', backName));
+            
+            // 从配置读取 Lore
+            List<String> backLore = guiConfig.getStringList("Page2.Back.Lore");
+            if (!backLore.isEmpty()) {
+                List<String> translatedLore = new ArrayList<>();
+                for (String lore : backLore) {
+                    translatedLore.add(ChatColor.translateAlternateColorCodes('&', lore));
+                }
+                cyanMeta.setLore(translatedLore);
+            }
+            
             cyanGlass.setItemMeta(cyanMeta);
         }
         shop.setItem(49, cyanGlass);
@@ -283,17 +347,42 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                     // 先转换传统颜色代码，再添加 16 进制颜色
                     meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', displayName));
                     
-                    // Lore
-                    List<String> lore = new ArrayList<>();
+                    // Lore - 复用 Page1 的配置
                     if (titleId.equals(currentTitle)) {
-                        lore.add(ChatColor.YELLOW + "当前穿戴该称号");
+                        // 已穿戴状态 - 使用 Page1 的配置
+                        List<String> onLore = guiConfig.getStringList("Page1.OnPlayerTitle.Lore");
+                        if (!onLore.isEmpty()) {
+                            List<String> translatedLore = new ArrayList<>();
+                            for (String lore : onLore) {
+                                // 替换 %ChatPrefix% 变量
+                                String processedLore = lore.replace("%ChatPrefix%", displayName);
+                                translatedLore.add(ChatColor.translateAlternateColorCodes('&', processedLore));
+                            }
+                            meta.setLore(translatedLore);
+                        } else {
+                            // 默认 Lore
+                            meta.setLore(List.of(ChatColor.YELLOW + "当前穿戴该称号"));
+                        }
+                        
                         // 添加附魔特效
                         meta.addEnchant(Enchantment.UNBREAKING, 1, true);
                         meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
                     } else {
-                        lore.add(ChatColor.GREEN + "点击穿戴该称号");
+                        // 未穿戴状态 - 使用 Page1 的配置
+                        List<String> offLore = guiConfig.getStringList("Page1.OffPlayerTitle.Lore");
+                        if (!offLore.isEmpty()) {
+                            List<String> translatedLore = new ArrayList<>();
+                            for (String lore : offLore) {
+                                // 替换 %ChatPrefix% 变量
+                                String processedLore = lore.replace("%ChatPrefix%", displayName);
+                                translatedLore.add(ChatColor.translateAlternateColorCodes('&', processedLore));
+                            }
+                            meta.setLore(translatedLore);
+                        } else {
+                            // 默认 Lore
+                            meta.setLore(List.of(ChatColor.GREEN + "点击穿戴该称号"));
+                        }
                     }
-                    meta.setLore(lore);
                 }
                 
                 nameTag.setItemMeta(meta);
@@ -337,14 +426,17 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         
         String invTitle = event.getView().getTitle();
         
+        // 从配置读取界面标题
+        String page1Title = ChatColor.translateAlternateColorCodes('&', guiConfig.getString("Page1.name", "&a称号仓库 第1页"));
+        String page2Title = ChatColor.translateAlternateColorCodes('&', guiConfig.getString("Page2.name", "&a称号仓库 第2页"));
+        
         // 检查是否是称号仓库界面（第1页或第2页）
-        if (!invTitle.equals(ChatColor.GREEN + "称号仓库 第1页") && 
-            !invTitle.equals(ChatColor.GREEN + "称号仓库 第2页")) return;
+        if (!invTitle.equals(page1Title) && !invTitle.equals(page2Title)) return;
         
         event.setCancelled(true);
         
         // 点击的是第1页的下一页按钮（品红色玻璃板）
-        if (invTitle.equals(ChatColor.GREEN + "称号仓库 第1页") && event.getSlot() == 49) {
+        if (invTitle.equals(page1Title) && event.getSlot() == 49) {
             ItemStack clickedItem = event.getCurrentItem();
             if (clickedItem != null && clickedItem.getType() == Material.MAGENTA_STAINED_GLASS_PANE) {
                 player.closeInventory();
@@ -354,7 +446,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         }
         
         // 点击的是第2页的上一页按钮（青色玻璃板）
-        if (invTitle.equals(ChatColor.GREEN + "称号仓库 第2页") && event.getSlot() == 49) {
+        if (invTitle.equals(page2Title) && event.getSlot() == 49) {
             ItemStack clickedItem = event.getCurrentItem();
             if (clickedItem != null && clickedItem.getType() == Material.CYAN_STAINED_GLASS_PANE) {
                 player.closeInventory();
@@ -406,15 +498,21 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             String currentTitle = playerCurrentTitle.get(player.getUniqueId().toString());
             
             if (selectedTitleId.equals(currentTitle)) {
-                player.sendMessage(ChatColor.YELLOW + "你已经穿戴着这个称号了!");
+                // 从配置读取重复穿戴提示
+                String equippedMsg = guiConfig.getString("Message.Equipped", "&e你已经穿戴着这个称号了!");
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', equippedMsg));
             } else {
                 // 穿戴新称号
                 playerCurrentTitle.put(player.getUniqueId().toString(), selectedTitleId);
-                player.sendMessage(ChatColor.GREEN + "成功穿戴称号: " + displayName);
+                
+                // 从配置读取穿戴成功提示，替换 %ChatPrefix%
+                String equipDoneMsg = guiConfig.getString("Message.EquipDone", "&a成功穿戴称号: %ChatPrefix%");
+                String processedMsg = equipDoneMsg.replace("%ChatPrefix%", displayName);
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', processedMsg));
                 
                 // 根据当前页面重新打开界面
                 player.closeInventory();
-                if (invTitle.equals(ChatColor.GREEN + "称号仓库 第1页")) {
+                if (invTitle.equals(ChatColor.translateAlternateColorCodes('&', guiConfig.getString("Page1.name", "&a称号仓库 第1页")))) {
                     Bukkit.getScheduler().runTaskLater(this, () -> openTitleShopPage1(player), 2L);
                 } else {
                     Bukkit.getScheduler().runTaskLater(this, () -> openTitleShopPage2(player), 2L);
@@ -426,6 +524,9 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
     private void reloadPluginConfig() {
         // 重新加载配置文件
         reloadConfig();
+        
+        // 重新加载 GUI 配置
+        loadGuiConfig();
 
         // 重新加载聊天格式
         loadChatFormats();
@@ -435,6 +536,17 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         
         // 重新加载玩家称号配置
         loadPlayerTitles();
+    }
+    
+    /**
+     * 加载 GUI 配置文件
+     */
+    private void loadGuiConfig() {
+        File guiFile = new File(getDataFolder(), "Gui.yml");
+        if (!guiFile.exists()) {
+            saveResource("Gui.yml", false);
+        }
+        guiConfig = YamlConfiguration.loadConfiguration(guiFile);
     }
 
     private void loadChatFormats() {
