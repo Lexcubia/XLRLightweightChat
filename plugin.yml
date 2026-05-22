@@ -7,14 +7,19 @@ description: 一款多功能聊天插件
 
 commands:
   xlrchat:
-    description: 重载插件配置
-    usage: /<command> reload
-    permission: xlr.admin.reload
+    description: 插件主命令
+    usage: /<command> [cp|reload]
 
 permissions:
   xlr.admin.reload:
     description: 重载插件配置
     default: op
+  xlr.command.cp:
+    description: 打开称号仓库
+    default: true
   xlr.chat.*:
     description: 所有聊天格式权限（通配符）
+    default: false
+  xlr.chat.playertitle.*:
+    description: 所有称号权限（通配符）
     default: false

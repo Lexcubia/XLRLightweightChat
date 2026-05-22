@@ -1,10 +1,11 @@
 
-# 优先级从上往下开始检查，权限节点是 xlr.chat.名称，玩家默认拥有 xlr.chat.default 权限
-# 聊天格式顺序 [前缀] [玩家名称] : [16进制颜色] [聊天内容]
+# 优先级从上往下开始检查，权限节点是 xlr.chat.格式名称
+# 聊天格式顺序 [前缀] [称号] [玩家名称] : [16进制颜色] [聊天内容]
 # 可多个聊天格式，格式名称可自定义
+# 占位符：%player% = 玩家名称，%title% = 称号，%chat% = 聊天内容
 Chat:
-  op: "&a%player%: %color1%%chat%"
-  default: "&a%player%: &a%chat%"
+  op: "&a%title%%player%: %color1%%chat%"
+  default: "&a%title%%player%: %color3%%chat%"
 
 # 16进制渐变颜色变量配置，可以创建多个
 # 可以在上面使用变量是 %color1% %color2%
@@ -12,3 +13,13 @@ Variable:
   color1: "#e4afcb-#7edbdc"
   color2: "#e4afcb-#eef1f5"
   color3: "#00c6fb-#005bea"
+
+# 称号配置 - 最多拥有 56 个称号，最少 1 个
+# 优先级从上往下开始检查，权限节点是 xlr.chat.playertitle.ID， ID小的优先级更高
+# 格式 ID: "称号前缀"，ID只能由数字排序，不能重复
+# 支持 16 进制颜色变量：%color1%、%color2%
+PlayerTitle:
+  1: "%color2%[管理员]"
+  2: "%color3%[SVIP]"
+  3: "&b[居民]"
+  # 4-56: 可以继续添加更多称号...
