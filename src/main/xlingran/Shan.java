@@ -763,7 +763,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
      */
     private String getItemDisplayName(ItemStack item) {
         if (item == null || item.getType() == Material.AIR) {
-            return "[空手]";
+            return "&r[空手]&r";
         }
         
         String displayName;
@@ -787,19 +787,19 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                                .append(part.substring(1).toLowerCase());
                 }
             }
-            // 使用 §f 白色，避免被聊天颜色覆盖
-            displayName = "§f" + friendlyName.toString();
+            // 使用 &f 白色，避免被聊天颜色覆盖
+            displayName = "&f" + friendlyName.toString();
         }
         
         // 获取数量
         int amount = item.getAmount();
         
         // 格式: [物品名称X数量]
-        // 使用 §r 重置颜色，确保括号和 X 符号使用默认颜色
+        // 使用 &r 重置颜色，确保括号和 X 符号使用默认颜色
         if (amount > 1) {
-            return "§r[" + displayName + " §rX " + amount + "§r]";
+            return "&r[" + displayName + " &rX " + amount + "&r]";
         } else {
-            return "§r[" + displayName + "§r]";
+            return "&r[" + displayName + "&r]";
         }
     }
 
