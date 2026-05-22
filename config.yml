@@ -3,8 +3,8 @@
 # 聊天格式顺序 [前缀] [玩家名称] : [16进制颜色] [聊天内容]
 # 可多个聊天格式，格式名称可自定义
 Chat:
-  op: "%ChatPrefix% &a%player%: %color1%%chat%"
-  default: "%ChatPrefix% &a%player%: &a%chat%"
+  op: "&a%player%: %color1%%chat%"
+  default: "&a%player%: &a%chat%"
 
 # 16进制渐变颜色变量配置，可以创建多个
 # 可以在上面使用变量是 %color1% %color2%
@@ -12,38 +12,3 @@ Variable:
   color1: "#e4afcb-#7edbdc"
   color2: "#e4afcb-#eef1f5"
   color3: "#00c6fb-#005bea"
-
-# 最多拥有 56 个称号，最少 1 个，也就是两个 Gui容量
-# 优先级从上往下开始检查，权限节点是 xlr.chat.名称，玩家默认拥有 xlr.chat.playertitle.1 权限
-# 前缀格式 ID: "前缀"，ID只能由数字排序，不能重复
-PlayerTitle:
-  1: "&b[居民]"
-  2: "%color2%[管理员]"
-  3: "%color3%[VIP]"
-
-# 输入命令，命令输出提示
-Command:
-  # 输入/xlrchat reload 后提示
-  reload:
-    - "&7配置已重新加载"
-    - "&7已加载 &6%chat_format% &7个聊天格式"
-    - "&7已加载 &6%color_config% &7个变量颜色配置"
-  help:
-    - "&6===== [XLRightweightChat] ====="
-    - "&7- /xlrchat cp &6打开称号仓库"
-    - "&7- /xlrchat reload &6重载该插件"
-
-# 消息提示
-Message:
-  # 没有权限时输出提示
-  NoPermission: "&c你没有权限执行此命令"
-  # 输入未知子命令时输出提示
-  UnknownSubCmd: "&c未知的子命令"
-  # 命令不是由玩家执行时
-  NoPlayer: "&c此命令只能由玩家执行!"
-
-# 玩家在聊天栏输入[item]展示手里的物品 true 为开启 false 为关闭
-# 例子: 我现在手里有 [item]
-DisplayInHand: true
-# 展示物品信息显示 zh-cn 中文 en 为英文
-DisitemLanguage: zh-cn
