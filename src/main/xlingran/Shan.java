@@ -892,7 +892,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             // 单一颜色，直接应用
             if (colorConfig.startsWith("#")) {
                 ChatColor color = ChatColor.of(colorConfig);
-                return color.toString() + text;
+                return color + text;
             }
             return text;
         }
@@ -910,8 +910,42 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         java.awt.Color endColor = parseHexColor(endHex);
         
         StringBuilder result = new StringBuilder();
-        int charIndex = 0; // 当前文本中的字符索引
+        int charIndex = 0; // 当前文本中的可见字符索引
+        int visibleLength = 0; // 可见字符总数（不包括颜色代码）
         
+        // 先计算可见字符总数（不包括颜色代码）
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            // 跳过 § 颜色代码
+            if (c == '§' && i + 1 < text.length()) {
+                i++;
+                continue;
+            }
+            // 跳过 & 颜色代码
+            if (c == '&' && i + 1 < text.length()) {
+                char nextChar = text.charAt(i + 1);
+                if ((nextChar >= '0' && nextChar <= '9') || 
+                    (nextChar >= 'a' && nextChar <= 'f') ||
+                    (nextChar >= 'A' && nextChar <= 'F') ||
+                    nextChar == 'r' || nextChar == 'R' ||
+                    nextChar == 'k' || nextChar == 'K' ||
+                    nextChar == 'l' || nextChar == 'L' ||
+                    nextChar == 'm' || nextChar == 'M' ||
+                    nextChar == 'n' || nextChar == 'N' ||
+                    nextChar == 'o' || nextChar == 'O') {
+                    i++;
+                    continue;
+                }
+            }
+            visibleLength++;
+        }
+        
+        // 防止除零错误
+        if (visibleLength == 0) {
+            return text;
+        }
+        
+        // 为每个可见字符应用渐变色
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
             
@@ -925,7 +959,6 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             // 跳过 & 颜色代码
             if (c == '&' && i + 1 < text.length()) {
                 char nextChar = text.charAt(i + 1);
-                // 检查是否是有效的颜色代码（0-9, a-f, k-o, r）
                 if ((nextChar >= '0' && nextChar <= '9') || 
                     (nextChar >= 'a' && nextChar <= 'f') ||
                     (nextChar >= 'A' && nextChar <= 'F') ||

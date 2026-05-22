@@ -530,15 +530,12 @@ public class ShanItem {
         
         // 标题行：物品名称（斜体）
         builder.append(displayName).italic(true);
-        builder.append("\n");
         
-        // 添加空行
-        builder.append("\n");
-        
-        // 添加 Lore（描述）- 按照第二张图的格式
+        // 添加 Lore（描述）- 按照游戏标准格式
         if (meta != null && meta.hasLore()) {
             List<String> lore = meta.getLore();
             if (lore != null && !lore.isEmpty()) {
+                builder.append("\n"); // 名称和Lore之间的分隔
                 // 重置样式，然后显示 Lore 内容
                 for (String loreLine : lore) {
                     String coloredLore = ChatColor.translateAlternateColorCodes('&', loreLine);
@@ -555,12 +552,17 @@ public class ShanItem {
                 builder.append("\n");
             }
             
-            for (Map.Entry<Enchantment, Integer> enchant : meta.getEnchants().entrySet()) {
+            List<Map.Entry<Enchantment, Integer>> enchants = new ArrayList<>(meta.getEnchants().entrySet());
+            for (int i = 0; i < enchants.size(); i++) {
+                Map.Entry<Enchantment, Integer> enchant = enchants.get(i);
                 String enchantName = getEnchantmentChineseName(enchant.getKey());
                 String level = getRomanNumber(enchant.getValue());
                 String enchantLine = "§7" + enchantName + " " + level;
                 builder.reset().append(enchantLine).italic(false);
-                builder.append("\n");
+                // 只在不是最后一个附魔时添加换行符
+                if (i < enchants.size() - 1) {
+                    builder.append("\n");
+                }
             }
         }
         
@@ -577,9 +579,13 @@ public class ShanItem {
                 // 添加空行
                 builder.append("\n");
                 
-                for (String info : extraInfo) {
+                for (int i = 0; i < extraInfo.size(); i++) {
+                    String info = extraInfo.get(i);
                     builder.reset().append(info).italic(false);
-                    builder.append("\n");
+                    // 只在不是最后一个属性时添加换行符
+                    if (i < extraInfo.size() - 1) {
+                        builder.append("\n");
+                    }
                 }
             }
         }
