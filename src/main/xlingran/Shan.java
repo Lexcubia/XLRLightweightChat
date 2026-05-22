@@ -1001,10 +1001,16 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             int g = (int) (startColor.getGreen() + (endColor.getGreen() - startColor.getGreen()) * ratio);
             int b = (int) (startColor.getBlue() + (endColor.getBlue() - startColor.getBlue()) * ratio);
             
-            String hexColor = String.format("#%02x%02x%02x", r, g, b);
-            ChatColor chatColor = ChatColor.of(hexColor);
+            // 手动生成 §x§R§R§G§G§B§B 格式的 16 进制颜色代码
+            String hexColor = String.format("§x§%c§%c§%c§%c§%c§%c",
+                Character.forDigit((r >> 4) & 0xF, 16),
+                Character.forDigit(r & 0xF, 16),
+                Character.forDigit((g >> 4) & 0xF, 16),
+                Character.forDigit(g & 0xF, 16),
+                Character.forDigit((b >> 4) & 0xF, 16),
+                Character.forDigit(b & 0xF, 16));
             
-            result.append(chatColor).append(c);
+            result.append(hexColor).append(c);
             charIndex++;
         }
         
@@ -1121,10 +1127,16 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             int g = (int) (startColor.getGreen() + (endColor.getGreen() - startColor.getGreen()) * ratio);
             int b = (int) (startColor.getBlue() + (endColor.getBlue() - startColor.getBlue()) * ratio);
 
-            String hexColor = String.format("#%02x%02x%02x", r, g, b);
-            ChatColor chatColor = ChatColor.of(hexColor);
+            // 手动生成 §x§R§R§G§G§B§B 格式的 16 进制颜色代码
+            String hexColor = String.format("§x§%c§%c§%c§%c§%c§%c",
+                Character.forDigit((r >> 4) & 0xF, 16),
+                Character.forDigit(r & 0xF, 16),
+                Character.forDigit((g >> 4) & 0xF, 16),
+                Character.forDigit(g & 0xF, 16),
+                Character.forDigit((b >> 4) & 0xF, 16),
+                Character.forDigit(b & 0xF, 16));
 
-            result.append(chatColor).append(c);
+            result.append(hexColor).append(c);
             charIndex++;
         }
 
