@@ -94,7 +94,7 @@ public class Shan extends JavaPlugin implements Listener {
                             playerTitles.put(id, prefix);
                         }
                     } catch (NumberFormatException e) {
-                        getLogger().warning("称号 ID 格式错误: " + key);
+                        // 忽略非数字 ID
                     }
                 }
             }
@@ -116,8 +116,15 @@ public class Shan extends JavaPlugin implements Listener {
         String format = findMatchingFormat(player);
         
         if (format == null) {
-            // 如果没有匹配格式，使用默认格式
-            format = config.getString("Chat.default");
+            // 如果没有匹配格式，检查是否有 default 权限
+            if (player.hasPermission("xlr.chat.default")) {
+                format = config.getString("Chat.default");
+            }
+            
+            // 如果还是没有，使用第一个格式作为兜底
+            if (format == null) {
+                format = getDefaultFormat();
+            }
         }
         
         if (format == null) {
@@ -157,6 +164,29 @@ public class Shan extends JavaPlugin implements Listener {
         }
         
         return null;
+    }
+
+    /**
+     * 获取默认聊天格式（配置中的第一个格式）
+     */
+    private String getDefaultFormat() {
+        if (!config.contains("Chat")) {
+            return null;
+        }
+        
+        ConfigurationSection section = config.getConfigurationSection("Chat");
+        if (section == null) {
+            return null;
+        }
+        
+        Set<String> formats = section.getKeys(false);
+        if (formats.isEmpty()) {
+            return null;
+        }
+        
+        // 返回第一个格式
+        String firstFormat = formats.iterator().next();
+        return section.getString(firstFormat);
     }
 
     /**
