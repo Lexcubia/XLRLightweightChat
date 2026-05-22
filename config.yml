@@ -1,8 +1,7 @@
 
-# 从上往下的权限检查，权限节点是 xlr.chat.名称，
-# 玩家默认拥有权限 xlr.chat.default
-# 聊天格式：称号 玩家ID 配置16进制颜色 聊天内容，格式可自定义
-# 可以配置多个聊天格式，名称可自定义
+# 优先级从上往下开始检查，权限节点是 xlr.chat.名称，玩家默认拥有 xlr.chat.default 权限
+# 聊天格式顺序 [前缀] [玩家名称] : [16进制颜色] [聊天内容]
+# 可多个聊天格式，格式名称可自定义
 Chat:
   op: "%ChatPrefix% &a%player%: %color1%%chat%"
   default: "%ChatPrefix% &a%player%: &a%chat%"
@@ -13,13 +12,12 @@ Variable:
   color1: "#e4afcb-#7edbdc"
   color2: "#e4afcb-#eef1f5"
 
-# 从上往下的权限检查，权限节点是 xlr.chat.playertitle.ID
-# 玩家默认拥有 xlr.chat.playertitle.1 权限
-# 称号，格式 ID: "称号"
 # 最多拥有 56 个称号，最少 1 个
+# 优先级从上往下开始检查，权限节点是 xlr.chat.名称，玩家默认拥有 xlr.chat.playertitle.1 权限
+# 前缀格式 ID: "前缀"，ID只能由数字排序，不能重复
 PlayerTitle:
   1: "&b[居民]"
-  2: "&2[管理员]"
+  2: "%color2%[管理员]"
 
 # 输入命令，命令输出提示
 Command:
@@ -34,3 +32,5 @@ Message:
   NoPermission: "&c你没有权限执行此命令"
   # 输入未知子命令时输出提示
   UnknownSubCmd: "&c未知的子命令"
+  # 命令不是由玩家执行时
+  NoPlayer: "&c此命令只能由玩家执行!"
