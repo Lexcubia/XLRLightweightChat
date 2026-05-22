@@ -45,3 +45,5 @@ Message:
 # 玩家在聊天栏输入[item]展示手里的物品 true 为开启 false 为关闭
 # 例子: 我现在手里有 [item]
 DisplayInHand: true
+# 展示物品信息显示 zh-cn 中文 en 为英文
+DisitemLanguage: zh-cn
