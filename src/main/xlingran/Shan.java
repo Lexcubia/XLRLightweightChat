@@ -82,7 +82,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                     return true;
                 }
                 Player player = (Player) sender;
-                openTitleShop(player);
+                openTitleShopPage1(player);
                 return true;
             }
             
@@ -121,10 +121,10 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
     }
 
     /**
-     * 打开称号仓库界面
+     * 打开称号仓库第一页界面
      */
-    private void openTitleShop(Player player) {
-        Inventory shop = Bukkit.createInventory(null, 54, ChatColor.GREEN + "称号仓库");
+    private void openTitleShopPage1(Player player) {
+        Inventory shop = Bukkit.createInventory(null, 54, ChatColor.GREEN + "称号仓库 第1页");
         
         // 填充黑色玻璃板边框
         ItemStack blackGlass = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
@@ -143,16 +143,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             shop.setItem(row * 9 + 8, blackGlass); // 右侧
         }
         
-        // 第6行第5格（索引49）放置品红色玻璃板 - 下一页
-        // 第6行从索引 45 开始，第5个格子是 45+4=49
-        ItemStack magentaGlass = new ItemStack(Material.MAGENTA_STAINED_GLASS_PANE);
-        ItemMeta magentaMeta = magentaGlass.getItemMeta();
-        magentaMeta.setDisplayName(ChatColor.RED + "下一页");
-        magentaGlass.setItemMeta(magentaMeta);
-        shop.setItem(49, magentaGlass);
-        
-        // 剩余28个格子放置称号（索引：9-17, 18-26, 27-35, 36-38, 39, 41-44）
-        // 实际上应该是第2-5行的中间7格，共28格
+        // 称号槽位定义（28个格子：第2-5行的中间7格）
         int[] titleSlots = {
             10, 11, 12, 13, 14, 15, 16,  // 第2行
             19, 20, 21, 22, 23, 24, 25,  // 第3行
@@ -160,13 +151,105 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             37, 38, 39                     // 第5行（前3格）
         };
         
+        // 第6行第5格（索引49）- 根据称号数量决定是否显示下一页按钮
+        // 称号槽位总数为 28 个
         // 获取玩家拥有的称号
         List<String> ownedTitles = getPlayerOwnedTitles(player);
         String currentTitle = playerCurrentTitle.get(player.getUniqueId().toString());
         
+        // 如果称号数量少于槽位数，显示黑色玻璃板；否则显示下一页按钮
+        if (ownedTitles.size() < titleSlots.length) {
+            // 称号没满，显示黑色玻璃板
+            shop.setItem(49, blackGlass);
+        } else {
+            // 称号满了，显示品红色玻璃板 - 下一页
+            ItemStack magentaGlass = new ItemStack(Material.MAGENTA_STAINED_GLASS_PANE);
+            ItemMeta magentaMeta = magentaGlass.getItemMeta();
+            magentaMeta.setDisplayName(ChatColor.RED + "下一页");
+            magentaGlass.setItemMeta(magentaMeta);
+            shop.setItem(49, magentaGlass);
+        }
+        
         // 填充称号物品
         for (int i = 0; i < Math.min(ownedTitles.size(), titleSlots.length); i++) {
             String titleId = ownedTitles.get(i);
+            String titleName = playerTitles.get(titleId);
+            
+            if (titleName != null) {
+                ItemStack nameTag = new ItemStack(Material.NAME_TAG);
+                ItemMeta meta = nameTag.getItemMeta();
+                
+                // 处理颜色变量
+                String displayName = processColorVariables(titleName);
+                // 先转换传统颜色代码，再添加 16 进制颜色
+                meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', displayName));
+                
+                // Lore
+                List<String> lore = new ArrayList<>();
+                if (titleId.equals(currentTitle)) {
+                    lore.add(ChatColor.YELLOW + "当前穿戴该称号");
+                    // 添加附魔特效
+                    meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+                    meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+                } else {
+                    lore.add(ChatColor.GREEN + "点击穿戴该称号");
+                }
+                meta.setLore(lore);
+                
+                nameTag.setItemMeta(meta);
+                shop.setItem(titleSlots[i], nameTag);
+            }
+        }
+        
+        player.openInventory(shop);
+    }
+    
+    /**
+     * 打开称号仓库第二页界面
+     */
+    private void openTitleShopPage2(Player player) {
+        Inventory shop = Bukkit.createInventory(null, 54, ChatColor.GREEN + "称号仓库 第2页");
+        
+        // 填充黑色玻璃板边框
+        ItemStack blackGlass = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
+        ItemMeta blackMeta = blackGlass.getItemMeta();
+        blackMeta.setDisplayName(" ");
+        blackGlass.setItemMeta(blackMeta);
+        
+        // 第1行（0-8）和第6行（45-53）
+        for (int i = 0; i < 9; i++) {
+            shop.setItem(i, blackGlass);
+            shop.setItem(i + 45, blackGlass);
+        }
+        // 两侧（第2-5行的第1格和第9格）
+        for (int row = 1; row < 5; row++) {
+            shop.setItem(row * 9, blackGlass); // 左侧
+            shop.setItem(row * 9 + 8, blackGlass); // 右侧
+        }
+        
+        // 称号槽位定义（28个格子：第2-5行的中间7格）
+        int[] titleSlots = {
+            10, 11, 12, 13, 14, 15, 16,  // 第2行
+            19, 20, 21, 22, 23, 24, 25,  // 第3行
+            28, 29, 30, 31, 32, 33, 34,  // 第4行
+            37, 38, 39                     // 第5行（前3格）
+        };
+        
+        // 第6行第5格（索引49）- 第二页始终显示上一页按钮
+        ItemStack cyanGlass = new ItemStack(Material.CYAN_STAINED_GLASS_PANE);
+        ItemMeta cyanMeta = cyanGlass.getItemMeta();
+        cyanMeta.setDisplayName(ChatColor.YELLOW + "上一页");
+        cyanGlass.setItemMeta(cyanMeta);
+        shop.setItem(49, cyanGlass);
+        
+        // 获取玩家拥有的称号
+        List<String> ownedTitles = getPlayerOwnedTitles(player);
+        String currentTitle = playerCurrentTitle.get(player.getUniqueId().toString());
+        
+        // 填充第二页的称号物品（跳过前28个，显示第29-56个）
+        int startIndex = 28; // 从第29个称号开始
+        for (int i = 0; i < Math.min(ownedTitles.size() - startIndex, titleSlots.length); i++) {
+            String titleId = ownedTitles.get(startIndex + i);
             String titleName = playerTitles.get(titleId);
             
             if (titleName != null) {
@@ -230,16 +313,30 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         Player player = (Player) event.getWhoClicked();
         String invTitle = event.getView().getTitle();
         
-        // 检查是否是称号仓库界面
-        if (!invTitle.equals(ChatColor.GREEN + "称号仓库")) return;
+        // 检查是否是称号仓库界面（第1页或第2页）
+        if (!invTitle.equals(ChatColor.GREEN + "称号仓库 第1页") && 
+            !invTitle.equals(ChatColor.GREEN + "称号仓库 第2页")) return;
         
         event.setCancelled(true);
         
-        // 点击的是品红色玻璃板（下一页）
-        if (event.getSlot() == 49) {
-            player.closeInventory();
-            player.sendMessage(ChatColor.YELLOW + "敬请期待更多称号!");
-            return;
+        // 点击的是第1页的下一页按钮（品红色玻璃板）
+        if (invTitle.equals(ChatColor.GREEN + "称号仓库 第1页") && event.getSlot() == 49) {
+            ItemStack clickedItem = event.getCurrentItem();
+            if (clickedItem != null && clickedItem.getType() == Material.MAGENTA_STAINED_GLASS_PANE) {
+                player.closeInventory();
+                Bukkit.getScheduler().runTaskLater(this, () -> openTitleShopPage2(player), 2L);
+                return;
+            }
+        }
+        
+        // 点击的是第2页的上一页按钮（青色玻璃板）
+        if (invTitle.equals(ChatColor.GREEN + "称号仓库 第2页") && event.getSlot() == 49) {
+            ItemStack clickedItem = event.getCurrentItem();
+            if (clickedItem != null && clickedItem.getType() == Material.CYAN_STAINED_GLASS_PANE) {
+                player.closeInventory();
+                Bukkit.getScheduler().runTaskLater(this, () -> openTitleShopPage1(player), 2L);
+                return;
+            }
         }
         
         // 点击的是称号物品
@@ -272,9 +369,13 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                 playerCurrentTitle.put(player.getUniqueId().toString(), selectedTitleId);
                 player.sendMessage(ChatColor.GREEN + "成功穿戴称号: " + displayName);
                 
-                // 重新打开界面
+                // 根据当前页面重新打开界面
                 player.closeInventory();
-                Bukkit.getScheduler().runTaskLater(this, () -> openTitleShop(player), 2L);
+                if (invTitle.equals(ChatColor.GREEN + "称号仓库 第1页")) {
+                    Bukkit.getScheduler().runTaskLater(this, () -> openTitleShopPage1(player), 2L);
+                } else {
+                    Bukkit.getScheduler().runTaskLater(this, () -> openTitleShopPage2(player), 2L);
+                }
             }
         }
     }
