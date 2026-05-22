@@ -146,16 +146,16 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             shop.setItem(row * 9 + 8, blackGlass); // 右侧
         }
         
-        // 称号槽位定义（24个格子：第2-4行的中间7格 + 第5行前3格）
+        // 称号槽位定义（28个格子：第2-5行的中间7格）
         int[] titleSlots = {
             10, 11, 12, 13, 14, 15, 16,  // 第2行
             19, 20, 21, 22, 23, 24, 25,  // 第3行
             28, 29, 30, 31, 32, 33, 34,  // 第4行
-            37, 38, 39                     // 第5行（前3格）
+            37, 38, 39, 40, 41, 42, 43   // 第5行
         };
         
         // 第6行第5格（索引49）- 根据称号数量决定是否显示下一页按钮
-        // 称号槽位总数为 24 个
+        // 称号槽位总数为 28 个
         // 获取玩家拥有的称号
         List<String> ownedTitles = getPlayerOwnedTitles(player);
         String currentTitle = playerCurrentTitle.get(player.getUniqueId().toString());
@@ -236,12 +236,12 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             shop.setItem(row * 9 + 8, blackGlass); // 右侧
         }
         
-        // 称号槽位定义（24个格子：第2-4行的中间7格 + 第5行前3格）
+        // 称号槽位定义（28个格子：第2-5行的中间7格）
         int[] titleSlots = {
             10, 11, 12, 13, 14, 15, 16,  // 第2行
             19, 20, 21, 22, 23, 24, 25,  // 第3行
             28, 29, 30, 31, 32, 33, 34,  // 第4行
-            37, 38, 39                     // 第5行（前3格）
+            37, 38, 39, 40, 41, 42, 43   // 第5行
         };
         
         // 第6行第5格（索引49）- 第二页始终显示上一页按钮
@@ -257,8 +257,8 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         List<String> ownedTitles = getPlayerOwnedTitles(player);
         String currentTitle = playerCurrentTitle.get(player.getUniqueId().toString());
         
-        // 填充第二页的称号物品（跳过前24个，显示第25-48个）
-        int startIndex = 24; // 从第25个称号开始
+        // 填充第二页的称号物品（跳过前28个，显示第29-56个）
+        int startIndex = 28; // 从第29个称号开始
         
         // 确保有称号可以显示
         if (ownedTitles.size() <= startIndex) {
@@ -379,7 +379,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             10, 11, 12, 13, 14, 15, 16,  // 第2行
             19, 20, 21, 22, 23, 24, 25,  // 第3行
             28, 29, 30, 31, 32, 33, 34,  // 第4行
-            37, 38, 39                     // 第5行（前3格）
+            37, 38, 39, 40, 41, 42, 43   // 第5行
         };
         
         // 查找点击的槽位对应的称号
@@ -392,8 +392,8 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                         selectedTitleId = ownedTitles.get(i);
                     }
                 } else {
-                    // 第2页：从第25个开始
-                    int actualIndex = 24 + i;
+                    // 第2页：从第29个开始
+                    int actualIndex = 28 + i;
                     if (actualIndex < ownedTitles.size()) {
                         selectedTitleId = ownedTitles.get(actualIndex);
                     }
