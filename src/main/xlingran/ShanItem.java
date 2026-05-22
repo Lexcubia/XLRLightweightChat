@@ -470,11 +470,12 @@ public class ShanItem {
         // 在开头添加 §r 重置符，清除前面的样式影响
         TextComponent itemComponent = new TextComponent("§r" + coloredDisplayName + "§r");
         
-        // 设置悬浮事件 - 使用 Content 接口创建 HoverEvent（Spigot 1.16+ 推荐方式）
-        itemComponent.setHoverEvent(new HoverEvent(
-            HoverEvent.Action.SHOW_TEXT,
-            new HoverEvent.Content(hoverComponents)
-        ));
+        // 设置悬浮事件 - 使用 ComponentBuilder 设置 HoverEvent（Spigot 1.21.1 兼容方式）
+        ComponentBuilder hoverBuilder = new ComponentBuilder();
+        for (BaseComponent component : hoverComponents) {
+            hoverBuilder.append(component);
+        }
+        itemComponent.setHoverEvent(hoverBuilder.create()[0].getHoverEvent());
         
         return new BaseComponent[]{itemComponent};
     }
