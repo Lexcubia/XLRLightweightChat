@@ -4,29 +4,22 @@
 # 聊天格式：称号 玩家ID 配置16进制颜色 聊天内容，格式可自定义
 # 可以配置多个聊天格式，名称可自定义
 Chat:
-  op: "%ChatPrefix% &a%player%: %color5%%chat%"
-  vip: "%ChatPrefix% &a%player%: %color4%%chat%"
-  svip: "%ChatPrefix% &a%player%: %color3%%chat%"
+  op: "%ChatPrefix% &a%player%: %color1%%chat%"
   default: "%ChatPrefix% &a%player%: &a%chat%"
 
 # 16进制渐变颜色变量配置，可以创建多个
 # 可以在上面使用变量是 %color1% %color2%
 Variable:
   color1: "#e4afcb-#7edbdc"
-  color2: "#30cfd0-#330867"
-  color3: "#ff6b6b-#ff8e8e"
-  color4: "#d4fc79-#96e6a1"
-  color5: "#4facfe-#00f2fe"
+  color2: "#e4afcb-#eef1f5"
 
 # 从上往下的权限检查，权限节点是 xlr.chat.playertitle.ID
 # 玩家默认拥有 xlr.chat.playertitle.1 权限
 # 称号，格式 ID: "称号"
 # 最多拥有 56 个称号，最少 1 个
 PlayerTitle:
-  1: "%color2%[居民]"
-  2: "&c[管理员]"
-  3: "&6[VIP]"
-  4: "%color1%[SVIP]"
+  1: "&b[居民]"
+  2: "&2[管理员]"
 
 # 输入命令，命令输出提示
 Command:
