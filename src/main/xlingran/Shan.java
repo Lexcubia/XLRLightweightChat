@@ -751,7 +751,16 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
             } else if (colorConfig != null) {
                 // 有渐变颜色但没有物品：正常处理
                 String coloredMessage = applyGradientColor(message, colorConfig);
+                
+                // DEBUG: 打印替换前的format
+                System.out.println("[DEBUG] 替换前的format: " + format);
+                System.out.println("[DEBUG] format中是否包含%chat%: " + format.contains("%chat%"));
+                
                 result = format.replace("%chat%", coloredMessage);
+                
+                // DEBUG: 打印替换后的result
+                System.out.println("[DEBUG] 替换后的result: " + result);
+                System.out.println("[DEBUG] result中是否包含%chat%: " + result.contains("%chat%"));
                 
                 // DEBUG: 打印聊天内容处理后的result
                 System.out.println("[DEBUG] 有渐变颜色-处理后的result: " + result);
@@ -921,6 +930,51 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
      * @param textLength 当前文本的长度
      * @param totalLength 整个消息的总长度（不包括物品）
      */
+    /**
+     * 计算字符串中的可见字符数（跳过所有颜色代码）
+     * @param text 输入文本
+     * @return 可见字符数
+     */
+    private int countVisibleCharacters(String text) {
+        int visibleLength = 0;
+        
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            // 跳过 § 颜色代码
+            if (c == '§' && i + 1 < text.length()) {
+                char nextChar = text.charAt(i + 1);
+                // 检查是否是 16 进制颜色代码 §x§R§R§G§G§B§B
+                if (nextChar == 'x' || nextChar == 'X') {
+                    // 16 进制颜色代码占 14 个字符（§x§R§R§G§G§B§B）
+                    i += 13; // 跳过剩余的 13 个字符
+                    continue;
+                }
+                // 其他 § 颜色代码占 2 个字符
+                i++; // 跳过下一个字符
+                continue;
+            }
+            // 跳过 & 颜色代码
+            if (c == '&' && i + 1 < text.length()) {
+                char nextChar = text.charAt(i + 1);
+                if ((nextChar >= '0' && nextChar <= '9') || 
+                    (nextChar >= 'a' && nextChar <= 'f') ||
+                    (nextChar >= 'A' && nextChar <= 'F') ||
+                    nextChar == 'r' || nextChar == 'R' ||
+                    nextChar == 'k' || nextChar == 'K' ||
+                    nextChar == 'l' || nextChar == 'L' ||
+                    nextChar == 'm' || nextChar == 'M' ||
+                    nextChar == 'n' || nextChar == 'N' ||
+                    nextChar == 'o' || nextChar == 'O') {
+                    i++; // 跳过下一个字符
+                    continue;
+                }
+            }
+            visibleLength++;
+        }
+        
+        return visibleLength;
+    }
+    
     private String applyGradientWithRange(String text, String colorConfig, int rangeStart, int textLength, int totalLength) {
         if (text.isEmpty() || totalLength == 0) {
             return text;
@@ -961,42 +1015,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         
         StringBuilder result = new StringBuilder();
         int charIndex = 0; // 当前文本中的可见字符索引
-        int visibleLength = 0; // 可见字符总数（不包括颜色代码）
-        
-        // 先计算可见字符总数（不包括颜色代码）
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            // 跳过 § 颜色代码
-            if (c == '§' && i + 1 < text.length()) {
-                char nextChar = text.charAt(i + 1);
-                // 检查是否是 16 进制颜色代码 §x§R§R§G§G§B§B
-                if (nextChar == 'x' || nextChar == 'X') {
-                    // 16 进制颜色代码占 14 个字符（§x§R§R§G§G§B§B）
-                    i += 13; // 跳过剩余的 13 个字符
-                    continue;
-                }
-                // 其他 § 颜色代码占 2 个字符
-                i++; // 跳过下一个字符
-                continue;
-            }
-            // 跳过 & 颜色代码
-            if (c == '&' && i + 1 < text.length()) {
-                char nextChar = text.charAt(i + 1);
-                if ((nextChar >= '0' && nextChar <= '9') || 
-                    (nextChar >= 'a' && nextChar <= 'f') ||
-                    (nextChar >= 'A' && nextChar <= 'F') ||
-                    nextChar == 'r' || nextChar == 'R' ||
-                    nextChar == 'k' || nextChar == 'K' ||
-                    nextChar == 'l' || nextChar == 'L' ||
-                    nextChar == 'm' || nextChar == 'M' ||
-                    nextChar == 'n' || nextChar == 'N' ||
-                    nextChar == 'o' || nextChar == 'O') {
-                    i++; // 跳过下一个字符
-                    continue;
-                }
-            }
-            visibleLength++;
-        }
+        int visibleLength = countVisibleCharacters(text); // 计算可见字符总数
         
         // 防止除零错误
         if (visibleLength == 0) {
@@ -1014,7 +1033,10 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                 if (nextChar == 'x' || nextChar == 'X') {
                     // 16 进制颜色代码占 14 个字符（§x§R§R§G§G§B§B）
                     // 保留完整的 16 进制颜色代码
-                    result.append(text.substring(i, Math.min(i + 14, text.length())));
+                    int endIndex = Math.min(i + 14, text.length());
+                    for (int j = i; j < endIndex; j++) {
+                        result.append(text.charAt(j));
+                    }
                     i += 13; // 跳过剩余的 13 个字符
                     continue;
                 }
@@ -1095,42 +1117,7 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
 
         // 为每个字符应用渐变色，但跳过颜色代码
         int charIndex = 0; // 实际可见字符的索引
-        int visibleLength = 0; // 可见字符总数（不包括颜色代码）
-        
-        // 先计算可见字符总数（不包括 § 和 & 颜色代码）
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            // 跳过 § 颜色代码
-            if (c == '§' && i + 1 < text.length()) {
-                char nextChar = text.charAt(i + 1);
-                // 检查是否是 16 进制颜色代码 §x§R§R§G§G§B§B
-                if (nextChar == 'x' || nextChar == 'X') {
-                    // 16 进制颜色代码占 14 个字符（§x§R§R§G§G§B§B）
-                    i += 13; // 跳过剩余的 13 个字符
-                    continue;
-                }
-                // 其他 § 颜色代码占 2 个字符
-                i++; // 跳过下一个字符
-                continue;
-            }
-            // 跳过 & 颜色代码
-            if (c == '&' && i + 1 < text.length()) {
-                char nextChar = text.charAt(i + 1);
-                if ((nextChar >= '0' && nextChar <= '9') || 
-                    (nextChar >= 'a' && nextChar <= 'f') ||
-                    (nextChar >= 'A' && nextChar <= 'F') ||
-                    nextChar == 'r' || nextChar == 'R' ||
-                    nextChar == 'k' || nextChar == 'K' ||
-                    nextChar == 'l' || nextChar == 'L' ||
-                    nextChar == 'm' || nextChar == 'M' ||
-                    nextChar == 'n' || nextChar == 'N' ||
-                    nextChar == 'o' || nextChar == 'O') {
-                    i++; // 跳过下一个字符
-                    continue;
-                }
-            }
-            visibleLength++;
-        }
+        int visibleLength = countVisibleCharacters(text); // 计算可见字符总数
         
         // 防止除零错误
         if (visibleLength == 0) {
@@ -1148,7 +1135,10 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
                 if (nextChar == 'x' || nextChar == 'X') {
                     // 16 进制颜色代码占 14 个字符（§x§R§R§G§G§B§B）
                     // 保留完整的 16 进制颜色代码
-                    result.append(text.substring(i, Math.min(i + 14, text.length())));
+                    int endIndex = Math.min(i + 14, text.length());
+                    for (int j = i; j < endIndex; j++) {
+                        result.append(text.charAt(j));
+                    }
                     i += 13; // 跳过剩余的 13 个字符
                     continue;
                 }
