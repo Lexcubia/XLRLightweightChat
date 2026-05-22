@@ -248,6 +248,13 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         
         // 填充第二页的称号物品（跳过前28个，显示第29-56个）
         int startIndex = 28; // 从第29个称号开始
+        
+        // 确保有称号可以显示
+        if (ownedTitles.size() <= startIndex) {
+            player.openInventory(shop);
+            return;
+        }
+        
         for (int i = 0; i < Math.min(ownedTitles.size() - startIndex, titleSlots.length); i++) {
             String titleId = ownedTitles.get(startIndex + i);
             String titleName = playerTitles.get(titleId);
@@ -348,13 +355,32 @@ public class Shan extends JavaPlugin implements Listener, CommandExecutor {
         
         String displayName = meta.getDisplayName();
         
-        // 找到对应的称号 ID
+        // 根据当前页面和点击的槽位找到对应的称号 ID
         String selectedTitleId = null;
-        for (Map.Entry<String, String> entry : playerTitles.entrySet()) {
-            String titleName = processColorVariables(entry.getValue());
-            String coloredName = ChatColor.translateAlternateColorCodes('&', titleName);
-            if (coloredName.equals(displayName)) {
-                selectedTitleId = entry.getKey();
+        List<String> ownedTitles = getPlayerOwnedTitles(player);
+        int[] titleSlots = {
+            10, 11, 12, 13, 14, 15, 16,  // 第2行
+            19, 20, 21, 22, 23, 24, 25,  // 第3行
+            28, 29, 30, 31, 32, 33, 34,  // 第4行
+            37, 38, 39                     // 第5行（前3格）
+        };
+        
+        // 查找点击的槽位对应的称号
+        for (int i = 0; i < titleSlots.length; i++) {
+            if (titleSlots[i] == event.getSlot()) {
+                // 找到了对应的槽位
+                if (invTitle.equals(ChatColor.GREEN + "称号仓库 第1页")) {
+                    // 第1页：直接索引
+                    if (i < ownedTitles.size()) {
+                        selectedTitleId = ownedTitles.get(i);
+                    }
+                } else {
+                    // 第2页：从第29个开始
+                    int actualIndex = 28 + i;
+                    if (actualIndex < ownedTitles.size()) {
+                        selectedTitleId = ownedTitles.get(actualIndex);
+                    }
+                }
                 break;
             }
         }
