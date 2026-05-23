@@ -23,15 +23,24 @@ PlayerTitle:
   3: "&b[居民]"
   # 4-56: 可以继续添加更多称号...
 
-# %player% 变量，玩家鼠标挪到到这个变量时的悬浮显示
-player:
-  # 悬浮字体显示
-  - ""
-  - "&a> 点我私聊"
-  # Command 点击会在聊天栏预填指令
-  # RunCommand 点击后会直接执行指令
-  # 只能执行一条指令
-  - Command: msg %player%
+# 鼠标悬浮事件
+Required:
+  # 代表 %player% 鼠标挪到到这个变量时的悬浮显示
+  player:
+    # 悬浮显示字体
+    - ""
+    - "&a> &b点我私聊"
+    # 预装填到聊天栏指令
+    - Command: msg %player%
+  # 代表 %chat%
+  chat:
+    - ""
+    - "&a> &b点击发送传送"
+    - "&a> &b需要该玩家同意!"
+    # 直接执行指令
+    - RunCommand: tpa %player%
+
+chat
 
 # 输入命令，命令输出提示
 Command:
