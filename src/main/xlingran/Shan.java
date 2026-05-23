@@ -39,8 +39,8 @@ public class Shan extends JavaPlugin implements Listener {
     
     // 悬浮提示配置
     private List<String> playerHoverLore; // 玩家名称悬浮提示内容
-    private String playerSuggestCommand; // 点击后预填命令（Command）
-    private String playerRunCommand; // 点击后直接执行命令（RunCommand）
+    private List<String> playerSuggestCommands; // 点击后预填命令列表（Command）
+    private List<String> playerRunCommands; // 点击后直接执行命令列表（RunCommand）
 
     @Override
     public void onEnable() {
@@ -216,8 +216,8 @@ public class Shan extends JavaPlugin implements Listener {
      */
     private void loadPlayerHoverConfig() {
         playerHoverLore = new ArrayList<>();
-        playerSuggestCommand = null;
-        playerRunCommand = null;
+        playerSuggestCommands = new ArrayList<>();
+        playerRunCommands = new ArrayList<>();
         
         if (config.contains("player")) {
             List<String> playerConfig = config.getStringList("player");
@@ -225,10 +225,16 @@ public class Shan extends JavaPlugin implements Listener {
             for (String line : playerConfig) {
                 if (line.startsWith("Command:")) {
                     // 这是预填命令配置
-                    playerSuggestCommand = line.substring(8); // 移除 "Command:" 前缀
+                    String command = line.substring(8).trim(); // 移除 "Command:" 前缀
+                    if (!command.isEmpty()) {
+                        playerSuggestCommands.add(command);
+                    }
                 } else if (line.startsWith("RunCommand:")) {
                     // 这是直接执行命令配置
-                    playerRunCommand = line.substring(11); // 移除 "RunCommand:" 前缀
+                    String command = line.substring(11).trim(); // 移除 "RunCommand:" 前缀
+                    if (!command.isEmpty()) {
+                        playerRunCommands.add(command);
+                    }
                 } else {
                     // 这是悬浮提示文本
                     playerHoverLore.add(line);
@@ -359,14 +365,16 @@ public class Shan extends JavaPlugin implements Listener {
             }
         }
         
+        // 检查是否包含 %player% 且需要悬浮提示（在替换 %chat% 之前检查）
+        boolean needHover = result.contains("%player%") && playerHoverLore != null && !playerHoverLore.isEmpty();
+        
         // 最后替换 %chat%（处理没有颜色变量的情况）
         result = result.replace("%chat%", message);
         
         // 转换传统颜色代码 & -> §
         result = ChatColor.translateAlternateColorCodes('&', result);
         
-        // 检查是否包含 %player% 且需要悬浮提示
-        if (result.contains("%player%") && playerHoverLore != null && !playerHoverLore.isEmpty()) {
+        if (needHover) {
             return buildComponentWithHover(result, player);
         }
         
@@ -379,26 +387,43 @@ public class Shan extends JavaPlugin implements Listener {
      * 构建带悬浮提示的组件
      */
     private BaseComponent[] buildComponentWithHover(String message, Player player) {
-        // 分割消息，找到 %player% 的位置
-        String[] parts = message.split("%player%", 2);
+        // 在替换 %player% 之前，先分割消息
+        // 使用 split 并限制为 2，确保只分割第一个 %player%
+        int playerIndex = message.indexOf("%player%");
         
-        if (parts.length == 0) {
+        if (playerIndex == -1) {
+            // 没有找到 %player%，直接返回
             return new BaseComponent[]{new TextComponent(message)};
         }
         
+        String beforePlayer = message.substring(0, playerIndex);
+        String afterPlayer = message.substring(playerIndex + 8); // 8 是 "%player%" 的长度
+        
         ComponentBuilder builder = new ComponentBuilder();
         
-        // 添加前面的文本（需要正确解析 16 进制颜色代码）
-        if (parts.length > 0 && !parts[0].isEmpty()) {
+        // 用于保存前面的最后一个颜色，以便应用到玩家名称上
+        net.md_5.bungee.api.ChatColor lastColor = null;
+        
+        // 添加 %player% 前面的文本（需要正确解析 16 进制颜色代码）
+        if (!beforePlayer.isEmpty()) {
             // 将包含 § 格式的字符串转换为 BaseComponent
-            BaseComponent[] frontComponents = parseLegacyTextWithHexColors(parts[0]);
+            BaseComponent[] frontComponents = parseLegacyTextWithHexColors(beforePlayer);
             for (BaseComponent component : frontComponents) {
                 builder.append(component);
+                // 记录最后一个组件的颜色
+                if (component instanceof TextComponent textComp && textComp.getColor() != null) {
+                    lastColor = textComp.getColor();
+                }
             }
         }
         
         // 创建玩家名称组件（带悬浮提示和点击事件）
         TextComponent playerComponent = new TextComponent(player.getName());
+        
+        // 继承前面的颜色（如果有的话）
+        if (lastColor != null) {
+            playerComponent.setColor(lastColor);
+        }
         
         // 设置悬浮提示
         BaseComponent[] hoverComponents = buildHoverComponents();
@@ -408,23 +433,37 @@ public class Shan extends JavaPlugin implements Listener {
         
         // 设置点击事件（预填命令或直接执行）
         // 优先使用 RunCommand（直接执行），其次使用 Command（预填）
-        if (playerRunCommand != null && !playerRunCommand.isEmpty()) {
-            // 直接执行命令
-            String command = playerRunCommand.replace("%player%", player.getName());
-            playerComponent.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/" + command));
-        } else if (playerSuggestCommand != null && !playerSuggestCommand.isEmpty()) {
-            // 预填命令
-            String command = playerSuggestCommand.replace("%player%", player.getName());
-            playerComponent.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/" + command));
+        if (!playerRunCommands.isEmpty()) {
+            // 直接执行多条命令（使用 && 分隔）
+            StringBuilder commandBuilder = new StringBuilder();
+            for (int i = 0; i < playerRunCommands.size(); i++) {
+                String command = playerRunCommands.get(i).replace("%player%", player.getName());
+                commandBuilder.append("/").append(command);
+                if (i < playerRunCommands.size() - 1) {
+                    commandBuilder.append(" && ");
+                }
+            }
+            playerComponent.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, commandBuilder.toString()));
+        } else if (!playerSuggestCommands.isEmpty()) {
+            // 预填多条命令（使用 && 分隔）
+            StringBuilder commandBuilder = new StringBuilder();
+            for (int i = 0; i < playerSuggestCommands.size(); i++) {
+                String command = playerSuggestCommands.get(i).replace("%player%", player.getName());
+                commandBuilder.append("/").append(command);
+                if (i < playerSuggestCommands.size() - 1) {
+                    commandBuilder.append(" && ");
+                }
+            }
+            playerComponent.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, commandBuilder.toString()));
         }
         
         // 添加玩家名称
         builder.append(playerComponent);
         
-        // 添加后面的文本（需要正确解析 16 进制颜色代码）
-        if (parts.length > 1 && !parts[1].isEmpty()) {
+        // 添加 %player% 后面的文本（需要正确解析 16 进制颜色代码）
+        if (!afterPlayer.isEmpty()) {
             // 将包含 § 格式的字符串转换为 BaseComponent
-            BaseComponent[] backComponents = parseLegacyTextWithHexColors(parts[1]);
+            BaseComponent[] backComponents = parseLegacyTextWithHexColors(afterPlayer);
             for (BaseComponent component : backComponents) {
                 builder.append(component);
             }
