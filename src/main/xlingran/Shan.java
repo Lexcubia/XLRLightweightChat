@@ -424,48 +424,29 @@ public class Shan extends JavaPlugin implements Listener {
     }
 
     /**
-     * 从文本中提取最后一个颜色代码
+     * 从文本中提取最后一个传统颜色代码（& 或 § 格式）
+     * 注意：不会提取 16 进制颜色代码（§x§R§R§G§G§B§B）中的部分
      * @param text 包含颜色代码的文本
-     * @return 最后一个颜色代码，如果没有则返回 null
+     * @return 最后一个传统颜色代码，如果没有则返回 null
      */
     private net.md_5.bungee.api.ChatColor extractLastColorCode(String text) {
-        // 从后往前查找颜色代码
-        for (int i = text.length() - 1; i >= 0; i--) {
-            char c = text.charAt(i);
-            
-            // 检查 § 格式的颜色代码
-            if (c == '§' && i > 0) {
-                char next = text.charAt(i - 1);
-                // 16 进制颜色代码格式: §x§R§R§G§G§B§B
-                if (next == 'x' && i >= 13) {
-                    // 提取 16 进制颜色
-                    try {
-                        StringBuilder hex = new StringBuilder("#");
-                        for (int j = 0; j < 6; j++) {
-                            hex.append(text.charAt(i - 2 - j * 2));
-                        }
-                        String hexColor = hex.reverse().toString();
-                        return net.md_5.bungee.api.ChatColor.of(hexColor);
-                    } catch (Exception e) {
-                        // 解析失败，继续查找
-                    }
-                }
-                // 传统颜色代码: §a, §b, §c 等
-                else if (Character.isLetterOrDigit(next)) {
-                    return net.md_5.bungee.api.ChatColor.getByChar(next);
-                }
-            }
-            
-            // 检查 & 格式的颜色代码
-            if (c == '&' && i > 0) {
-                char prev = text.charAt(i - 1);
-                if (Character.isLetterOrDigit(prev)) {
-                    return net.md_5.bungee.api.ChatColor.getByChar(prev);
-                }
+        // 使用正则表达式查找所有传统颜色代码（&a 或 §a 格式，但不是 §x）
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("[&§]([^xX][0-9a-fk-or])", java.util.regex.Pattern.CASE_INSENSITIVE);
+        java.util.regex.Matcher matcher = pattern.matcher(text);
+        
+        net.md_5.bungee.api.ChatColor lastColor = null;
+        
+        while (matcher.find()) {
+            String colorCode = matcher.group(1);
+            char codeChar = colorCode.charAt(0);
+            // 使用 BungeeCord ChatColor 解析传统颜色代码
+            net.md_5.bungee.api.ChatColor color = net.md_5.bungee.api.ChatColor.getByChar(codeChar);
+            if (color != null) {
+                lastColor = color;
             }
         }
         
-        return null;
+        return lastColor;
     }
 
     /**
@@ -588,6 +569,12 @@ public class Shan extends JavaPlugin implements Listener {
             // 将包含 § 格式的字符串转换为 BaseComponent
             BaseComponent[] backComponents = parseLegacyTextWithHexColors(afterPlayer);
             for (BaseComponent component : backComponents) {
+                // 确保后面的组件不继承悬浮提示和点击事件
+                if (component instanceof TextComponent textComp) {
+                    // 清除可能继承的事件
+                    textComp.setHoverEvent(null);
+                    textComp.setClickEvent(null);
+                }
                 builder.append(component);
             }
         }
