@@ -47,6 +47,9 @@ public class Shan extends JavaPlugin implements Listener {
     private List<String> chatHoverLore; // 聊天消息悬浮提示内容（Required.chat）
     private List<String> chatSuggestCommands; // 点击后预填命令列表（Command - chat）
     private List<String> chatRunCommands; // 点击后直接执行命令列表（RunCommand - chat）
+    
+    // 物品展示配置
+    private boolean displayItemEnabled = false; // 是否启用 [item] 占位符
 
     @Override
     public void onEnable() {
@@ -60,6 +63,7 @@ public class Shan extends JavaPlugin implements Listener {
         loadColorVariables();
         loadPlayerTitles();
         loadPlayerHoverConfig();
+        loadDisplayItemConfig();
         
         // 初始化悬浮配置列表
         if (playerHoverLore == null) playerHoverLore = new ArrayList<>();
@@ -180,8 +184,16 @@ public class Shan extends JavaPlugin implements Listener {
         loadColorVariables();
         loadPlayerTitles();
         loadPlayerHoverConfig();
+        loadDisplayItemConfig();
         // 重新加载玩家数据
         loadPlayerData();
+    }
+
+    /**
+     * 加载 DisplayItem 配置
+     */
+    private void loadDisplayItemConfig() {
+        displayItemEnabled = config.getBoolean("Displayitem", false);
     }
 
     /**
@@ -222,12 +234,19 @@ public class Shan extends JavaPlugin implements Listener {
                             if (titleSection != null) {
                                 String name = titleSection.getString("name");
                                 if (name != null) {
-                                    playerTitles.put(id, name);
+                                    // 转换传统颜色代码 & -> §，确保后续比较一致性
+                                    String processedName = ChatColor.translateAlternateColorCodes('&', name);
+                                    playerTitles.put(id, processedName);
                                 }
                                 
                                 List<String> lore = titleSection.getStringList("Lore");
                                 if (!lore.isEmpty()) {
-                                    playerTitleLore.put(id, lore);
+                                    // 转换 Lore 中的传统颜色代码
+                                    List<String> processedLore = new ArrayList<>();
+                                    for (String loreLine : lore) {
+                                        processedLore.add(ChatColor.translateAlternateColorCodes('&', loreLine));
+                                    }
+                                    playerTitleLore.put(id, processedLore);
                                 }
                             }
                         } 
@@ -428,11 +447,238 @@ public class Shan extends JavaPlugin implements Listener {
     }
 
     /**
+     * 获取玩家手持物品的显示文本
+     * @param player 玩家
+     * @return 物品显示文本，格式: [物品名称 x数量]，如果没有物品则返回 null
+     */
+    private String getHandItemDisplay(Player player) {
+        org.bukkit.inventory.ItemStack item = player.getInventory().getItemInMainHand();
+        
+        // 检查是否有物品
+        if (item == null || item.getType() == org.bukkit.Material.AIR) {
+            return null;
+        }
+        
+        // 获取物品名称
+        String itemName = getItemChineseName(item.getType());
+        int amount = item.getAmount();
+        
+        // 返回格式: [物品 x数量]
+        return "[" + itemName + " x" + amount + "]";
+    }
+    
+    /**
+     * 获取物品的中文名称
+     * @param material 物品类型
+     * @return 中文名称，如果没有映射则返回英文名称
+     */
+    private String getItemChineseName(org.bukkit.Material material) {
+        // 常见物品的中文映射
+        return switch (material) {
+            // 方块类
+            case STONE -> "石头";
+            case GRANITE -> "花岗岩";
+            case DIORITE -> "闪长岩";
+            case ANDESITE -> "安山岩";
+            case GRASS_BLOCK -> "草方块";
+            case DIRT -> "泥土";
+            case COBBLESTONE -> "圆石";
+            case OAK_PLANKS -> "橡木木板";
+            case SPRUCE_PLANKS -> "云杉木板";
+            case BIRCH_PLANKS -> "白桦木板";
+            case JUNGLE_PLANKS -> "丛林木板";
+            case ACACIA_PLANKS -> "金合欢木板";
+            case DARK_OAK_PLANKS -> "深色橡木木板";
+            case OAK_LOG -> "橡木原木";
+            case SPRUCE_LOG -> "云杉原木";
+            case BIRCH_LOG -> "白桦原木";
+            case JUNGLE_LOG -> "丛林原木";
+            case ACACIA_LOG -> "金合欢原木";
+            case DARK_OAK_LOG -> "深色橡木原木";
+            case SAND -> "沙子";
+            case RED_SAND -> "红沙";
+            case GRAVEL -> "砂砾";
+            case COAL_ORE -> "煤矿石";
+            case IRON_ORE -> "铁矿石";
+            case GOLD_ORE -> "金矿石";
+            case DIAMOND_ORE -> "钻石矿石";
+            case EMERALD_ORE -> "绿宝石矿石";
+            case LAPIS_ORE -> "青金石矿石";
+            case REDSTONE_ORE -> "红石矿石";
+            case GLASS -> "玻璃";
+            case BRICK -> "砖块";
+            case BOOKSHELF -> "书架";
+            case CHEST -> "箱子";
+            case CRAFTING_TABLE -> "工作台";
+            case FURNACE -> "熔炉";
+            case TORCH -> "火把";
+            case LADDER -> "梯子";
+            case OAK_DOOR -> "橡木门";
+            case OAK_TRAPDOOR -> "橡木活板门";
+            
+            // 工具类
+            case WOODEN_PICKAXE -> "木镐";
+            case STONE_PICKAXE -> "石镐";
+            case IRON_PICKAXE -> "铁镐";
+            case GOLDEN_PICKAXE -> "金镐";
+            case DIAMOND_PICKAXE -> "钻石镐";
+            case NETHERITE_PICKAXE -> "下界合金镐";
+            case WOODEN_AXE -> "木斧";
+            case STONE_AXE -> "石斧";
+            case IRON_AXE -> "铁斧";
+            case GOLDEN_AXE -> "金斧";
+            case DIAMOND_AXE -> "钻石斧";
+            case NETHERITE_AXE -> "下界合金斧";
+            case WOODEN_SHOVEL -> "木铲";
+            case STONE_SHOVEL -> "石铲";
+            case IRON_SHOVEL -> "铁铲";
+            case GOLDEN_SHOVEL -> "金铲";
+            case DIAMOND_SHOVEL -> "钻石铲";
+            case NETHERITE_SHOVEL -> "下界合金铲";
+            case WOODEN_HOE -> "木锄";
+            case STONE_HOE -> "石锄";
+            case IRON_HOE -> "铁锄";
+            case GOLDEN_HOE -> "金锄";
+            case DIAMOND_HOE -> "钻石锄";
+            case NETHERITE_HOE -> "下界合金锄";
+            case WOODEN_SWORD -> "木剑";
+            case STONE_SWORD -> "石剑";
+            case IRON_SWORD -> "铁剑";
+            case GOLDEN_SWORD -> "金剑";
+            case DIAMOND_SWORD -> "钻石剑";
+            case NETHERITE_SWORD -> "下界合金剑";
+            
+            // 盔甲类
+            case LEATHER_HELMET -> "皮革头盔";
+            case LEATHER_CHESTPLATE -> "皮革胸甲";
+            case LEATHER_LEGGINGS -> "皮革护腿";
+            case LEATHER_BOOTS -> "皮革靴子";
+            case CHAINMAIL_HELMET -> "锁链头盔";
+            case CHAINMAIL_CHESTPLATE -> "锁链胸甲";
+            case CHAINMAIL_LEGGINGS -> "锁链护腿";
+            case CHAINMAIL_BOOTS -> "锁链靴子";
+            case IRON_HELMET -> "铁头盔";
+            case IRON_CHESTPLATE -> "铁胸甲";
+            case IRON_LEGGINGS -> "铁护腿";
+            case IRON_BOOTS -> "铁靴子";
+            case GOLDEN_HELMET -> "金头盔";
+            case GOLDEN_CHESTPLATE -> "金胸甲";
+            case GOLDEN_LEGGINGS -> "金护腿";
+            case GOLDEN_BOOTS -> "金靴子";
+            case DIAMOND_HELMET -> "钻石头盔";
+            case DIAMOND_CHESTPLATE -> "钻石胸甲";
+            case DIAMOND_LEGGINGS -> "钻石护腿";
+            case DIAMOND_BOOTS -> "钻石靴子";
+            case NETHERITE_HELMET -> "下界合金头盔";
+            case NETHERITE_CHESTPLATE -> "下界合金胸甲";
+            case NETHERITE_LEGGINGS -> "下界合金护腿";
+            case NETHERITE_BOOTS -> "下界合金靴子";
+            
+            // 食物类
+            case APPLE -> "苹果";
+            case BREAD -> "面包";
+            case COOKED_PORKCHOP -> "熟猪排";
+            case COOKED_BEEF -> "熟牛肉";
+            case COOKED_CHICKEN -> "熟鸡肉";
+            case COOKED_MUTTON -> "熟羊肉";
+            case COOKED_RABBIT -> "熟兔肉";
+            case COOKED_COD -> "熟鳕鱼";
+            case COOKED_SALMON -> "熟鲑鱼";
+            case GOLDEN_APPLE -> "金苹果";
+            case ENCHANTED_GOLDEN_APPLE -> "附魔金苹果";
+            case CARROT -> "胡萝卜";
+            case POTATO -> "马铃薯";
+            case BAKED_POTATO -> "烤马铃薯";
+            case BEETROOT -> "甜菜根";
+            case MELON_SLICE -> "西瓜片";
+            case PUMPKIN_PIE -> "南瓜派";
+            case COOKIE -> "曲奇";
+            case CAKE -> "蛋糕";
+            
+            // 材料类
+            case COAL -> "煤炭";
+            case CHARCOAL -> "木炭";
+            case IRON_INGOT -> "铁锭";
+            case GOLD_INGOT -> "金锭";
+            case DIAMOND -> "钻石";
+            case EMERALD -> "绿宝石";
+            case LAPIS_LAZULI -> "青金石";
+            case REDSTONE -> "红石粉";
+            case STICK -> "木棍";
+            case STRING -> "线";
+            case FEATHER -> "羽毛";
+            case GUNPOWDER -> "火药";
+            case FLINT -> "燧石";
+            case BONE -> "骨头";
+            case LEATHER -> "皮革";
+            case RABBIT_HIDE -> "兔子皮";
+            case PAPER -> "纸";
+            case BOOK -> "书";
+            case SLIME_BALL -> "黏液球";
+            case EGG -> "鸡蛋";
+            case GLOWSTONE_DUST -> "荧石粉";
+            case INK_SAC -> "墨囊";
+            case COCOA_BEANS -> "可可豆";
+            
+            // 药水类
+            case POTION -> "药水";
+            case SPLASH_POTION -> "喷溅药水";
+            case LINGERING_POTION -> "滞留药水";
+            
+            // 其他
+            case BOW -> "弓";
+            case CROSSBOW -> "弩";
+            case SHIELD -> "盾牌";
+            case FISHING_ROD -> "钓鱼竿";
+            case FLINT_AND_STEEL -> "打火石";
+            case SHEARS -> "剪刀";
+            case COMPASS -> "指南针";
+            case CLOCK -> "时钟";
+            case MAP -> "地图";
+            case NAME_TAG -> "命名牌";
+            case LEAD -> "栓绳";
+            case SADDLE -> "鞍";
+            case TNT -> "TNT";
+            case BEDROCK -> "基岩";
+            case WATER_BUCKET -> "水桶";
+            case LAVA_BUCKET -> "岩浆桶";
+            case MILK_BUCKET -> "奶桶";
+            case BUCKET -> "桶";
+            case OAK_SAPLING -> "橡树苗";
+            case SPRUCE_SAPLING -> "云杉树苗";
+            case BIRCH_SAPLING -> "白桦树苗";
+            case JUNGLE_SAPLING -> "丛林树苗";
+            case ACACIA_SAPLING -> "金合欢树苗";
+            case DARK_OAK_SAPLING -> "深色橡树苗";
+            case OAK_LEAVES -> "橡树树叶";
+            case SPRUCE_LEAVES -> "云杉树叶";
+            case BIRCH_LEAVES -> "白桦树叶";
+            case JUNGLE_LEAVES -> "丛林树叶";
+            case ACACIA_LEAVES -> "金合欢树叶";
+            case DARK_OAK_LEAVES -> "深色橡树叶";
+            
+            // 默认：返回英文名称
+            default -> material.name().replace('_', ' ').toLowerCase();
+        };
+    }
+
+    /**
      * 处理格式字符串，替换占位符并应用颜色
      */
     private BaseComponent[] processFormatToComponent(String format, Player player, String message) {
         // 构建完整的消息
         String result = format;
+        
+        // 处理 [item] 占位符（如果启用）
+        if (displayItemEnabled && message.contains("[item]")) {
+            String itemDisplay = getHandItemDisplay(player);
+            if (itemDisplay != null) {
+                message = message.replace("[item]", itemDisplay);
+            } else {
+                // 如果手里没有物品，移除 [item]
+                message = message.replace("[item]", "");
+            }
+        }
         
         // 只使用玩家当前穿戴的称号（不穿戴则不显示）
         String title = getPlayerCurrentTitle(player);
@@ -843,6 +1089,7 @@ public class Shan extends JavaPlugin implements Listener {
 
     /**
      * 处理称号中的颜色变量
+     * 注意：称号名称和 Lore 已经在加载时转换为 § 格式，这里只处理颜色变量
      */
     public String processTitleColors(String title) {
         String result = title;
