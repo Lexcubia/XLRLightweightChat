@@ -463,8 +463,8 @@ public class Shan extends JavaPlugin implements Listener {
     private String getHandItemDisplay(Player player) {
         org.bukkit.inventory.ItemStack item = player.getInventory().getItemInMainHand();
         
-        // 检查是否有物品
-        if (item == null || item.getType() == org.bukkit.Material.AIR) {
+        // 检查是否有物品（Spigot API 保证不会返回 null，只检查 AIR）
+        if (item.getType() == org.bukkit.Material.AIR) {
             return null;
         }
         
@@ -539,48 +539,25 @@ public class Shan extends JavaPlugin implements Listener {
             case CHAINMAIL_HELMET, CHAINMAIL_CHESTPLATE, CHAINMAIL_LEGGINGS, CHAINMAIL_BOOTS -> "&7"; // 灰色
             
             // 食物类
-            case APPLE -> "&c"; // 红色
-            case BREAD -> "&e"; // 黄色
+            case APPLE, BEETROOT -> "&c"; // 红色
+            case BREAD, POTATO, BAKED_POTATO, PUMPKIN_PIE, COOKIE, GLOWSTONE_DUST, CLOCK, MAP -> "&e"; // 黄色
             case COOKED_PORKCHOP, COOKED_BEEF, COOKED_CHICKEN, COOKED_MUTTON, COOKED_RABBIT,
-                 COOKED_COD, COOKED_SALMON -> "&6"; // 棕色
-            case CARROT -> "&6"; // 橙色
-            case POTATO, BAKED_POTATO -> "&e"; // 黄色
-            case BEETROOT -> "&c"; // 红色
-            case MELON_SLICE -> "&a"; // 绿色
-            case PUMPKIN_PIE -> "&e"; // 黄色
-            case COOKIE -> "&e"; // 棕色
-            case CAKE -> "&f"; // 白色
+                 COOKED_COD, COOKED_SALMON, CARROT, COCOA_BEANS -> "&6"; // 棕色
+            case MELON_SLICE, SLIME_BALL -> "&a"; // 绿色
+            case CAKE, STRING, FEATHER, PAPER, BOOK, BONE, EGG, COMPASS, NAME_TAG, LEAD, MILK_BUCKET -> "&f"; // 白色
             
-            // 材料类
-            case STRING, FEATHER, PAPER, BOOK -> "&f"; // 白色
-            case GUNPOWDER, FLINT -> "&8"; // 灰色
-            case BONE -> "&f"; // 白色
-            case SLIME_BALL -> "&a"; // 绿色
-            case EGG -> "&f"; // 白色
-            case GLOWSTONE_DUST -> "&e"; // 黄色
-            case INK_SAC -> "&8"; // 黑色
-            case COCOA_BEANS -> "&6"; // 棕色
+            // 材料类（已在食物类中合并）
             
             // 药水类
             case POTION, SPLASH_POTION, LINGERING_POTION -> "&b"; // 蓝色
             
             // 其他
-            case BOW -> "&6"; // 棕色
-            case CROSSBOW -> "&8"; // 深灰色
-            case SHIELD -> "&8"; // 灰色
-            case FISHING_ROD -> "&6"; // 棕色
-            case FLINT_AND_STEEL -> "&7"; // 灰色
-            case SHEARS -> "&7"; // 灰色
-            case COMPASS -> "&f"; // 白色
-            case CLOCK -> "&e"; // 金色
-            case MAP -> "&e"; // 黄色
-            case NAME_TAG -> "&f"; // 白色
-            case LEAD -> "&f"; // 白色
+            case BOW, FISHING_ROD -> "&6"; // 棕色
+            case CROSSBOW, SHIELD, GUNPOWDER, FLINT, INK_SAC -> "&8"; // 深灰色/黑色
+            case FLINT_AND_STEEL, SHEARS, BUCKET -> "&7"; // 灰色
             case SADDLE -> "&4"; // 深棕色
             case WATER_BUCKET -> "&9"; // 蓝色
             case LAVA_BUCKET -> "&c"; // 红色
-            case MILK_BUCKET -> "&f"; // 白色
-            case BUCKET -> "&7"; // 灰色
             
             // 默认：返回白色
             default -> "&f";
