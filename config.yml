@@ -55,4 +55,5 @@ player:
   - ""
   - "&a> 点我私聊"
   # 点击悬浮字体后直接打开聊天栏补全指令
-  - command: msg %player%
+  - Command: msg %player%
+  - RunCommand: tpa %player%
