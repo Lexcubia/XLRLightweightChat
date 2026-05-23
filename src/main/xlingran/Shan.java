@@ -588,7 +588,26 @@ public class Shan extends JavaPlugin implements Listener {
                 }
                 
                 // 创建称号组件（带悬浮提示）
-                TextComponent titleComponent = new TextComponent(title);
+                // 称号文本已包含渐变颜色代码，需要正确解析
+                BaseComponent[] titleComponents = parseLegacyTextWithHexColors(title);
+                
+                // 使用 ComponentBuilder 合并所有称号组件
+                ComponentBuilder titleBuilder = new ComponentBuilder();
+                for (int i = 0; i < titleComponents.length; i++) {
+                    if (i > 0) {
+                        titleBuilder.append(""); // 添加空字符串作为连接
+                    }
+                    titleBuilder.append(titleComponents[i]);
+                }
+                
+                // 获取合并后的组件
+                BaseComponent[] mergedTitleComponents = titleBuilder.create();
+                TextComponent titleComponent;
+                if (mergedTitleComponents.length > 0 && mergedTitleComponents[0] instanceof TextComponent) {
+                    titleComponent = (TextComponent) mergedTitleComponents[0];
+                } else {
+                    titleComponent = new TextComponent(title);
+                }
                 
                 // 获取称号 Lore 并设置为悬浮提示
                 List<String> titleLore = playerTitleLore.get(titleId);
@@ -1026,7 +1045,31 @@ public class Shan extends JavaPlugin implements Listener {
         
         for (int i = 0; i < hoverLore.size(); i++) {
             String line = hoverLore.get(i);
-            String translated = ChatColor.translateAlternateColorCodes('&', line);
+            
+            // 先处理颜色变量（如 %color4%）
+            String processedLine = line;
+            for (Map.Entry<String, String> entry : colorVariables.entrySet()) {
+                if (processedLine.contains(entry.getKey())) {
+                    String gradientConfig = entry.getValue();
+                    String placeholder = entry.getKey();
+                    
+                    // 提取占位符后面的文本
+                    int placeholderIndex = processedLine.indexOf(placeholder);
+                    if (placeholderIndex != -1) {
+                        String afterPlaceholder = processedLine.substring(placeholderIndex + placeholder.length());
+                        String beforePlaceholder = processedLine.substring(0, placeholderIndex);
+                        
+                        // 对文本应用渐变
+                        String gradientText = applyGradient(gradientConfig, afterPlaceholder);
+                        
+                        // 重新组合
+                        processedLine = beforePlaceholder + gradientText;
+                    }
+                }
+            }
+            
+            // 再转换传统颜色代码
+            String translated = ChatColor.translateAlternateColorCodes('&', processedLine);
             
             if (i > 0) {
                 builder.append("\n");
