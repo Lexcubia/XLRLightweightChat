@@ -448,11 +448,13 @@ public class Shan extends JavaPlugin implements Listener {
         if (!beforePlayer.isEmpty()) {
             // 将包含 § 格式的字符串转换为 BaseComponent
             BaseComponent[] frontComponents = parseLegacyTextWithHexColors(beforePlayer);
+            getLogger().info("[调试] beforePlayer 文本: " + beforePlayer);
             for (BaseComponent component : frontComponents) {
                 builder.append(component);
                 // 记录最后一个组件的颜色
                 if (component instanceof TextComponent textComp && textComp.getColor() != null) {
                     lastColor = textComp.getColor();
+                    getLogger().info("[调试] 记录颜色: " + lastColor.getName() + " 文本: " + textComp.getText());
                 }
             }
         }
@@ -471,19 +473,33 @@ public class Shan extends JavaPlugin implements Listener {
             playerComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverComponents));
         }
         
-        // 设置点击事件（预填命令或直接执行）
-        // 优先使用 RunCommand（直接执行），其次使用 Command（预填）
-        if (!playerRunCommands.isEmpty()) {
-            // 直接执行多条命令（使用 ; 分隔）
+        // 设置点击事件（合并 Command 和 RunCommand）
+        List<String> allCommands = new ArrayList<>();
+        
+        // 添加所有 RunCommand（直接执行）
+        for (String cmd : playerRunCommands) {
+            String command = cmd.replace("%player%", player.getName());
+            if (!command.startsWith("/")) {
+                command = "/" + command;
+            }
+            allCommands.add(command);
+        }
+        
+        // 添加所有 Command（预填）
+        for (String cmd : playerSuggestCommands) {
+            String command = cmd.replace("%player%", player.getName());
+            if (!command.startsWith("/")) {
+                command = "/" + command;
+            }
+            allCommands.add(command);
+        }
+        
+        if (!allCommands.isEmpty()) {
+            // 使用 RUN_COMMAND 执行所有命令（用 ; 分隔）
             StringBuilder commandBuilder = new StringBuilder();
-            for (int i = 0; i < playerRunCommands.size(); i++) {
-                String command = playerRunCommands.get(i).replace("%player%", player.getName());
-                // 确保命令以 / 开头
-                if (!command.startsWith("/")) {
-                    command = "/" + command;
-                }
-                commandBuilder.append(command);
-                if (i < playerRunCommands.size() - 1) {
+            for (int i = 0; i < allCommands.size(); i++) {
+                commandBuilder.append(allCommands.get(i));
+                if (i < allCommands.size() - 1) {
                     commandBuilder.append("; ");
                 }
             }
@@ -491,26 +507,9 @@ public class Shan extends JavaPlugin implements Listener {
             playerComponent.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, finalCommand));
             // 调试信息：输出设置的点击事件
             getLogger().info("[调试] 设置 RUN_COMMAND 点击事件: " + finalCommand);
-        } else if (!playerSuggestCommands.isEmpty()) {
-            // 预填多条命令（使用 ; 分隔）
-            StringBuilder commandBuilder = new StringBuilder();
-            for (int i = 0; i < playerSuggestCommands.size(); i++) {
-                String command = playerSuggestCommands.get(i).replace("%player%", player.getName());
-                // 确保命令以 / 开头
-                if (!command.startsWith("/")) {
-                    command = "/" + command;
-                }
-                commandBuilder.append(command);
-                if (i < playerSuggestCommands.size() - 1) {
-                    commandBuilder.append("; ");
-                }
-            }
-            String finalCommand = commandBuilder.toString();
-            playerComponent.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, finalCommand));
-            // 调试信息：输出设置的点击事件
-            getLogger().info("[调试] 设置 SUGGEST_COMMAND 点击事件: " + finalCommand);
+            getLogger().info("[调试] 包含 " + playerRunCommands.size() + " 个 RunCommand 和 " + playerSuggestCommands.size() + " 个 Command");
         } else {
-            getLogger().info("[调试] 未设置点击事件，playerRunCommands 和 playerSuggestCommands 都为空");
+            getLogger().info("[调试] 未设置点击事件");
         }
         
         // 添加玩家名称
