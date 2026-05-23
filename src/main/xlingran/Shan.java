@@ -190,48 +190,21 @@ public class Shan extends JavaPlugin implements Listener {
     }
 
     /**
-     * 查找匹配的称号（按优先级从上往下检查）
-     * 配置文件中 ID 小的优先级更高
-     * 找到第一个有权限的称号后立即返回，不再检查后续
-     */
-    private String findMatchingTitle(Player player) {
-        if (playerTitles.isEmpty()) {
-            return null;
-        }
-        
-        // TreeMap 已经按 ID 排序，从小到大检查
-        for (Map.Entry<Integer, String> entry : playerTitles.entrySet()) {
-            int id = entry.getKey();
-            String prefix = entry.getValue();
-            String permission = "xlr.chat.playertitle." + id;
-            
-            if (player.hasPermission(permission)) {
-                return prefix;
-            }
-        }
-        
-        return null;
-    }
-
-    /**
      * 处理格式字符串，替换占位符并应用颜色
      */
     private String processFormat(String format, Player player, String message) {
         // 替换 %player%
         String result = format.replace("%player%", player.getName());
         
-        // 查找玩家当前穿戴的称号（优先使用玩家穿戴的称号，如果没有则查找最高权限称号）
+        // 只使用玩家当前穿戴的称号（不穿戴则不显示）
         String title = getPlayerCurrentTitle(player);
-        if (title == null) {
-            // 如果玩家没有穿戴称号，查找最高权限的称号
-            title = findMatchingTitle(player);
-        }
         
         if (title != null) {
             // 处理称号中的颜色变量
             title = processTitleColors(title);
             result = result.replace("%title%", title);
         } else {
+            // 玩家没有穿戴称号，不显示称号
             result = result.replace("%title%", "");
         }
         
