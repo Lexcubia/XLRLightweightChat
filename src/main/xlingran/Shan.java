@@ -220,29 +220,59 @@ public class Shan extends JavaPlugin implements Listener {
         playerRunCommands = new ArrayList<>();
         
         if (config.contains("player")) {
-            List<String> playerConfig = config.getStringList("player");
-            getLogger().info("[调试] 加载 player 配置，共 " + playerConfig.size() + " 行");
+            // 尝试获取配置，处理可能的 Map 格式
+            Object playerObj = config.get("player");
+            getLogger().info("[调试] player 配置类型: " + (playerObj != null ? playerObj.getClass().getName() : "null"));
             
-            for (String line : playerConfig) {
-                if (line.startsWith("Command:")) {
-                    // 这是预填命令配置
-                    String command = line.substring(8).trim(); // 移除 "Command:" 前缀
-                    if (!command.isEmpty()) {
-                        playerSuggestCommands.add(command);
-                        getLogger().info("[调试] 添加 Command: " + command);
+            if (playerObj instanceof List) {
+                List<?> playerList = (List<?>) playerObj;
+                getLogger().info("[调试] 加载 player 配置（列表），共 " + playerList.size() + " 行");
+                
+                for (Object item : playerList) {
+                    // 处理 Map 格式（YAML 会将 "- Command: xxx" 解析为 Map）
+                    if (item instanceof Map) {
+                        Map<?, ?> map = (Map<?, ?>) item;
+                        for (Map.Entry<?, ?> entry : map.entrySet()) {
+                            String key = String.valueOf(entry.getKey());
+                            String value = String.valueOf(entry.getValue());
+                            
+                            if (key.equalsIgnoreCase("Command")) {
+                                if (!value.isEmpty()) {
+                                    playerSuggestCommands.add(value);
+                                    getLogger().info("[调试] 添加 Command: " + value);
+                                }
+                            } else if (key.equalsIgnoreCase("RunCommand")) {
+                                if (!value.isEmpty()) {
+                                    playerRunCommands.add(value);
+                                    getLogger().info("[调试] 添加 RunCommand: " + value);
+                                }
+                            }
+                        }
+                    } else {
+                        // 普通字符串
+                        String line = String.valueOf(item);
+                        getLogger().info("[调试] 读取到行: " + line);
+                        
+                        if (line.startsWith("Command:")) {
+                            String command = line.substring(8).trim();
+                            if (!command.isEmpty()) {
+                                playerSuggestCommands.add(command);
+                                getLogger().info("[调试] 添加 Command: " + command);
+                            }
+                        } else if (line.startsWith("RunCommand:")) {
+                            String command = line.substring(11).trim();
+                            if (!command.isEmpty()) {
+                                playerRunCommands.add(command);
+                                getLogger().info("[调试] 添加 RunCommand: " + command);
+                            }
+                        } else {
+                            playerHoverLore.add(line);
+                            getLogger().info("[调试] 添加悬浮文本: " + line);
+                        }
                     }
-                } else if (line.startsWith("RunCommand:")) {
-                    // 这是直接执行命令配置
-                    String command = line.substring(11).trim(); // 移除 "RunCommand:" 前缀
-                    if (!command.isEmpty()) {
-                        playerRunCommands.add(command);
-                        getLogger().info("[调试] 添加 RunCommand: " + command);
-                    }
-                } else {
-                    // 这是悬浮提示文本
-                    playerHoverLore.add(line);
-                    getLogger().info("[调试] 添加悬浮文本: " + line);
                 }
+            } else {
+                getLogger().info("[调试] player 不是列表类型");
             }
             
             getLogger().info("[调试] 配置加载完成 - 悬浮文本: " + playerHoverLore.size() + 
