@@ -39,7 +39,8 @@ public class Shan extends JavaPlugin implements Listener {
     
     // 悬浮提示配置
     private List<String> playerHoverLore; // 玩家名称悬浮提示内容
-    private String playerClickCommand; // 点击后执行的命令
+    private String playerSuggestCommand; // 点击后预填命令（Command）
+    private String playerRunCommand; // 点击后直接执行命令（RunCommand）
 
     @Override
     public void onEnable() {
@@ -215,15 +216,19 @@ public class Shan extends JavaPlugin implements Listener {
      */
     private void loadPlayerHoverConfig() {
         playerHoverLore = new ArrayList<>();
-        playerClickCommand = null;
+        playerSuggestCommand = null;
+        playerRunCommand = null;
         
         if (config.contains("player")) {
             List<String> playerConfig = config.getStringList("player");
             
             for (String line : playerConfig) {
-                if (line.startsWith("command:")) {
-                    // 这是点击命令配置
-                    playerClickCommand = line.substring(8); // 移除 "command:" 前缀
+                if (line.startsWith("Command:")) {
+                    // 这是预填命令配置
+                    playerSuggestCommand = line.substring(8); // 移除 "Command:" 前缀
+                } else if (line.startsWith("RunCommand:")) {
+                    // 这是直接执行命令配置
+                    playerRunCommand = line.substring(11); // 移除 "RunCommand:" 前缀
                 } else {
                     // 这是悬浮提示文本
                     playerHoverLore.add(line);
@@ -397,10 +402,15 @@ public class Shan extends JavaPlugin implements Listener {
             playerComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverComponents));
         }
         
-        // 设置点击事件（打开聊天栏补全指令）
-        if (playerClickCommand != null && !playerClickCommand.isEmpty()) {
-            String command = playerClickCommand.replace("%player%", player.getName());
-            // 使用 SUGGEST_COMMAND 动作，在聊天栏中预填命令
+        // 设置点击事件（预填命令或直接执行）
+        // 优先使用 RunCommand（直接执行），其次使用 Command（预填）
+        if (playerRunCommand != null && !playerRunCommand.isEmpty()) {
+            // 直接执行命令
+            String command = playerRunCommand.replace("%player%", player.getName());
+            playerComponent.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/" + command));
+        } else if (playerSuggestCommand != null && !playerSuggestCommand.isEmpty()) {
+            // 预填命令
+            String command = playerSuggestCommand.replace("%player%", player.getName());
             playerComponent.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/" + command));
         }
         
@@ -617,7 +627,10 @@ public class Shan extends JavaPlugin implements Listener {
      */
     private void broadcastMessage(String playerName, String message) {
         String formatted = "&a" + playerName + ": &f" + message;
-        broadcastProcessedMessage(ChatColor.translateAlternateColorCodes('&', formatted));
+        String translated = ChatColor.translateAlternateColorCodes('&', formatted);
+        // 将 String 转换为 BaseComponent[]
+        BaseComponent[] components = new BaseComponent[]{new TextComponent(translated)};
+        broadcastProcessedMessage(components);
     }
 
     /**
