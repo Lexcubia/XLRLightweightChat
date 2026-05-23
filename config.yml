@@ -55,7 +55,9 @@ Required:
 # 物品展示，true为开启，false为关闭
 # 玩家手握物品输入 [item] 可展示手里的物品
 Displayitem: true
-# 如果上面的选项开启后，可以自己选择物品语言
+# zh-cn = 中文简体
+# en-us = 英文
+# 展示物品名称为中文还是英文
 DiaplayLanguage: zh-cn
 
 
