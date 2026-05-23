@@ -8,6 +8,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
@@ -265,12 +266,18 @@ public class GuiManager implements Listener {
         
         // 通过标题判断是否是称号仓库 GUI
         String title = event.getView().getTitle();
-        if (!title.equals(ChatColor.translateAlternateColorCodes('&', "&6称号仓库")) && 
-            !title.startsWith(ChatColor.translateAlternateColorCodes('&', "&6称号仓库第"))) {
+        
+        // 调试：打印实际标题
+        plugin.getLogger().info("[GUI调试] 点击事件触发 - 标题: " + title);
+        
+        if (!title.contains("称号仓库")) {
+            plugin.getLogger().info("[GUI调试] 标题不包含'称号仓库'，跳过处理");
             return;
         }
 
+        plugin.getLogger().info("[GUI调试] 开始取消事件");
         event.setCancelled(true); // 禁止拿取物品
+        plugin.getLogger().info("[GUI调试] 事件已取消 - 槽位: " + event.getSlot());
 
         int slot = event.getSlot();
         Inventory topInventory = event.getView().getTopInventory();
@@ -284,6 +291,21 @@ public class GuiManager implements Listener {
         // 2. 点击称号命名牌
         if (isTitleSlot(slot)) {
             handleTitleClick(player, topInventory, slot);
+        }
+    }
+
+    /**
+     * 处理 GUI 拖拽事件
+     */
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+        
+        String title = event.getView().getTitle();
+        if (title.contains("称号仓库")) {
+            event.setCancelled(true);
         }
     }
 
