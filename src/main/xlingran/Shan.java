@@ -280,8 +280,7 @@ public class Shan extends JavaPlugin implements Listener {
                                         String configName) {
         for (Object item : list) {
             // 处理 Map 格式（YAML 会将 "- Command: xxx" 解析为 Map）
-            if (item instanceof Map) {
-                Map<?, ?> map = (Map<?, ?>) item;
+            if (item instanceof Map<?, ?> map) {
                 for (Map.Entry<?, ?> entry : map.entrySet()) {
                     String key = String.valueOf(entry.getKey());
                     String value = String.valueOf(entry.getValue());
@@ -429,7 +428,20 @@ public class Shan extends JavaPlugin implements Listener {
             result = result.replace("%title%", "");
         }
         
-        // 先替换颜色变量 %color1%, %color2% 等（在 %chat% 之前）
+        // 检查是否有颜色变量应用到 %player% 上
+        String playerColorGradient = null;
+        for (Map.Entry<String, String> entry : colorVariables.entrySet()) {
+            String placeholder = entry.getKey();
+            String pattern = placeholder + "%player%";
+            if (result.contains(pattern)) {
+                playerColorGradient = entry.getValue();
+                // 先移除 %colorX%%player% 组合，后续单独处理
+                result = result.replace(pattern, "%player%");
+                break;
+            }
+        }
+        
+        // 处理颜色变量应用到 %chat% 上
         for (Map.Entry<String, String> entry : colorVariables.entrySet()) {
             if (result.contains(entry.getKey())) {
                 String gradientConfig = entry.getValue();
@@ -457,7 +469,7 @@ public class Shan extends JavaPlugin implements Listener {
         result = ChatColor.translateAlternateColorCodes('&', result);
         
         if (needHover) {
-            return buildComponentWithHover(result, player, playerColor);
+            return buildComponentWithHover(result, player, playerColor, playerColorGradient);
         }
         
         // 不需要悬浮提示，直接替换 %player%
@@ -496,9 +508,12 @@ public class Shan extends JavaPlugin implements Listener {
      * 构建带悬浮提示的组件
      * @param message 已转换颜色的消息（§ 格式）
      * @param player 玩家对象
-     * @param playerColor 在转换前提取的玩家名称颜色代码
+     * @param playerColor 在转换前提取的玩家名称颜色代码（传统颜色）
+     * @param playerColorGradient 玩家名称的渐变颜色配置（16进制颜色）
      */
-    private BaseComponent[] buildComponentWithHover(String message, Player player, net.md_5.bungee.api.ChatColor playerColor) {
+    private BaseComponent[] buildComponentWithHover(String message, Player player, 
+                                                     net.md_5.bungee.api.ChatColor playerColor,
+                                                     String playerColorGradient) {
         // 在替换 %player% 之前，先分割消息
         // 使用 split 并限制为 2，确保只分割第一个 %player%
         int playerIndex = message.indexOf("%player%");
@@ -523,12 +538,30 @@ public class Shan extends JavaPlugin implements Listener {
         }
         
         // 创建玩家名称组件（带悬浮提示和点击事件）
-        TextComponent playerComponent = new TextComponent(player.getName());
+        TextComponent playerComponent;
         
-        // 应用提取到的颜色（在转换前提取的 &a 颜色代码）
-        if (playerColor != null) {
-            playerComponent.setColor(playerColor);
-            getLogger().info("[调试] 玩家名称应用颜色: " + playerColor.getName());
+        // 优先使用渐变颜色，如果没有则使用传统颜色
+        if (playerColorGradient != null) {
+            // 应用渐变颜色到玩家名称（返回 String）
+            String gradientText = applyGradient(playerColorGradient, player.getName());
+            
+            // 将包含渐变颜色的 String 转换为 BaseComponent
+            BaseComponent[] gradientComponents = parseLegacyTextWithHexColors(gradientText);
+            
+            if (gradientComponents.length > 0 && gradientComponents[0] instanceof TextComponent) {
+                playerComponent = (TextComponent) gradientComponents[0];
+                getLogger().info("[调试] 玩家名称应用渐变颜色: " + playerColorGradient);
+            } else {
+                playerComponent = new TextComponent(player.getName());
+            }
+        } else {
+            playerComponent = new TextComponent(player.getName());
+            
+            // 应用提取到的颜色（在转换前提取的 &a 颜色代码）
+            if (playerColor != null) {
+                playerComponent.setColor(playerColor);
+                getLogger().info("[调试] 玩家名称应用颜色: " + playerColor.getName());
+            }
         }
         
         // 设置悬浮提示
@@ -725,28 +758,34 @@ public class Shan extends JavaPlugin implements Listener {
     /**
      * 应用渐变颜色到文本
      */
+    /**
+     * 应用渐变颜色到文本（支持任意数量的颜色）
+     * @param gradientConfig 颜色配置，格式: "#RRGGBB-#RRGGBB-#RRGGBB..."
+     * @param text 要应用渐变的文本
+     * @return 应用渐变后的文本
+     */
     private String applyGradient(String gradientConfig, String text) {
-        // 解析渐变配置，格式: "#RRGGBB-#RRGGBB"
-        String[] colors = gradientConfig.split("-");
-        if (colors.length != 2) {
-            return text;
+        // 解析渐变配置，格式: "#RRGGBB-#RRGGBB" 或 "#RRGGBB-#RRGGBB-#RRGGBB"
+        String[] colorConfigs = gradientConfig.split("-");
+        if (colorConfigs.length < 2) {
+            return text; // 至少需要两个颜色
         }
         
-        String startColor = colors[0].trim();
-        String endColor = colors[1].trim();
-        
-        // 移除 # 符号
-        startColor = startColor.replace("#", "");
-        endColor = endColor.replace("#", "");
-        
-        // 解析 RGB 值
-        int startR = Integer.parseInt(startColor.substring(0, 2), 16);
-        int startG = Integer.parseInt(startColor.substring(2, 4), 16);
-        int startB = Integer.parseInt(startColor.substring(4, 6), 16);
-        
-        int endR = Integer.parseInt(endColor.substring(0, 2), 16);
-        int endG = Integer.parseInt(endColor.substring(2, 4), 16);
-        int endB = Integer.parseInt(endColor.substring(4, 6), 16);
+        // 解析所有颜色的 RGB 值
+        int[][] colors = new int[colorConfigs.length][3]; // [colorIndex][R, G, B]
+        for (int i = 0; i < colorConfigs.length; i++) {
+            String color = colorConfigs[i].trim().replace("#", "");
+            if (color.length() != 6) {
+                return text; // 颜色格式错误
+            }
+            try {
+                colors[i][0] = Integer.parseInt(color.substring(0, 2), 16); // R
+                colors[i][1] = Integer.parseInt(color.substring(2, 4), 16); // G
+                colors[i][2] = Integer.parseInt(color.substring(4, 6), 16); // B
+            } catch (NumberFormatException e) {
+                return text; // 解析失败
+            }
+        }
         
         // 计算可见字符数量（跳过颜色代码）
         List<Integer> visibleCharIndices = new ArrayList<>();
@@ -775,6 +814,7 @@ public class Shan extends JavaPlugin implements Listener {
         // 构建渐变文本
         StringBuilder result = new StringBuilder();
         int visibleCount = visibleCharIndices.size();
+        int colorSegmentCount = colors.length - 1; // 颜色段数量
         
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
@@ -806,11 +846,25 @@ public class Shan extends JavaPlugin implements Listener {
             }
             
             if (visibleIndex >= 0) {
+                // 计算当前字符应该使用哪个颜色段
+                float overallRatio = visibleCount > 1 ? (float) visibleIndex / (visibleCount - 1) : 0;
+                int colorSegmentIndex = (int) (overallRatio * colorSegmentCount);
+                
+                // 确保不越界
+                if (colorSegmentIndex >= colorSegmentCount) {
+                    colorSegmentIndex = colorSegmentCount - 1;
+                }
+                
+                // 在当前颜色段内计算比例
+                float segmentRatio = (overallRatio * colorSegmentCount) - colorSegmentIndex;
+                
                 // 计算渐变颜色
-                float ratio = visibleCount > 1 ? (float) visibleIndex / (visibleCount - 1) : 0;
-                int r = (int) (startR + (endR - startR) * ratio);
-                int g = (int) (startG + (endG - startG) * ratio);
-                int b = (int) (startB + (endB - startB) * ratio);
+                int r = (int) (colors[colorSegmentIndex][0] + 
+                              (colors[colorSegmentIndex + 1][0] - colors[colorSegmentIndex][0]) * segmentRatio);
+                int g = (int) (colors[colorSegmentIndex][1] + 
+                              (colors[colorSegmentIndex + 1][1] - colors[colorSegmentIndex][1]) * segmentRatio);
+                int b = (int) (colors[colorSegmentIndex][2] + 
+                              (colors[colorSegmentIndex + 1][2] - colors[colorSegmentIndex][2]) * segmentRatio);
                 
                 // 生成 16 进制颜色代码 (§x§R§R§G§G§B§B)
                 String hexColor = String.format("§x§%c§%c§%c§%c§%c§%c",
@@ -973,7 +1027,8 @@ public class Shan extends JavaPlugin implements Listener {
             String subCommand = args[0].toLowerCase();
             
             // /xlrchat cp - 打开称号仓库
-            if (subCommand.equals("cp")) {
+            switch (subCommand) {
+                case "cp" -> {
                 if (!player.hasPermission("xlr.command.cp")) {
                     String noPermMsg = config.getString("Message.NoPermission", "&c你没有权限执行此命令");
                     player.sendMessage(ChatColor.translateAlternateColorCodes('&', noPermMsg));
@@ -985,11 +1040,10 @@ public class Shan extends JavaPlugin implements Listener {
                 } else {
                     player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&c称号系统未初始化！"));
                 }
-                return true;
-            }
-            
-            // /xlrchat reload - 重载配置
-            if (subCommand.equals("reload")) {
+                }
+                
+                // /xlrchat reload - 重载配置
+                case "reload" -> {
                 if (!player.hasPermission("xlr.admin.reload")) {
                     String noPermMsg = config.getString("Message.NoPermission", "&c你没有权限执行此命令");
                     player.sendMessage(ChatColor.translateAlternateColorCodes('&', noPermMsg));
@@ -1011,18 +1065,19 @@ public class Shan extends JavaPlugin implements Listener {
                         player.sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
                     }
                 }
-                return true;
+                }
+                
+                // /xlrchat help - 显示帮助
+                case "help" -> {
+                    sendHelpMessage(player);
+                }
+                
+                // 未知子命令
+                default -> {
+                    String unknownMsg = config.getString("Message.UnknownSubCmd", "&c未知的子命令");
+                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', unknownMsg));
+                }
             }
-            
-            // /xlrchat help - 显示帮助
-            if (subCommand.equals("help")) {
-                sendHelpMessage(player);
-                return true;
-            }
-            
-            // 未知子命令
-            String unknownMsg = config.getString("Message.UnknownSubCmd", "&c未知的子命令");
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', unknownMsg));
             return true;
         }
         
