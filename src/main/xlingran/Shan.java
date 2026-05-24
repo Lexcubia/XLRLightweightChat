@@ -1060,13 +1060,6 @@ public class Shan extends JavaPlugin implements Listener {
             case MANGROVE_BOAT -> "红树木船";
             case CHERRY_BOAT -> "樱花船";
             case BAMBOO_RAFT -> "竹筏";
-            case CHEST_BOAT -> "运输船";
-            case MINECART -> "矿车";
-            case CHEST_MINECART -> "运输矿车";
-            case FURNACE_MINECART -> "动力矿车";
-            case TNT_MINECART -> "TNT矿车";
-            case HOPPER_MINECART -> "漏斗矿车";
-            case COMMAND_BLOCK_MINECART -> "命令方块矿车";
             case OAK_SIGN -> "橡木告示牌";
             case SPRUCE_SIGN -> "云杉告示牌";
             case BIRCH_SIGN -> "白桦告示牌";
