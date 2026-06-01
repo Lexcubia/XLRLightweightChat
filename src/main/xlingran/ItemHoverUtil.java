@@ -24,6 +24,8 @@ public final class ItemHoverUtil {
     private static final Logger LOGGER = Bukkit.getLogger();
     private static volatile Method serializeItemAsJsonMethod;
     private static volatile boolean serializeMethodResolved;
+    private static volatile Method setV1215Method;
+    private static volatile boolean setV1215MethodResolved;
     private static volatile NmsItemEncoder nmsItemEncoder;
 
     private ItemHoverUtil() {
@@ -38,8 +40,39 @@ public final class ItemHoverUtil {
             return null;
         }
         HoverEvent event = new HoverEvent(HoverEvent.Action.SHOW_ITEM, new ModernShowItem(itemJson));
-        event.setV1_21_5(true);
+        applyV1215HoverFormat(event);
         return event;
+    }
+
+    /**
+     * Spigot 1.21.1 内置的 bungeecord-chat 可能低于编译依赖，无 setV1_21_5。
+     */
+    private static void applyV1215HoverFormat(HoverEvent event) {
+        Method method = resolveSetV1215Method();
+        if (method == null) {
+            return;
+        }
+        try {
+            method.invoke(event, true);
+        } catch (ReflectiveOperationException e) {
+            LOGGER.log(Level.FINE, "[XLRLightweightChat] setV1_21_5 调用失败", e);
+        }
+    }
+
+    private static Method resolveSetV1215Method() {
+        if (!setV1215MethodResolved) {
+            synchronized (ItemHoverUtil.class) {
+                if (!setV1215MethodResolved) {
+                    try {
+                        setV1215Method = HoverEvent.class.getMethod("setV1_21_5", boolean.class);
+                    } catch (NoSuchMethodException ignored) {
+                        setV1215Method = null;
+                    }
+                    setV1215MethodResolved = true;
+                }
+            }
+        }
+        return setV1215Method;
     }
 
     static JsonObject buildItemJson(ItemStack stack) {
