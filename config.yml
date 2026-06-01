@@ -53,10 +53,14 @@ Required:
     - RunCommand: tpa %player%
 
 # 物品展示，true为开启，false为关闭
-# 玩家手握物品输入 [item] 可展示手里的物品，格式: &7[物品名 &fx数量&7]（随聊天渐变）
+# 玩家手握物品输入 [item] 可展示手里的物品，格式: &7[物品名 &fx数量&7]
 Displayitem: true
 # 物品名称语言: zh-cn = 中文简体, en-us = 英文（修改后 /xlrchat reload）
 DiaplayLanguage: zh-cn
+# 鼠标悬停展示物品时显示原版物品提示框（Lore、附魔等）
+DisplayitemHover: true
+# false=物品段保留自定义名/材质色，不随 %colorX%%chat% 渐变；true=物品段也渐变
+DisplayitemInGradient: false
 
 
 # 输入命令，命令输出提示

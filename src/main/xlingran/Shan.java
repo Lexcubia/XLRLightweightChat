@@ -49,7 +49,12 @@ public class Shan extends JavaPlugin implements Listener {
     // 物品展示配置
     private boolean displayItemEnabled = false; // 是否启用 [item] 占位符
     private String displayItemLanguage = "zh-cn"; // 物品显示语言：zh-cn（中文简体）或 en-us（英文）
+    private boolean displayItemHover = true; // [item] 是否 SHOW_ITEM 悬浮
+    private boolean displayItemInGradient = false; // [item] 是否参与 %chat% 渐变
     private final Item itemService = new Item();
+
+    /** 聊天组件插入点（不参与 & 色码转换） */
+    private static final String CHAT_PART_MARKER = "\uE000XLRCHAT\uE001";
 
     @Override
     public void onEnable() {
@@ -207,12 +212,13 @@ public class Shan extends JavaPlugin implements Listener {
     private void loadDisplayItemConfig() {
         displayItemEnabled = config.getBoolean("Displayitem", false);
         displayItemLanguage = config.getString("DiaplayLanguage", "zh-cn").toLowerCase();
-        
-        // 验证语言配置
+        displayItemHover = config.getBoolean("DisplayitemHover", true);
+        displayItemInGradient = config.getBoolean("DisplayitemInGradient", false);
+
         if (!displayItemLanguage.equals("zh-cn") && !displayItemLanguage.equals("en-us")) {
             getLogger().warning("[警告] DiaplayLanguage 配置无效: " + displayItemLanguage);
             getLogger().warning("[提示] 有效值: zh-cn（中文简体）, en-us（英文）");
-            displayItemLanguage = "zh-cn"; // 默认使用中文
+            displayItemLanguage = "zh-cn";
         }
     }
 
@@ -474,22 +480,153 @@ public class Shan extends JavaPlugin implements Listener {
         return itemService;
     }
 
-    /**
-     * 将聊天内容中的 [item] 替换为 &7[名称 &fx数量&7]（参与后续整体渐变）
-     */
-    private String applyItemPlaceholder(Player player, String message) {
+    private List<ChatMessagePart> buildMessageParts(Player player, String message) {
         if (!message.contains("[item]")) {
-            return message;
+            return List.of(new ChatMessagePart.Text(message));
         }
         if (!displayItemEnabled) {
             getLogger().warning("[物品展示] 检测到 [item] 但功能未启用！请检查 config.yml 中 Displayitem: true");
-            return message;
+            return List.of(new ChatMessagePart.Text(message));
         }
-        String itemSegment = itemService.formatHandItemForChat(player, displayItemLanguage);
-        if (itemSegment == null) {
-            return message.replace("[item]", "");
+        List<ChatMessagePart> parts = new ArrayList<>();
+        final String token = "[item]";
+        int idx = 0;
+        while (true) {
+            int pos = message.indexOf(token, idx);
+            if (pos < 0) {
+                if (idx < message.length()) {
+                    parts.add(new ChatMessagePart.Text(message.substring(idx)));
+                }
+                break;
+            }
+            if (pos > idx) {
+                parts.add(new ChatMessagePart.Text(message.substring(idx, pos)));
+            }
+            ItemDisplaySegment segment = itemService.buildDisplaySegment(player, displayItemLanguage);
+            if (segment != null) {
+                parts.add(new ChatMessagePart.Item(segment));
+            }
+            idx = pos + token.length();
         }
-        return message.replace("[item]", itemSegment);
+        if (parts.isEmpty()) {
+            parts.add(new ChatMessagePart.Text(message));
+        }
+        return parts;
+    }
+
+    private BaseComponent[] buildChatComponentsFromParts(Player player, List<ChatMessagePart> parts,
+                                                         String gradientConfig) {
+        ComponentBuilder builder = new ComponentBuilder();
+        boolean applyChatHover = chatHoverLore != null && !chatHoverLore.isEmpty();
+        BaseComponent[] chatHoverComponents = applyChatHover ? buildHoverComponents(chatHoverLore) : null;
+        ClickEvent chatClick = resolveChatClickEvent(player);
+
+        for (ChatMessagePart part : parts) {
+            if (part instanceof ChatMessagePart.Text textPart) {
+                appendTextPart(builder, textPart.content(), gradientConfig, true,
+                        chatHoverComponents, chatClick);
+            } else if (part instanceof ChatMessagePart.Item itemPart) {
+                String content = itemPart.segment().displayText();
+                if (displayItemInGradient && gradientConfig != null) {
+                    content = applyGradient(gradientConfig, content);
+                }
+                content = ChatColor.translateAlternateColorCodes('&', content);
+                HoverEvent itemHover = displayItemHover
+                        ? itemService.createItemHoverEvent(itemPart.segment().snapshot())
+                        : null;
+                for (BaseComponent component : parseLegacyTextWithHexColors(content)) {
+                    if (component instanceof TextComponent textComp && itemHover != null) {
+                        textComp.setHoverEvent(itemHover);
+                    }
+                    builder.append(component);
+                }
+            }
+        }
+        return builder.create();
+    }
+
+    private void appendTextPart(ComponentBuilder builder, String content, String gradientConfig,
+                                boolean applyGradientToPart, BaseComponent[] chatHover,
+                                ClickEvent chatClick) {
+        if (content == null || content.isEmpty()) {
+            return;
+        }
+        String text = content;
+        if (applyGradientToPart && gradientConfig != null) {
+            text = applyGradient(gradientConfig, text);
+        }
+        text = ChatColor.translateAlternateColorCodes('&', text);
+        for (BaseComponent component : parseLegacyTextWithHexColors(text)) {
+            if (component instanceof TextComponent textComp) {
+                if (chatHover != null && chatHover.length > 0) {
+                    textComp.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, chatHover));
+                }
+                if (chatClick != null) {
+                    textComp.setClickEvent(chatClick);
+                }
+            }
+            builder.append(component);
+        }
+    }
+
+    private ClickEvent resolveChatClickEvent(Player player) {
+        if (!chatSuggestCommands.isEmpty() && !chatRunCommands.isEmpty()) {
+            return new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, joinCommands(player, chatSuggestCommands));
+        }
+        if (!chatSuggestCommands.isEmpty()) {
+            return new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, joinCommands(player, chatSuggestCommands));
+        }
+        if (!chatRunCommands.isEmpty()) {
+            return new ClickEvent(ClickEvent.Action.RUN_COMMAND, joinCommands(player, chatRunCommands));
+        }
+        return null;
+    }
+
+    private String joinCommands(Player player, List<String> commands) {
+        StringBuilder commandBuilder = new StringBuilder();
+        for (int i = 0; i < commands.size(); i++) {
+            String command = commands.get(i).replace("%player%", player.getName());
+            if (!command.startsWith("/")) {
+                command = "/" + command;
+            }
+            commandBuilder.append(command);
+            if (i < commands.size() - 1) {
+                commandBuilder.append("; ");
+            }
+        }
+        return commandBuilder.toString();
+    }
+
+    private String extractChatGradientPattern(String formatResult) {
+        for (String placeholder : colorVariables.keySet()) {
+            String pattern = placeholder + "%chat%";
+            if (formatResult.contains(pattern)) {
+                return pattern;
+            }
+        }
+        return null;
+    }
+
+    private BaseComponent[] assembleFormatWithChat(String formatResult, Player player,
+                                                   BaseComponent[] chatComponents) {
+        String[] sections = formatResult.split(CHAT_PART_MARKER, -1);
+        ComponentBuilder builder = new ComponentBuilder();
+
+        for (int i = 0; i < sections.length; i++) {
+            String section = sections[i];
+            if (!section.isEmpty()) {
+                section = section.replace("%player%", player.getName());
+                for (BaseComponent component : parseLegacyTextWithHexColors(section)) {
+                    builder.append(component);
+                }
+            }
+            if (i < sections.length - 1 && chatComponents != null) {
+                for (BaseComponent chatComponent : chatComponents) {
+                    builder.append(chatComponent);
+                }
+            }
+        }
+        return builder.create();
     }
 
     /**
@@ -545,38 +682,30 @@ public class Shan extends JavaPlugin implements Listener {
             }
         }
         
-        // 检查是否包含 %player% 且需要悬浮提示（在替换 %chat% 之前检查）
         boolean needHover = result.contains("%player%") && playerHoverLore != null && !playerHoverLore.isEmpty();
 
-        // [item] 先写入 &7[名称 &fx数量&7]，再参与 %chat% 渐变（勿用临时占位符，渐变会破坏替换）
-        message = applyItemPlaceholder(player, message);
-
-        boolean chatPlaceholderReplaced = false;
-        for (Map.Entry<String, String> entry : colorVariables.entrySet()) {
-            String placeholder = entry.getKey();
-            String pattern = placeholder + "%chat%";
-            if (result.contains(pattern)) {
-                result = result.replace(pattern, applyGradient(entry.getValue(), message));
-                chatPlaceholderReplaced = true;
-            }
-        }
-        if (!chatPlaceholderReplaced && result.contains("%chat%")) {
-            result = result.replace("%chat%", message);
+        List<ChatMessagePart> messageParts = buildMessageParts(player, message);
+        String chatGradientConfig = null;
+        String chatGradientPattern = extractChatGradientPattern(result);
+        if (chatGradientPattern != null) {
+            String varKey = chatGradientPattern.replace("%chat%", "");
+            chatGradientConfig = colorVariables.get(varKey);
+            result = result.replace(chatGradientPattern, CHAT_PART_MARKER);
+        } else if (result.contains("%chat%")) {
+            result = result.replace("%chat%", CHAT_PART_MARKER);
         }
 
-        // 在转换 & -> § 之前，提取最后一个传统颜色代码（&a 格式）
+        BaseComponent[] chatComponents = buildChatComponentsFromParts(player, messageParts, chatGradientConfig);
+
         net.md_5.bungee.api.ChatColor playerColor = needHover ? extractLastColorCode(result) : null;
-
-        // 转换传统颜色代码 & -> §
         result = ChatColor.translateAlternateColorCodes('&', result);
 
         if (needHover || needTitleHover) {
-            return buildComponentWithHover(result, player, playerColor, playerColorGradient, title, titleId, needTitleHover);
+            return buildComponentWithHover(result, player, playerColor, playerColorGradient, title, titleId,
+                    needTitleHover, chatComponents);
         }
-        
-        // 不需要悬浮提示，直接替换 %player%
-        result = result.replace("%player%", player.getName());
-        return new BaseComponent[]{new TextComponent(result)};
+
+        return assembleFormatWithChat(result, player, chatComponents);
     }
 
     /**
@@ -621,13 +750,16 @@ public class Shan extends JavaPlugin implements Listener {
                                                      String playerColorGradient,
                                                      String title,
                                                      int titleId,
-                                                     boolean needTitleHover) {
+                                                     boolean needTitleHover,
+                                                     BaseComponent[] chatComponents) {
         // 在替换 %player% 之前，先分割消息
         // 使用 split 并限制为 2，确保只分割第一个 %player%
         int playerIndex = message.indexOf("%player%");
         
         if (playerIndex == -1) {
-            // 没有找到 %player%，直接返回
+            if (message.contains(CHAT_PART_MARKER) && chatComponents != null) {
+                return assembleFormatWithChat(message, player, chatComponents);
+            }
             return new BaseComponent[]{new TextComponent(message)};
         }
         
@@ -791,71 +923,52 @@ public class Shan extends JavaPlugin implements Listener {
         // 添加玩家名称
         builder.append(playerComponent);
         
-        // 添加 %player% 后面的文本（包含聊天消息，需要为其添加悬浮事件）
         if (!afterPlayer.isEmpty()) {
-            // 将包含 § 格式的字符串转换为 BaseComponent
-            BaseComponent[] backComponents = parseLegacyTextWithHexColors(afterPlayer);
-            for (BaseComponent component : backComponents) {
-                // 为聊天消息部分添加悬浮提示和点击事件
-                if (component instanceof TextComponent textComp) {
-                    // 清除可能继承的事件
-                    textComp.setHoverEvent(null);
-                    textComp.setClickEvent(null);
-                    
-                    // 设置 %chat% 的悬浮提示
-                    BaseComponent[] chatHoverComponents = buildHoverComponents(chatHoverLore);
-                    if (chatHoverComponents != null && chatHoverComponents.length > 0) {
-                        textComp.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, chatHoverComponents));
-                    }
-                    
-                    // 设置 %chat% 的点击事件
-                    if (!chatSuggestCommands.isEmpty() && !chatRunCommands.isEmpty()) {
-                        getLogger().warning("[警告] chat 同时配置了 Command 和 RunCommand，只使用 Command（预填）");
-                        StringBuilder commandBuilder = new StringBuilder();
-                        for (int i = 0; i < chatSuggestCommands.size(); i++) {
-                            String command = chatSuggestCommands.get(i).replace("%player%", player.getName());
-                            if (!command.startsWith("/")) {
-                                command = "/" + command;
-                            }
-                            commandBuilder.append(command);
-                            if (i < chatSuggestCommands.size() - 1) {
-                                commandBuilder.append("; ");
-                            }
-                        }
-                        textComp.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, commandBuilder.toString()));
-                    } else if (!chatSuggestCommands.isEmpty()) {
-                        StringBuilder commandBuilder = new StringBuilder();
-                        for (int i = 0; i < chatSuggestCommands.size(); i++) {
-                            String command = chatSuggestCommands.get(i).replace("%player%", player.getName());
-                            if (!command.startsWith("/")) {
-                                command = "/" + command;
-                            }
-                            commandBuilder.append(command);
-                            if (i < chatSuggestCommands.size() - 1) {
-                                commandBuilder.append("; ");
-                            }
-                        }
-                        textComp.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, commandBuilder.toString()));
-                    } else if (!chatRunCommands.isEmpty()) {
-                        StringBuilder commandBuilder = new StringBuilder();
-                        for (int i = 0; i < chatRunCommands.size(); i++) {
-                            String command = chatRunCommands.get(i).replace("%player%", player.getName());
-                            if (!command.startsWith("/")) {
-                                command = "/" + command;
-                            }
-                            commandBuilder.append(command);
-                            if (i < chatRunCommands.size() - 1) {
-                                commandBuilder.append("; ");
-                            }
-                        }
-                        textComp.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, commandBuilder.toString()));
-                    }
-                }
-                builder.append(component);
-            }
+            appendAfterPlayerSection(builder, afterPlayer, player, chatComponents);
         }
-        
+
         return builder.create();
+    }
+
+    private void appendAfterPlayerSection(ComponentBuilder builder, String afterPlayer, Player player,
+                                          BaseComponent[] chatComponents) {
+        int markerIndex = afterPlayer.indexOf(CHAT_PART_MARKER);
+        if (markerIndex >= 0 && chatComponents != null) {
+            String beforeChat = afterPlayer.substring(0, markerIndex);
+            String afterChat = afterPlayer.substring(markerIndex + CHAT_PART_MARKER.length());
+            appendPlainSectionWithChatHover(builder, beforeChat, player);
+            for (BaseComponent chatComponent : chatComponents) {
+                builder.append(chatComponent);
+            }
+            appendPlainSectionWithChatHover(builder, afterChat, player);
+            return;
+        }
+        appendPlainSectionWithChatHover(builder, afterPlayer, player);
+    }
+
+    private void appendPlainSectionWithChatHover(ComponentBuilder builder, String section, Player player) {
+        if (section == null || section.isEmpty()) {
+            return;
+        }
+        BaseComponent[] chatHoverComponents = (chatHoverLore != null && !chatHoverLore.isEmpty())
+                ? buildHoverComponents(chatHoverLore) : null;
+        ClickEvent chatClick = resolveChatClickEvent(player);
+        if (!chatSuggestCommands.isEmpty() && !chatRunCommands.isEmpty()) {
+            getLogger().warning("[警告] chat 同时配置了 Command 和 RunCommand，只使用 Command（预填）");
+        }
+        for (BaseComponent component : parseLegacyTextWithHexColors(section)) {
+            if (component instanceof TextComponent textComp) {
+                textComp.setHoverEvent(null);
+                textComp.setClickEvent(null);
+                if (chatHoverComponents != null && chatHoverComponents.length > 0) {
+                    textComp.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, chatHoverComponents));
+                }
+                if (chatClick != null) {
+                    textComp.setClickEvent(chatClick);
+                }
+            }
+            builder.append(component);
+        }
     }
 
     /**

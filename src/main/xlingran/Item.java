@@ -1,8 +1,11 @@
 package xlingran;
 
+import net.md_5.bungee.api.chat.HoverEvent;
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 
 /**
  * 物品名称、颜色与 [item] 聊天展示。
@@ -13,16 +16,47 @@ public class Item {
     public static final String LANG_EN_US = "en-us";
 
     /**
-     * 聊天 [item] 片段（& 格式），参与整条 %chat% 渐变：&7[名称 &fx数量&7]
+     * 构建主手 [item] 展示段；无物品时返回 null。
      */
-    public String formatHandItemForChat(Player player, String language) {
-        ItemStack item = player.getInventory().getItemInMainHand();
-        if (item.getType() == Material.AIR) {
+    public ItemDisplaySegment buildDisplaySegment(Player player, String language) {
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        if (hand.getType() == Material.AIR) {
             return null;
         }
-        String itemName = getDisplayName(item.getType(), language);
-        int amount = item.getAmount();
+        ItemStack snapshot = hand.clone();
+        String displayText = formatDisplayText(snapshot, language);
+        return new ItemDisplaySegment(displayText, snapshot);
+    }
+
+    public HoverEvent createItemHoverEvent(ItemStack snapshot) {
+        return ItemHoverUtil.createShowItemHover(snapshot);
+    }
+
+    /**
+     * 展示文本 &7[名称 &fx数量&7]；自定义 displayName 保留 &/§ 色码，不使用材质色。
+     */
+    public String formatDisplayText(ItemStack stack, String language) {
+        String itemName = resolveItemName(stack, language);
+        int amount = stack.getAmount();
         return "&7[" + itemName + " &fx" + amount + "&7]";
+    }
+
+    /**
+     * 解析物品名：优先 ItemMeta 自定义名，否则按语言取材质译名。
+     */
+    public String resolveItemName(ItemStack stack, String language) {
+        if (stack.hasItemMeta()) {
+            ItemMeta meta = stack.getItemMeta();
+            if (meta != null && meta.hasDisplayName()) {
+                String custom = meta.getDisplayName();
+                if (custom != null && !custom.isEmpty()) {
+                    return custom;
+                }
+            }
+        }
+        String translated = getDisplayName(stack.getType(), language);
+        String color = getColorCode(stack.getType());
+        return color + translated;
     }
 
     public String getDisplayName(Material material, String language) {
