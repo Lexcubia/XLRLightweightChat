@@ -35,7 +35,6 @@ public class Shan extends JavaPlugin implements Listener {
     private File playerDataFile; // 玩家数据文件
     private FileConfiguration playerData; // 玩家数据配置
     
-    private final Map<String, Integer> titleDisplayToId = new HashMap<>();
     private RequiredActions playerRequired = new RequiredActions();
     private RequiredActions chatRequired = new RequiredActions();
     
@@ -218,7 +217,6 @@ public class Shan extends JavaPlugin implements Listener {
     private void loadPlayerTitles() {
         playerTitles = new TreeMap<>();
         playerTitleLore = new TreeMap<>();
-        titleDisplayToId.clear();
         
         if (config.contains("PlayerTitle")) {
             ConfigurationSection section = config.getConfigurationSection("PlayerTitle");
@@ -236,7 +234,6 @@ public class Shan extends JavaPlugin implements Listener {
                                     // 转换传统颜色代码 & -> §，确保后续比较一致性
                                     String processedName = ChatColor.translateAlternateColorCodes('&', name);
                                     playerTitles.put(id, processedName);
-                                    titleDisplayToId.put(processedName, id);
                                 }
                                 
                                 List<String> lore = titleSection.getStringList("Lore");
@@ -255,7 +252,6 @@ public class Shan extends JavaPlugin implements Listener {
                             String prefix = section.getString(key);
                             if (prefix != null) {
                                 playerTitles.put(id, prefix);
-                                titleDisplayToId.put(prefix, id);
                             }
                         }
                     } catch (NumberFormatException e) {
@@ -554,8 +550,8 @@ public class Shan extends JavaPlugin implements Listener {
         int titleId = -1;
         
         if (title != null) {
+            titleId = resolveTitleId(title);
             title = processTitleColors(title);
-            titleId = titleDisplayToId.getOrDefault(title, -1);
             if (titleId > 0) {
                 List<String> lore = playerTitleLore.get(titleId);
                 needTitleHover = lore != null && !lore.isEmpty();
@@ -868,6 +864,22 @@ public class Shan extends JavaPlugin implements Listener {
      */
     public String processTitleColors(String title) {
         return applyGradientPlaceholders(title);
+    }
+
+    /**
+     * 根据玩家当前穿戴的称号文本解析配置 ID（需与配置名同样经过 {@link #processTitleColors} 再比较）。
+     */
+    private int resolveTitleId(String wornTitle) {
+        if (wornTitle == null || wornTitle.isEmpty()) {
+            return -1;
+        }
+        String wornDisplay = processTitleColors(wornTitle);
+        for (Map.Entry<Integer, String> entry : playerTitles.entrySet()) {
+            if (processTitleColors(entry.getValue()).equals(wornDisplay)) {
+                return entry.getKey();
+            }
+        }
+        return -1;
     }
 
     private String applyGradientPlaceholders(String text) {
