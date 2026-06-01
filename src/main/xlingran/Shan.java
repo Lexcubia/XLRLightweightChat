@@ -8,15 +8,12 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.ComponentBuilder;
@@ -52,7 +49,6 @@ public class Shan extends JavaPlugin implements Listener {
     // 物品展示配置
     private boolean displayItemEnabled = false; // 是否启用 [item] 占位符
     private String displayItemLanguage = "zh-cn"; // 物品显示语言：zh-cn（中文简体）或 en-us（英文）
-    private boolean displayItemHover = true; // [item] 是否 SHOW_ITEM 悬浮
     private boolean displayItemInGradient = false; // [item] 是否参与 %chat% 渐变
     private final Item itemService = new Item();
 
@@ -215,7 +211,6 @@ public class Shan extends JavaPlugin implements Listener {
     private void loadDisplayItemConfig() {
         displayItemEnabled = config.getBoolean("Displayitem", false);
         displayItemLanguage = config.getString("DiaplayLanguage", "zh-cn").toLowerCase();
-        displayItemHover = config.getBoolean("DisplayitemHover", true);
         displayItemInGradient = config.getBoolean("DisplayitemInGradient", false);
 
         if (!displayItemLanguage.equals("zh-cn") && !displayItemLanguage.equals("en-us")) {
@@ -415,17 +410,15 @@ public class Shan extends JavaPlugin implements Listener {
         
         if (format == null) {
             // 如果连默认格式都没有，直接发送原始消息
-            CraftChatBridge.broadcastOnMainThread(this, () -> broadcastMessage(player.getName(), message));
+            runOnMainThread(() -> broadcastMessage(player.getName(), message));
             return;
         }
 
         final String chatFormat = format;
-        CraftChatBridge.broadcastOnMainThread(this, () -> {
+        runOnMainThread(() -> {
             try {
-                if (!broadcastItemChatIfPossible(chatFormat, player, message)) {
-                    BaseComponent[] components = processFormatToComponent(chatFormat, player, message);
-                    CraftChatBridge.broadcast(components);
-                }
+                BaseComponent[] components = processFormatToComponent(chatFormat, player, message);
+                broadcastProcessedMessage(components);
             } catch (Throwable t) {
                 getLogger().severe("[XLRLightweightChat] 聊天发送失败: " + t.getMessage());
                 t.printStackTrace();
@@ -433,94 +426,12 @@ public class Shan extends JavaPlugin implements Listener {
         });
     }
 
-    /**
-     * 含 [item] 时在主线程用 JSON+NMS 发送（1.21 components）；成功返回 true。
-     */
-    private boolean broadcastItemChatIfPossible(String format, Player player, String message) {
-        if (!displayItemEnabled || !displayItemHover || !message.contains("[item]")) {
-            return false;
-        }
-        JsonArray extra = buildFullChatJsonExtra(format, player, message);
-        if (extra == null || extra.isEmpty()) {
-            return false;
-        }
-        if (CraftChatBridge.broadcastWithExtra(extra)) {
-            return true;
-        }
-        getLogger().warning("[XLRLightweightChat] JSON 物品聊天发送失败，已退回 Bungee 路径");
-        return false;
-    }
-
-    private JsonArray buildFullChatJsonExtra(String format, Player player, String message) {
-        String result = format;
-        String title = getPlayerCurrentTitle(player);
-        if (title != null) {
-            result = result.replace("%title%", processTitleColors(title));
+    private void runOnMainThread(Runnable task) {
+        if (Bukkit.isPrimaryThread()) {
+            task.run();
         } else {
-            result = result.replace("%title%", "");
+            Bukkit.getScheduler().runTask(this, task);
         }
-        for (Map.Entry<String, String> entry : colorVariables.entrySet()) {
-            String pattern = entry.getKey() + "%player%";
-            if (result.contains(pattern)) {
-                result = result.replace(pattern, "%player%");
-            }
-        }
-        String chatGradientConfig = null;
-        String chatGradientPattern = extractChatGradientPattern(result);
-        if (chatGradientPattern != null) {
-            String varKey = chatGradientPattern.replace("%chat%", "");
-            chatGradientConfig = colorVariables.get(varKey);
-            result = result.replace(chatGradientPattern, CHAT_PART_MARKER);
-        } else if (result.contains("%chat%")) {
-            result = result.replace("%chat%", CHAT_PART_MARKER);
-        }
-        List<ChatMessagePart> messageParts = buildMessageParts(player, message);
-        JsonArray chatExtra = buildChatJsonParts(player, messageParts, chatGradientConfig);
-        return assembleFormatJsonExtra(result, player, chatExtra);
-    }
-
-    private JsonArray buildChatJsonParts(Player player, List<ChatMessagePart> parts, String gradientConfig) {
-        JsonArray extra = new JsonArray();
-        for (ChatMessagePart part : parts) {
-            if (part instanceof ChatMessagePart.Text textPart) {
-                String text = textPart.content();
-                if (gradientConfig != null) {
-                    text = applyGradient(gradientConfig, text);
-                }
-                text = ChatColor.translateAlternateColorCodes('&', text);
-                if (!text.isEmpty()) {
-                    extra.add(CraftChatBridge.textNode(text));
-                }
-            } else if (part instanceof ChatMessagePart.Item itemPart) {
-                String content = itemPart.segment().displayText();
-                if (displayItemInGradient && gradientConfig != null) {
-                    content = applyGradient(gradientConfig, content);
-                }
-                content = ChatColor.translateAlternateColorCodes('&', content);
-                extra.add(CraftChatBridge.itemTextNode(content, itemPart.segment().snapshot()));
-            }
-        }
-        return extra;
-    }
-
-    private JsonArray assembleFormatJsonExtra(String formatResult, Player player, JsonArray chatExtra) {
-        JsonArray extra = new JsonArray();
-        String[] sections = formatResult.split(CHAT_PART_MARKER, -1);
-        for (int i = 0; i < sections.length; i++) {
-            String section = sections[i];
-            if (!section.isEmpty()) {
-                section = section.replace("%player%", player.getName());
-                section = applyColorVariables(section);
-                section = ChatColor.translateAlternateColorCodes('&', section);
-                extra.add(CraftChatBridge.textNode(section));
-            }
-            if (i < sections.length - 1 && chatExtra != null) {
-                for (JsonElement element : chatExtra) {
-                    extra.add(element);
-                }
-            }
-        }
-        return extra;
     }
 
     private String applyColorVariables(String text) {
@@ -639,20 +550,7 @@ public class Shan extends JavaPlugin implements Listener {
                     content = applyGradient(gradientConfig, content);
                 }
                 content = ChatColor.translateAlternateColorCodes('&', content);
-                ItemStack snapshot = itemPart.segment().snapshot();
-                HoverEvent itemHover = null;
-                if (displayItemHover) {
-                    try {
-                        itemHover = itemService.createItemHoverEvent(snapshot);
-                    } catch (Throwable t) {
-                        getLogger().log(java.util.logging.Level.WARNING,
-                                "[XLRLightweightChat] 物品悬浮构建失败", t);
-                    }
-                }
                 for (BaseComponent component : parseLegacyTextWithHexColors(content)) {
-                    if (component instanceof TextComponent textComp && itemHover != null) {
-                        textComp.setHoverEvent(itemHover);
-                    }
                     builder.append(component);
                 }
             }
@@ -1306,7 +1204,12 @@ public class Shan extends JavaPlugin implements Listener {
      * 广播处理后的消息（支持 BaseComponent）
      */
     private void broadcastProcessedMessage(BaseComponent[] components) {
-        CraftChatBridge.broadcast(components);
+        if (components == null || components.length == 0) {
+            return;
+        }
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            online.spigot().sendMessage(components);
+        }
     }
 
     /**
