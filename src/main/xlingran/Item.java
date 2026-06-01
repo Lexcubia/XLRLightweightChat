@@ -14,15 +14,12 @@ import java.util.EnumMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * 物品展示（Display）、药水名（PotionNames）、材质颜色（ColorRegistry）。
  */
 public class Item {
 
-    private static final Logger LOGGER = Bukkit.getLogger();
     private static final Map<Material, String> MATERIAL_COLORS = new EnumMap<>(Material.class);
 
     static {
