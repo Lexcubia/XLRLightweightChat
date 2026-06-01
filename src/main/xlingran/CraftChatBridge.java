@@ -33,9 +33,9 @@ final class CraftChatBridge {
     }
 
     static JsonObject itemTextNode(String legacyText, ItemStack stack) {
-        JsonObject itemJson = Item.resolveItemJsonForHover(stack);
-        if (itemJson == null || !itemJson.has("components")) {
-            LOGGER.warning("[XLRLightweightChat] 无法生成物品 components");
+        JsonObject itemJson = Item.normalizeItemHoverJson(Item.resolveItemJsonForHover(stack));
+        if (!Item.isValidShowItemContents(itemJson)) {
+            LOGGER.warning("[XLRLightweightChat] 无法生成物品悬浮 JSON（缺少 id/count）");
             return textNode(legacyText);
         }
         JsonObject node = new JsonObject();
@@ -93,7 +93,11 @@ final class CraftChatBridge {
         if (hover != null && hover.getAction() == HoverEvent.Action.SHOW_ITEM) {
             component.setHoverEvent(null);
         }
-        for (BaseComponent extra : component.getExtra()) {
+        java.util.List<BaseComponent> extras = component.getExtra();
+        if (extras == null) {
+            return;
+        }
+        for (BaseComponent extra : extras) {
             stripHoverRecursive(extra);
         }
     }
@@ -162,13 +166,22 @@ final class CraftChatBridge {
         for (Player player : Bukkit.getOnlinePlayers()) {
             try {
                 Object handle = player.getClass().getMethod("getHandle").invoke(player);
-                sendSystemMessageMethod.invoke(handle, nmsComponent, false);
+                invokeSendSystemMessage(handle, nmsComponent);
                 any = true;
             } catch (Throwable t) {
                 LOGGER.log(Level.WARNING, "[XLRLightweightChat] NMS 发送失败: " + player.getName(), t);
             }
         }
         return any;
+    }
+
+    private static void invokeSendSystemMessage(Object handle, Object nmsComponent) throws ReflectiveOperationException {
+        Class<?>[] params = sendSystemMessageMethod.getParameterTypes();
+        if (params.length == 1) {
+            sendSystemMessageMethod.invoke(handle, nmsComponent);
+        } else {
+            sendSystemMessageMethod.invoke(handle, nmsComponent, false);
+        }
     }
 
     private static void resolve() {
@@ -179,19 +192,33 @@ final class CraftChatBridge {
             if (resolved) {
                 return;
             }
+            Class<?> componentClass = null;
             try {
                 Class<?> craftChatMessage = SpigotReflection.craftClass("util.CraftChatMessage");
                 fromJsonMethod = SpigotReflection.resolveMethod(craftChatMessage, "fromJSON", String.class);
+                componentClass = fromJsonMethod.getReturnType();
             } catch (Throwable t) {
                 LOGGER.log(Level.WARNING, "[XLRLightweightChat] 无法解析 CraftChatMessage: " + t.getMessage());
             }
-            try {
-                Class<?> componentClass = SpigotReflection.serverClass("net.minecraft.network.chat.Component");
-                Class<?> serverPlayerClass = SpigotReflection.serverClass("net.minecraft.server.level.ServerPlayer");
-                sendSystemMessageMethod = SpigotReflection.resolveMethod(serverPlayerClass,
-                        "sendSystemMessage", componentClass, boolean.class);
-            } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[XLRLightweightChat] 无法解析 sendSystemMessage: " + t.getMessage());
+            if (componentClass == null) {
+                try {
+                    componentClass = SpigotReflection.serverClass("net.minecraft.network.chat.Component");
+                } catch (Throwable ignored) {
+                    // try below
+                }
+            }
+            if (componentClass != null) {
+                try {
+                    Class<?> serverPlayerClass = SpigotReflection.serverClass("net.minecraft.server.level.ServerPlayer");
+                    sendSystemMessageMethod = SpigotReflection.findSendSystemMessage(serverPlayerClass, componentClass);
+                    if (sendSystemMessageMethod == null) {
+                        LOGGER.warning("[XLRLightweightChat] 未找到匹配的 sendSystemMessage 方法");
+                    }
+                } catch (Throwable t) {
+                    LOGGER.log(Level.WARNING, "[XLRLightweightChat] 无法解析 sendSystemMessage: " + t.getMessage());
+                }
+            } else {
+                LOGGER.warning("[XLRLightweightChat] 无法加载 NMS Component 类型");
             }
             resolved = true;
         }

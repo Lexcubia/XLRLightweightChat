@@ -974,14 +974,62 @@ public class Item {
 
     private static JsonObject resolveItemJson(ItemStack stack) {
         JsonObject fromPaper = tryPaperSerializeItemAsJson(stack);
-        if (hasItemComponents(fromPaper)) {
-            return fromPaper;
+        if (isValidShowItemContents(fromPaper)) {
+            return normalizeItemHoverJson(fromPaper);
         }
         JsonObject fromNms = tryNmsEncodeItemJson(stack);
-        if (hasItemComponents(fromNms)) {
-            return fromNms;
+        if (isValidShowItemContents(fromNms)) {
+            return normalizeItemHoverJson(fromNms);
         }
-        return tryEncodeRebuiltStack(stack);
+        JsonObject rebuilt = tryEncodeRebuiltStack(stack);
+        if (isValidShowItemContents(rebuilt)) {
+            return normalizeItemHoverJson(rebuilt);
+        }
+        return buildMinimalItemHoverJson(stack);
+    }
+
+    /** 供 {@link CraftChatBridge} 校验 1.21 show_item 内容。 */
+    static boolean isValidShowItemContents(JsonObject itemJson) {
+        if (itemJson == null) {
+            return false;
+        }
+        if (itemJson.has("id")) {
+            return true;
+        }
+        return itemJson.has("item")
+                && itemJson.get("item").isJsonObject()
+                && itemJson.getAsJsonObject("item").has("id");
+    }
+
+    /** 统一为 {@code {id, count, components}} 结构（components 可为空对象）。 */
+    static JsonObject normalizeItemHoverJson(JsonObject itemJson) {
+        if (itemJson == null) {
+            return null;
+        }
+        JsonObject normalized = itemJson;
+        if (normalized.has("item") && normalized.get("item").isJsonObject()) {
+            normalized = normalized.getAsJsonObject("item").deepCopy();
+        } else {
+            normalized = normalized.deepCopy();
+        }
+        if (!normalized.has("count")) {
+            normalized.addProperty("count", 1);
+        }
+        if (!normalized.has("components")) {
+            normalized.add("components", new JsonObject());
+        }
+        return normalized;
+    }
+
+    private static JsonObject buildMinimalItemHoverJson(ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) {
+            return null;
+        }
+        JsonObject json = new JsonObject();
+        json.addProperty("id", stack.getType().getKey().toString());
+        json.addProperty("count", stack.getAmount());
+        json.add("components", new JsonObject());
+        return json;
     }
 
     private static JsonObject tryEncodeRebuiltStack(ItemStack stack) {
@@ -997,20 +1045,13 @@ public class Item {
             ItemStack rebuilt = Bukkit.getItemFactory().createItemStack(spec);
             rebuilt.setAmount(stack.getAmount());
             JsonObject encoded = tryNmsEncodeItemJson(rebuilt);
-            if (hasItemComponents(encoded)) {
+            if (isValidShowItemContents(encoded)) {
                 return encoded;
             }
         } catch (Throwable t) {
             LOGGER.log(Level.FINE, "[XLRLightweightChat] createItemStack 重建编码失败", t);
         }
         return null;
-    }
-
-    private static boolean hasItemComponents(JsonObject itemJson) {
-        return itemJson != null
-                && itemJson.has("components")
-                && itemJson.get("components").isJsonObject()
-                && !itemJson.getAsJsonObject("components").isEmpty();
     }
 
     private static JsonObject tryPaperSerializeItemAsJson(ItemStack stack) {
@@ -1154,7 +1195,7 @@ public class Item {
                 return new NmsItemJsonEncoder(asNmsCopy, createSerializationContext, registryAccess,
                         jsonOpsInstance, encodeStart, codec);
             } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[XLRLightweightChat] NMS 物品编码器初始化失败: " + t.getMessage());
+                LOGGER.log(Level.WARNING, "[XLRLightweightChat] NMS 物品编码器初始化失败: " + t.getMessage(), t);
                 return UNAVAILABLE;
             }
         }
@@ -1179,17 +1220,48 @@ public class Item {
                 Object craftServer = Bukkit.getServer();
                 Object minecraftServer = craftServer.getClass().getMethod("getServer").invoke(craftServer);
                 if (minecraftServer != null) {
-                    return minecraftServer.getClass().getMethod("registryAccess").invoke(minecraftServer);
+                    for (String methodName : new String[]{"registryAccess", "registryHolder"}) {
+                        try {
+                            Object access = minecraftServer.getClass().getMethod(methodName).invoke(minecraftServer);
+                            if (access != null) {
+                                return access;
+                            }
+                        } catch (NoSuchMethodException ignored) {
+                            // next
+                        }
+                    }
                 }
             } catch (Throwable ignored) {
-                // try CraftRegistry
+                // try CraftRegistry / world
             }
             try {
                 Class<?> craftRegistry = SpigotReflection.craftClass("CraftRegistry");
-                return craftRegistry.getMethod("getMinecraftRegistry").invoke(null);
+                for (String methodName : new String[]{"getMinecraftRegistry", "getMinecraftRegistries"}) {
+                    try {
+                        Object access = craftRegistry.getMethod(methodName).invoke(null);
+                        if (access != null) {
+                            return access;
+                        }
+                    } catch (NoSuchMethodException ignored) {
+                        // next
+                    }
+                }
             } catch (Throwable ignored) {
-                return null;
+                // try world
             }
+            for (Player online : Bukkit.getOnlinePlayers()) {
+                try {
+                    Object world = online.getWorld();
+                    Object level = world.getClass().getMethod("getHandle").invoke(world);
+                    Object access = level.getClass().getMethod("registryAccess").invoke(level);
+                    if (access != null) {
+                        return access;
+                    }
+                } catch (Throwable ignored) {
+                    // next player
+                }
+            }
+            return null;
         }
 
         private static Object resolveItemStackCodec(Class<?> nmsItemStackClass) throws ReflectiveOperationException {

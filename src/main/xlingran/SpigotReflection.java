@@ -42,4 +42,30 @@ final class SpigotReflection {
         method.setAccessible(true);
         return method;
     }
+
+    /**
+     * 在类及其父类中查找 {@code sendSystemMessage}，匹配 NMS {@link net.minecraft.network.chat.Component}。
+     */
+    static Method findSendSystemMessage(Class<?> serverPlayerClass, Class<?> componentClass) {
+        for (Class<?> type = serverPlayerClass; type != null; type = type.getSuperclass()) {
+            for (Method method : type.getDeclaredMethods()) {
+                if (!"sendSystemMessage".equals(method.getName())) {
+                    continue;
+                }
+                Class<?>[] params = method.getParameterTypes();
+                if (params.length < 1 || params.length > 2) {
+                    continue;
+                }
+                if (!params[0].isAssignableFrom(componentClass)) {
+                    continue;
+                }
+                if (params.length == 2 && params[1] != boolean.class) {
+                    continue;
+                }
+                method.setAccessible(true);
+                return method;
+            }
+        }
+        return null;
+    }
 }
