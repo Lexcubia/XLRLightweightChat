@@ -617,9 +617,55 @@ final class ItemNamesZh {
             case MANGROVE_LEAVES -> "红树木树叶";
             case AZALEA_LEAVES -> "杜鹃树叶";
             case FLOWERING_AZALEA_LEAVES -> "盛开的杜鹃树叶";
-            
-            // 默认：返回英文名称
-            default -> material.name().replace('_', ' ').toLowerCase();
+
+            // 常见未单列材质（其余由 ItemNamesZhCompose 自动组合）
+            case REDSTONE_BLOCK -> "红石块";
+            case WHEAT -> "小麦";
+            case WHEAT_SEEDS -> "小麦种子";
+            case BEETROOT_SEEDS -> "甜菜种子";
+            case MELON_SEEDS -> "西瓜种子";
+            case PUMPKIN_SEEDS -> "南瓜种子";
+            case TORCHFLOWER_SEEDS -> "火把花种子";
+            case PITCHER_POD -> "瓶子草荚果";
+            case NETHER_WART -> "下界疣";
+            case BAMBOO -> "竹子";
+            case SUGAR_CANE -> "甘蔗";
+            case SWEET_BERRIES -> "甜浆果";
+            case GLOW_BERRIES -> "发光浆果";
+            case SCULK -> "幽匿块";
+            case SCULK_SENSOR -> "幽匿感测体";
+            case SCULK_SHRIEKER -> "幽匿尖啸体";
+            case SCULK_CATALYST -> "幽匿催发体";
+            case MUD_BRICKS -> "泥砖";
+            case PACKED_MUD -> "压实泥巴";
+            case BEEHIVE -> "蜂箱";
+            case BEE_NEST -> "蜂巢";
+            case LANTERN -> "灯笼";
+            case SOUL_LANTERN -> "灵魂灯笼";
+            case CAMPFIRE -> "营火";
+            case SOUL_CAMPFIRE -> "灵魂营火";
+            case SCAFFOLDING -> "脚手架";
+            case LODESTONE -> "磁石";
+            case RESPAWN_ANCHOR -> "重生锚";
+            case NETHERITE_BLOCK -> "下界合金块";
+            case RAW_IRON_BLOCK -> "粗铁块";
+            case RAW_GOLD_BLOCK -> "粗金块";
+            case RAW_COPPER_BLOCK -> "粗铜块";
+            case CHERRY_PLANKS -> "樱花木板";
+            case MANGROVE_PLANKS -> "红树木板";
+            case BAMBOO_PLANKS -> "竹板";
+            case BAMBOO_BLOCK -> "竹块";
+            case DECORATED_POT -> "饰纹陶罐";
+            case CHISELED_BOOKSHELF -> "雕纹书架";
+            case TARGET -> "标靶";
+
+            default -> {
+                String composed = ItemNamesZhCompose.compose(material);
+                if (composed != null) {
+                    yield composed;
+                }
+                yield material.name().replace('_', ' ').toLowerCase();
+            }
         };
     }
 }
