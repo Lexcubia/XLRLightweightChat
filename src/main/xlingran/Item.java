@@ -13,17 +13,16 @@ public class Item {
     public static final String LANG_EN_US = "en-us";
 
     /**
-     * 主手物品展示文本，格式: &7[物品名 &fx数量 &7]
+     * 聊天 [item] 片段（& 格式），参与整条 %chat% 渐变：&7[名称 &fx数量&7]
      */
-    public String formatHandItem(Player player, String language) {
+    public String formatHandItemForChat(Player player, String language) {
         ItemStack item = player.getInventory().getItemInMainHand();
         if (item.getType() == Material.AIR) {
             return null;
         }
         String itemName = getDisplayName(item.getType(), language);
-        String itemColor = getColorCode(item.getType());
         int amount = item.getAmount();
-        return "&7[" + itemColor + itemName + " &fx" + amount + " &7]";
+        return "&7[" + itemName + " &fx" + amount + "&7]";
     }
 
     public String getDisplayName(Material material, String language) {

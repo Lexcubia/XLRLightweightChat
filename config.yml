@@ -53,7 +53,7 @@ Required:
     - RunCommand: tpa %player%
 
 # 物品展示，true为开启，false为关闭
-# 玩家手握物品输入 [item] 可展示手里的物品，格式: &7[物品名 &fx数量 &7]
+# 玩家手握物品输入 [item] 可展示手里的物品，格式: &7[物品名 &fx数量&7]（随聊天渐变）
 Displayitem: true
 # 物品名称语言: zh-cn = 中文简体, en-us = 英文（修改后 /xlrchat reload）
 DiaplayLanguage: zh-cn

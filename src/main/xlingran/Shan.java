@@ -49,6 +49,7 @@ public class Shan extends JavaPlugin implements Listener {
     // 物品展示配置
     private boolean displayItemEnabled = false; // 是否启用 [item] 占位符
     private String displayItemLanguage = "zh-cn"; // 物品显示语言：zh-cn（中文简体）或 en-us（英文）
+    private final Item itemService = new Item();
 
     @Override
     public void onEnable() {
@@ -465,17 +466,6 @@ public class Shan extends JavaPlugin implements Listener {
         return section.getString(firstFormat);
     }
 
-    /**
-     * 获取玩家手持物品的显示文本
-     * @param player 玩家
-     * @return 物品显示文本，格式: [物品名称 x数量]，如果没有物品则返回 null
-     */
-    private final Item itemService = new Item();
-
-    private String getHandItemDisplay(Player player) {
-        return itemService.formatHandItem(player, displayItemLanguage);
-    }
-
     public String getItemDisplayName(org.bukkit.Material material) {
         return itemService.getDisplayName(material, displayItemLanguage);
     }
@@ -484,7 +474,28 @@ public class Shan extends JavaPlugin implements Listener {
         return itemService;
     }
 
-        private BaseComponent[] processFormatToComponent(String format, Player player, String message) {
+    /**
+     * 将聊天内容中的 [item] 替换为 &7[名称 &fx数量&7]（参与后续整体渐变）
+     */
+    private String applyItemPlaceholder(Player player, String message) {
+        if (!message.contains("[item]")) {
+            return message;
+        }
+        if (!displayItemEnabled) {
+            getLogger().warning("[物品展示] 检测到 [item] 但功能未启用！请检查 config.yml 中 Displayitem: true");
+            return message;
+        }
+        String itemSegment = itemService.formatHandItemForChat(player, displayItemLanguage);
+        if (itemSegment == null) {
+            return message.replace("[item]", "");
+        }
+        return message.replace("[item]", itemSegment);
+    }
+
+    /**
+     * 处理格式字符串，替换占位符并应用颜色
+     */
+    private BaseComponent[] processFormatToComponent(String format, Player player, String message) {
         // 构建完整的消息
         String result = format;
         
@@ -537,19 +548,8 @@ public class Shan extends JavaPlugin implements Listener {
         // 检查是否包含 %player% 且需要悬浮提示（在替换 %chat% 之前检查）
         boolean needHover = result.contains("%player%") && playerHoverLore != null && !playerHoverLore.isEmpty();
 
-        // [item] 必须在 %chat% / 渐变替换之前处理，否则 %colorX%%chat% 会先固化字面量 [item]
-        String itemPlaceholder = null;
-        if (displayItemEnabled && message.contains("[item]")) {
-            String itemDisplay = getHandItemDisplay(player);
-            if (itemDisplay != null) {
-                itemPlaceholder = ChatColor.translateAlternateColorCodes('&', itemDisplay);
-                message = message.replace("[item]", "XLRITEMPLACEHOLDER");
-            } else {
-                message = message.replace("[item]", "");
-            }
-        } else if (!displayItemEnabled && message.contains("[item]")) {
-            getLogger().warning("[物品展示] 检测到 [item] 但功能未启用！请检查 config.yml 中 Displayitem: true");
-        }
+        // [item] 先写入 &7[名称 &fx数量&7]，再参与 %chat% 渐变（勿用临时占位符，渐变会破坏替换）
+        message = applyItemPlaceholder(player, message);
 
         boolean chatPlaceholderReplaced = false;
         for (Map.Entry<String, String> entry : colorVariables.entrySet()) {
@@ -570,10 +570,6 @@ public class Shan extends JavaPlugin implements Listener {
         // 转换传统颜色代码 & -> §
         result = ChatColor.translateAlternateColorCodes('&', result);
 
-        if (itemPlaceholder != null) {
-            result = result.replace("XLRITEMPLACEHOLDER", itemPlaceholder);
-        }
-        
         if (needHover || needTitleHover) {
             return buildComponentWithHover(result, player, playerColor, playerColorGradient, title, titleId, needTitleHover);
         }
