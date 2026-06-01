@@ -13,8 +13,11 @@ final class ItemNamesZhCompose {
 
     private static final Map<String, String> TOKENS = new HashMap<>();
     private static final Map<String, String> SUFFIXES = new HashMap<>();
+    /** 整词映射（组合算法无法正确拆分的 1.21+ 材质）。 */
+    private static final Map<String, String> EXACT_NAMES = new HashMap<>();
 
     static {
+        initExactNames();
         initTokens();
         initSuffixes();
     }
@@ -29,6 +32,10 @@ final class ItemNamesZhCompose {
     static String compose(String enumName) {
         if (enumName == null || enumName.isEmpty()) {
             return null;
+        }
+        String exact = EXACT_NAMES.get(enumName);
+        if (exact != null) {
+            return exact;
         }
         List<String> parts = List.of(enumName.split("_"));
         StringBuilder result = new StringBuilder();
@@ -57,6 +64,29 @@ final class ItemNamesZhCompose {
             }
         }
         return result.isEmpty() ? null : result.toString();
+    }
+
+    private static void initExactNames() {
+        putExact("CRAFTER", "合成器");
+        putExact("HEAVY_CORE", "沉重核心");
+        putExact("BIG_DRIPLEAF", "大型垂滴叶");
+        putExact("BIG_DRIPLEAF_STEM", "大型垂滴叶茎");
+        putExact("SMALL_DRIPLEAF", "小型垂滴叶");
+        putExact("BAMBOO_CHEST_RAFT", "运输竹筏");
+        putExact("BAMBOO_RAFT", "竹筏");
+        putExact("WIND_CHARGE", "风弹");
+        putExact("BREEZE_ROD", "旋风棒");
+        putExact("MACE", "重锤");
+        putExact("OAK_CHEST_BOAT", "运输橡木船");
+        putExact("SPRUCE_CHEST_BOAT", "运输云杉木船");
+        putExact("BIRCH_CHEST_BOAT", "运输白桦木船");
+        putExact("JUNGLE_CHEST_BOAT", "运输丛林木船");
+        putExact("ACACIA_CHEST_BOAT", "运输金合欢木船");
+        putExact("CHERRY_CHEST_BOAT", "运输樱花木船");
+        putExact("DARK_OAK_CHEST_BOAT", "运输深色橡木船");
+        putExact("MANGROVE_CHEST_BOAT", "运输红树木船");
+        // 部分服务端/旧 ID 兼容
+        putExact("CHEST_BAMBOO_RAFT", "运输竹筏");
     }
 
     private static void initSuffixes() {
@@ -400,6 +430,12 @@ final class ItemNamesZhCompose {
         putToken("WIND", "风");
         putToken("CHARGE", "弹");
         putToken("HEAVY", "重");
+        putToken("CORE", "核心");
+        putToken("DRIPLEAF", "垂滴叶");
+        putToken("CRAFTER", "合成器");
+        putToken("CHARGE", "弹");
+        putToken("ROD", "棒");
+        putToken("MACE", "重锤");
         putToken("WEIGHTED", "加权");
         putToken("LIGHT", "轻");
         putToken("TRIAL", "试炼");
@@ -674,6 +710,10 @@ final class ItemNamesZhCompose {
         putToken("SADDLE", "鞍");
         putToken("VALLEY", "谷");
         putToken("SPEED", "速度");
+    }
+
+    private static void putExact(String key, String value) {
+        EXACT_NAMES.put(key, value);
     }
 
     private static void putToken(String key, String value) {

@@ -659,6 +659,17 @@ final class ItemNamesZh {
             case CHISELED_BOOKSHELF -> "雕纹书架";
             case TARGET -> "标靶";
 
+            // 1.21 Tricky Trials / 竹筏
+            case CRAFTER -> "合成器";
+            case HEAVY_CORE -> "沉重核心";
+            case BIG_DRIPLEAF -> "大型垂滴叶";
+            case BIG_DRIPLEAF_STEM -> "大型垂滴叶茎";
+            case SMALL_DRIPLEAF -> "小型垂滴叶";
+            case BAMBOO_CHEST_RAFT -> "运输竹筏";
+            case WIND_CHARGE -> "风弹";
+            case BREEZE_ROD -> "旋风棒";
+            case MACE -> "重锤";
+
             default -> {
                 String composed = ItemNamesZhCompose.compose(material);
                 if (composed != null) {
