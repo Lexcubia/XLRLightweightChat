@@ -1,8 +1,10 @@
 package xlingran;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.bukkit.inventory.meta.PotionMeta;
 import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.ItemTag;
 import net.md_5.bungee.api.chat.hover.content.Content;
@@ -68,10 +70,113 @@ public final class ItemHoverUtil {
 
     private static JsonObject resolveItemJson(ItemStack stack) {
         JsonObject fromPaper = tryPaperSerializeItemAsJson(stack);
-        if (fromPaper != null) {
+        if (hasComponents(fromPaper)) {
             return fromPaper;
         }
-        return tryNmsEncodeItemJson(stack);
+        JsonObject fromNms = tryNmsEncodeItemJson(stack);
+        if (hasComponents(fromNms)) {
+            return fromNms;
+        }
+        return mergeComponentsFromMeta(minimalItemJson(stack), stack);
+    }
+
+    private static boolean hasComponents(JsonObject itemJson) {
+        return itemJson != null
+                && itemJson.has("components")
+                && itemJson.get("components").isJsonObject()
+                && !itemJson.getAsJsonObject("components").isEmpty();
+    }
+
+    private static JsonObject minimalItemJson(ItemStack stack) {
+        JsonObject root = new JsonObject();
+        root.addProperty("id", stack.getType().getKey().toString());
+        root.addProperty("count", stack.getAmount());
+        return root;
+    }
+
+    private static JsonObject mergeComponentsFromMeta(JsonObject base, ItemStack stack) {
+        JsonObject root = base != null ? base.deepCopy() : minimalItemJson(stack);
+        JsonObject components = buildComponentsFromMeta(stack);
+        if (components.isEmpty()) {
+            return hasComponents(root) ? root : null;
+        }
+        JsonObject existing = root.has("components") && root.get("components").isJsonObject()
+                ? root.getAsJsonObject("components")
+                : new JsonObject();
+        for (String key : components.keySet()) {
+            existing.add(key, components.get(key));
+        }
+        root.add("components", existing);
+        return root;
+    }
+
+    private static JsonObject buildComponentsFromMeta(ItemStack stack) {
+        JsonObject components = new JsonObject();
+        if (!stack.hasItemMeta()) {
+            return components;
+        }
+        ItemMeta meta = stack.getItemMeta();
+        if (meta == null) {
+            return components;
+        }
+        if (meta.hasDisplayName()) {
+            String name = meta.getDisplayName();
+            if (name != null && !name.isEmpty()) {
+                components.add("minecraft:custom_name", textComponent(name));
+            }
+        }
+        if (meta.hasLore()) {
+            java.util.List<String> lore = meta.getLore();
+            if (lore != null && !lore.isEmpty()) {
+                JsonArray loreArray = new JsonArray();
+                for (String line : lore) {
+                    if (line != null) {
+                        loreArray.add(textComponent(line));
+                    }
+                }
+                if (!loreArray.isEmpty()) {
+                    components.add("minecraft:lore", loreArray);
+                }
+            }
+        }
+        if (meta instanceof PotionMeta potionMeta) {
+            addPotionContentsComponent(components, potionMeta);
+        }
+        return components;
+    }
+
+    private static JsonObject textComponent(String legacyText) {
+        JsonObject comp = new JsonObject();
+        comp.addProperty("text", legacyText);
+        return comp;
+    }
+
+    private static void addPotionContentsComponent(JsonObject components, PotionMeta meta) {
+        if (meta.getBasePotionType() != null) {
+            String key = meta.getBasePotionType().getKey().getKey();
+            if (!"uncraftable".equals(key)) {
+                JsonObject potionContents = new JsonObject();
+                potionContents.addProperty("potion", "minecraft:" + key);
+                components.add("minecraft:potion_contents", potionContents);
+                return;
+            }
+        }
+        if (meta.hasCustomEffects() && !meta.getCustomEffects().isEmpty()) {
+            JsonObject potionContents = new JsonObject();
+            JsonArray customEffects = new JsonArray();
+            for (org.bukkit.potion.PotionEffect effect : meta.getCustomEffects()) {
+                JsonObject entry = new JsonObject();
+                entry.addProperty("id", effect.getType().getKey().toString());
+                entry.addProperty("amplifier", effect.getAmplifier());
+                entry.addProperty("duration", effect.getDuration());
+                entry.addProperty("ambient", effect.isAmbient());
+                entry.addProperty("show_particles", effect.hasParticles());
+                entry.addProperty("show_icon", effect.hasIcon());
+                customEffects.add(entry);
+            }
+            potionContents.add("custom_effects", customEffects);
+            components.add("minecraft:potion_contents", potionContents);
+        }
     }
 
     private static JsonObject tryPaperSerializeItemAsJson(ItemStack stack) {
@@ -113,12 +218,13 @@ public final class ItemHoverUtil {
     private static JsonObject tryNmsEncodeItemJson(ItemStack stack) {
         NmsItemJsonEncoder encoder = resolveNmsEncoder();
         if (encoder == null) {
+            LOGGER.warning("[XLRLightweightChat] NMS 编码器不可用，将尝试从 ItemMeta 合成 components");
             return null;
         }
         try {
             return encoder.encode(stack);
         } catch (Throwable t) {
-            LOGGER.log(Level.FINE, "[XLRLightweightChat] NMS 物品 JSON 编码失败", t);
+            LOGGER.log(Level.WARNING, "[XLRLightweightChat] NMS 物品 JSON 编码失败: " + t.getMessage(), t);
             return null;
         }
     }
@@ -232,7 +338,7 @@ public final class ItemHoverUtil {
                 return new NmsItemJsonEncoder(asNmsCopy, createSerializationContext, registryAccess,
                         jsonOpsInstance, encodeStart, codec);
             } catch (Throwable t) {
-                LOGGER.log(Level.FINE, "[XLRLightweightChat] 初始化 NMS 编码器失败: " + t.getMessage());
+                LOGGER.log(Level.WARNING, "[XLRLightweightChat] NMS 物品编码器初始化失败: " + t.getMessage());
                 return UNAVAILABLE;
             }
         }
@@ -245,10 +351,23 @@ public final class ItemHoverUtil {
             if (element == null || !element.isJsonObject()) {
                 return null;
             }
-            return element.getAsJsonObject();
+            JsonObject encoded = element.getAsJsonObject();
+            if (encoded.has("item") && encoded.get("item").isJsonObject()) {
+                encoded = encoded.getAsJsonObject("item");
+            }
+            return encoded;
         }
 
         private static Object resolveRegistryAccess() {
+            try {
+                Object craftServer = Bukkit.getServer();
+                Object minecraftServer = craftServer.getClass().getMethod("getServer").invoke(craftServer);
+                if (minecraftServer != null) {
+                    return minecraftServer.getClass().getMethod("registryAccess").invoke(minecraftServer);
+                }
+            } catch (Throwable ignored) {
+                // try static getServer
+            }
             try {
                 Class<?> serverClass = Class.forName("net.minecraft.server.MinecraftServer");
                 Object server = serverClass.getMethod("getServer").invoke(null);
