@@ -6,6 +6,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.PotionMeta;
 
 /**
  * 物品名称、颜色与 [item] 聊天展示。
@@ -45,18 +46,19 @@ public class Item {
      * 解析物品名：优先 ItemMeta 自定义名，否则按语言取材质译名。
      */
     public String resolveItemName(ItemStack stack, String language) {
-        if (stack.hasItemMeta()) {
-            ItemMeta meta = stack.getItemMeta();
-            if (meta != null && meta.hasDisplayName()) {
-                String custom = meta.getDisplayName();
-                if (custom != null && !custom.isEmpty()) {
-                    return custom;
-                }
+        ItemMeta meta = stack.getItemMeta();
+        if (meta != null && meta.hasDisplayName()) {
+            String custom = meta.getDisplayName();
+            if (custom != null && !custom.isEmpty()) {
+                return custom;
             }
         }
+        if (meta instanceof PotionMeta potionMeta && ItemPotionNames.isPotionMaterial(stack.getType())) {
+            String potionName = ItemPotionNames.resolve(potionMeta, stack.getType(), language);
+            return ItemColorRegistry.getColorCode(stack.getType()) + potionName;
+        }
         String translated = getDisplayName(stack.getType(), language);
-        String color = getColorCode(stack.getType());
-        return color + translated;
+        return ItemColorRegistry.getColorCode(stack.getType()) + translated;
     }
 
     public String getDisplayName(Material material, String language) {
@@ -687,83 +689,6 @@ public class Item {
     }
 
     public String getColorCode(Material material) {
-        return switch (material) {
-            // 矿石类 - 根据颜色分类
-            case COAL_ORE, COAL, CHARCOAL -> "&7"; // 灰色
-            case IRON_ORE, IRON_INGOT, IRON_PICKAXE, IRON_AXE, IRON_SHOVEL, IRON_HOE, IRON_SWORD,
-                 IRON_HELMET, IRON_CHESTPLATE, IRON_LEGGINGS, IRON_BOOTS -> "&f"; // 白色
-            case GOLD_ORE, GOLD_INGOT, GOLDEN_PICKAXE, GOLDEN_AXE, GOLDEN_SHOVEL, GOLDEN_HOE, GOLDEN_SWORD,
-                 GOLDEN_HELMET, GOLDEN_CHESTPLATE, GOLDEN_LEGGINGS, GOLDEN_BOOTS, GOLDEN_APPLE,
-                 ENCHANTED_GOLDEN_APPLE -> "&6"; // 金色
-            case DIAMOND_ORE, DIAMOND, DIAMOND_PICKAXE, DIAMOND_AXE, DIAMOND_SHOVEL, DIAMOND_HOE, DIAMOND_SWORD,
-                 DIAMOND_HELMET, DIAMOND_CHESTPLATE, DIAMOND_LEGGINGS, DIAMOND_BOOTS -> "&b"; // 青色
-            case EMERALD_ORE, EMERALD -> "&a"; // 绿色
-            case LAPIS_ORE, LAPIS_LAZULI -> "&9"; // 蓝色
-            case REDSTONE_ORE, REDSTONE -> "&c"; // 红色
-            
-            // 木材类 - 根据木材颜色
-            case OAK_LOG, OAK_PLANKS, OAK_DOOR, OAK_TRAPDOOR, OAK_SAPLING, OAK_LEAVES -> "&6"; // 橡木色
-            case SPRUCE_LOG, SPRUCE_PLANKS, SPRUCE_SAPLING, SPRUCE_LEAVES -> "&4"; // 深棕色
-            case BIRCH_LOG, BIRCH_PLANKS, BIRCH_SAPLING, BIRCH_LEAVES -> "&f"; // 白色
-            case JUNGLE_LOG, JUNGLE_PLANKS, JUNGLE_SAPLING, JUNGLE_LEAVES -> "&2"; // 深绿色
-            case ACACIA_LOG, ACACIA_PLANKS, ACACIA_SAPLING, ACACIA_LEAVES -> "&c"; // 橙红色
-            case DARK_OAK_LOG, DARK_OAK_PLANKS, DARK_OAK_SAPLING, DARK_OAK_LEAVES -> "&4"; // 深棕色
-            
-            // 方块类
-            case STONE, COBBLESTONE, GRAVEL -> "&8"; // 深灰色
-            case GRANITE -> "&c"; // 粉红色
-            case DIORITE -> "&f"; // 白色
-            case ANDESITE -> "&7"; // 灰色
-            case GRASS_BLOCK, DIRT -> "&2"; // 绿色/棕色
-            case SAND -> "&e"; // 黄色
-            case RED_SAND -> "&6"; // 橙色
-            case GLASS -> "&f"; // 透明/白色
-            case BRICK -> "&c"; // 红色
-            case BOOKSHELF -> "&6"; // 棕色
-            case CHEST -> "&6"; // 棕色
-            case CRAFTING_TABLE -> "&6"; // 棕色
-            case FURNACE -> "&8"; // 灰色
-            case TORCH -> "&e"; // 黄色
-            case LADDER -> "&6"; // 棕色
-            case BEDROCK -> "&8"; // 深灰色
-            case TNT -> "&c"; // 红色
-            
-            // 工具类（按材质分类，已在上面定义）
-            case WOODEN_PICKAXE, WOODEN_AXE, WOODEN_SHOVEL, WOODEN_HOE, WOODEN_SWORD, STICK -> "&6"; // 木色
-            case STONE_PICKAXE, STONE_AXE, STONE_SHOVEL, STONE_HOE, STONE_SWORD -> "&7"; // 石灰色
-            case NETHERITE_PICKAXE, NETHERITE_AXE, NETHERITE_SHOVEL, NETHERITE_HOE, NETHERITE_SWORD,
-                 NETHERITE_HELMET, NETHERITE_CHESTPLATE, NETHERITE_LEGGINGS, NETHERITE_BOOTS -> "&5"; // 紫色
-            
-            // 皮革盔甲
-            case LEATHER_HELMET, LEATHER_CHESTPLATE, LEATHER_LEGGINGS, LEATHER_BOOTS, LEATHER -> "&c"; // 红棕色
-            
-            // 锁链盔甲
-            case CHAINMAIL_HELMET, CHAINMAIL_CHESTPLATE, CHAINMAIL_LEGGINGS, CHAINMAIL_BOOTS -> "&7"; // 灰色
-            
-            // 食物类
-            case APPLE, BEETROOT -> "&c"; // 红色
-            case BREAD, POTATO, BAKED_POTATO, PUMPKIN_PIE, COOKIE, GLOWSTONE_DUST, CLOCK, MAP -> "&e"; // 黄色
-            case COOKED_PORKCHOP, COOKED_BEEF, COOKED_CHICKEN, COOKED_MUTTON, COOKED_RABBIT,
-                 COOKED_COD, COOKED_SALMON, CARROT, COCOA_BEANS -> "&6"; // 棕色
-            case MELON_SLICE, SLIME_BALL -> "&a"; // 绿色
-            case CAKE, STRING, FEATHER, PAPER, BOOK, BONE, EGG, COMPASS, NAME_TAG, LEAD, MILK_BUCKET -> "&f"; // 白色
-            
-            // 材料类（已在食物类中合并）
-            
-            // 药水类
-            case POTION, SPLASH_POTION, LINGERING_POTION -> "&b"; // 蓝色
-            
-            // 其他
-            case BOW, FISHING_ROD -> "&6"; // 棕色
-            case CROSSBOW, SHIELD, GUNPOWDER, FLINT, INK_SAC -> "&8"; // 深灰色/黑色
-            case FLINT_AND_STEEL, SHEARS, BUCKET -> "&7"; // 灰色
-            case SADDLE -> "&4"; // 深棕色
-            case WATER_BUCKET -> "&9"; // 蓝色
-            case LAVA_BUCKET -> "&c"; // 红色
-            
-            // 默认：返回白色
-            default -> "&f";
-        
-        };
+        return ItemColorRegistry.getColorCode(material);
     }
 }
