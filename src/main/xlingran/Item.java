@@ -13,7 +13,6 @@ import org.bukkit.potion.PotionType;
 import java.util.EnumMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * 物品展示（Display）、药水名（PotionNames）、材质颜色（ColorRegistry）。
