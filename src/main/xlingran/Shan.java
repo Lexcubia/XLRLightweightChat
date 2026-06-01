@@ -11,7 +11,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import net.md_5.bungee.api.chat.BaseComponent;
@@ -36,15 +35,9 @@ public class Shan extends JavaPlugin implements Listener {
     private File playerDataFile; // 玩家数据文件
     private FileConfiguration playerData; // 玩家数据配置
     
-    // 悬浮提示配置
-    private List<String> playerHoverLore; // 玩家名称悬浮提示内容（Required.player）
-    private List<String> playerSuggestCommands; // 点击后预填命令列表（Command - player）
-    private List<String> playerRunCommands; // 点击后直接执行命令列表（RunCommand - player）
-    
-    // %chat% 悬浮提示配置
-    private List<String> chatHoverLore; // 聊天消息悬浮提示内容（Required.chat）
-    private List<String> chatSuggestCommands; // 点击后预填命令列表（Command - chat）
-    private List<String> chatRunCommands; // 点击后直接执行命令列表（RunCommand - chat）
+    private final Map<String, Integer> titleDisplayToId = new HashMap<>();
+    private RequiredActions playerRequired = new RequiredActions();
+    private RequiredActions chatRequired = new RequiredActions();
     
     // 物品展示配置
     private boolean displayItemEnabled = false; // 是否启用 [item] 占位符
@@ -68,15 +61,7 @@ public class Shan extends JavaPlugin implements Listener {
         loadPlayerTitles();
         loadPlayerHoverConfig();
         loadDisplayItemConfig();
-        
-        // 初始化悬浮配置列表
-        if (playerHoverLore == null) playerHoverLore = new ArrayList<>();
-        if (playerSuggestCommands == null) playerSuggestCommands = new ArrayList<>();
-        if (playerRunCommands == null) playerRunCommands = new ArrayList<>();
-        if (chatHoverLore == null) chatHoverLore = new ArrayList<>();
-        if (chatSuggestCommands == null) chatSuggestCommands = new ArrayList<>();
-        if (chatRunCommands == null) chatRunCommands = new ArrayList<>();
-        
+
         // 加载玩家数据
         loadPlayerData();
         
@@ -161,17 +146,6 @@ public class Shan extends JavaPlugin implements Listener {
     }
 
     /**
-     * 监听玩家加入事件，加载称号数据
-     */
-    @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        
-        // 如果玩家数据已加载，不需要额外操作
-        // 称号数据已经在 loadPlayerData() 中加载
-    }
-
-    /**
      * 监听玩家退出事件，保存称号数据
      */
     @EventHandler
@@ -242,8 +216,9 @@ public class Shan extends JavaPlugin implements Listener {
      * 加载称号配置
      */
     private void loadPlayerTitles() {
-        playerTitles = new TreeMap<>(); // 使用 TreeMap 保持 ID 顺序
-        playerTitleLore = new TreeMap<>(); // 称号描述
+        playerTitles = new TreeMap<>();
+        playerTitleLore = new TreeMap<>();
+        titleDisplayToId.clear();
         
         if (config.contains("PlayerTitle")) {
             ConfigurationSection section = config.getConfigurationSection("PlayerTitle");
@@ -261,6 +236,7 @@ public class Shan extends JavaPlugin implements Listener {
                                     // 转换传统颜色代码 & -> §，确保后续比较一致性
                                     String processedName = ChatColor.translateAlternateColorCodes('&', name);
                                     playerTitles.put(id, processedName);
+                                    titleDisplayToId.put(processedName, id);
                                 }
                                 
                                 List<String> lore = titleSection.getStringList("Lore");
@@ -279,6 +255,7 @@ public class Shan extends JavaPlugin implements Listener {
                             String prefix = section.getString(key);
                             if (prefix != null) {
                                 playerTitles.put(id, prefix);
+                                titleDisplayToId.put(prefix, id);
                             }
                         }
                     } catch (NumberFormatException e) {
@@ -295,90 +272,20 @@ public class Shan extends JavaPlugin implements Listener {
      * 加载 Required 配置（player 和 chat 的悬浮提示和点击事件）
      */
     private void loadPlayerHoverConfig() {
-        // 初始化列表
-        playerHoverLore = new ArrayList<>();
-        playerSuggestCommands = new ArrayList<>();
-        playerRunCommands = new ArrayList<>();
-        chatHoverLore = new ArrayList<>();
-        chatSuggestCommands = new ArrayList<>();
-        chatRunCommands = new ArrayList<>();
-        
+        playerRequired = new RequiredActions();
+        chatRequired = new RequiredActions();
         if (!config.contains("Required")) {
-            // 未找到 Required 配置
             return;
         }
-        
         ConfigurationSection requiredSection = config.getConfigurationSection("Required");
         if (requiredSection == null) {
-            // Required 不是配置节
             return;
         }
-        
-        // 加载 player 配置
         if (requiredSection.contains("player")) {
-            List<?> playerList = requiredSection.getList("player");
-            if (playerList != null) {
-                extractCommandsAndLore(playerList, playerHoverLore, playerSuggestCommands, playerRunCommands, "player");
-            }
+            playerRequired = RequiredActions.fromConfigList(requiredSection.getList("player"));
         }
-        
-        // 加载 chat 配置
         if (requiredSection.contains("chat")) {
-            List<?> chatList = requiredSection.getList("chat");
-            if (chatList != null) {
-                extractCommandsAndLore(chatList, chatHoverLore, chatSuggestCommands, chatRunCommands, "chat");
-            }
-        }
-        
-        // Required 配置加载完成
-    }
-    
-    /**
-     * 从列表中提取悬浮文本和命令
-     */
-    private void extractCommandsAndLore(List<?> list, List<String> hoverLore, 
-                                        List<String> suggestCommands, List<String> runCommands,
-                                        String configName) {
-        for (Object item : list) {
-            // 处理 Map 格式（YAML 会将 "- Command: xxx" 解析为 Map）
-            if (item instanceof Map<?, ?> map) {
-                for (Map.Entry<?, ?> entry : map.entrySet()) {
-                    String key = String.valueOf(entry.getKey());
-                    String value = String.valueOf(entry.getValue());
-                    
-                    if (key.equalsIgnoreCase("Command")) {
-                        if (!value.isEmpty()) {
-                            suggestCommands.add(value);
-                            // 添加 Command
-                        }
-                    } else if (key.equalsIgnoreCase("RunCommand")) {
-                        if (!value.isEmpty()) {
-                            runCommands.add(value);
-                            // 添加 RunCommand
-                        }
-                    }
-                }
-            } else {
-                // 普通字符串
-                String line = String.valueOf(item);
-                
-                if (line.startsWith("Command:")) {
-                    String command = line.substring(8).trim();
-                    if (!command.isEmpty()) {
-                        suggestCommands.add(command);
-                        // 添加 Command
-                    }
-                } else if (line.startsWith("RunCommand:")) {
-                    String command = line.substring(11).trim();
-                    if (!command.isEmpty()) {
-                        runCommands.add(command);
-                        // 添加 RunCommand
-                    }
-                } else {
-                    hoverLore.add(line);
-                    // 添加悬浮文本
-                }
-            }
+            chatRequired = RequiredActions.fromConfigList(requiredSection.getList("chat"));
         }
     }
 
@@ -393,21 +300,7 @@ public class Shan extends JavaPlugin implements Listener {
         // 取消默认消息
         event.setCancelled(true);
         
-        // 查找匹配的聊天格式
-        String format = findMatchingFormat(player);
-        
-        if (format == null) {
-            // 如果没有匹配格式，检查是否有 default 权限
-            if (player.hasPermission("xlr.chat.default")) {
-                format = config.getString("Chat.default");
-            }
-            
-            // 如果还是没有，使用第一个格式作为兜底
-            if (format == null) {
-                format = getDefaultFormat();
-            }
-        }
-        
+        String format = resolveChatFormat(player);
         if (format == null) {
             // 如果连默认格式都没有，直接发送原始消息
             runOnMainThread(() -> broadcastMessage(player.getName(), message));
@@ -431,6 +324,38 @@ public class Shan extends JavaPlugin implements Listener {
             task.run();
         } else {
             Bukkit.getScheduler().runTask(this, task);
+        }
+    }
+
+    private String resolveChatFormat(Player player) {
+        String format = findMatchingFormat(player);
+        if (format != null) {
+            return format;
+        }
+        if (player.hasPermission("xlr.chat.default")) {
+            format = config.getString("Chat.default");
+            if (format != null) {
+                return format;
+            }
+        }
+        return getDefaultFormat();
+    }
+
+    private static String colorize(String text) {
+        return ChatColor.translateAlternateColorCodes('&', text);
+    }
+
+    private void sendPlayerMessages(Player player, List<String> messages, Map<String, String> placeholders) {
+        if (messages.isEmpty()) {
+            return;
+        }
+        for (String msg : messages) {
+            if (placeholders != null) {
+                for (Map.Entry<String, String> entry : placeholders.entrySet()) {
+                    msg = msg.replace(entry.getKey(), entry.getValue());
+                }
+            }
+            player.sendMessage(colorize(msg));
         }
     }
 
@@ -536,9 +461,9 @@ public class Shan extends JavaPlugin implements Listener {
     private BaseComponent[] buildChatComponentsFromParts(Player player, List<ChatMessagePart> parts,
                                                          String gradientConfig) {
         ComponentBuilder builder = new ComponentBuilder();
-        boolean applyChatHover = chatHoverLore != null && !chatHoverLore.isEmpty();
-        BaseComponent[] chatHoverComponents = applyChatHover ? buildHoverComponents(chatHoverLore) : null;
-        ClickEvent chatClick = resolveChatClickEvent(player);
+        BaseComponent[] chatHoverComponents = chatRequired.hasHover()
+                ? buildHoverComponents(chatRequired.hoverLore) : null;
+        ClickEvent chatClick = chatRequired.createClickEvent(player, getLogger(), "chat");
 
         for (ChatMessagePart part : parts) {
             if (part instanceof ChatMessagePart.Text textPart) {
@@ -550,7 +475,7 @@ public class Shan extends JavaPlugin implements Listener {
                     content = applyGradient(gradientConfig, content);
                 }
                 content = ChatColor.translateAlternateColorCodes('&', content);
-                for (BaseComponent component : parseLegacyTextWithHexColors(content)) {
+                for (BaseComponent component : ChatComponents.parseLegacyTextWithHexColors(content)) {
                     builder.append(component);
                 }
             }
@@ -569,7 +494,7 @@ public class Shan extends JavaPlugin implements Listener {
             text = applyGradient(gradientConfig, text);
         }
         text = ChatColor.translateAlternateColorCodes('&', text);
-        for (BaseComponent component : parseLegacyTextWithHexColors(text)) {
+        for (BaseComponent component : ChatComponents.parseLegacyTextWithHexColors(text)) {
             if (component instanceof TextComponent textComp) {
                 if (chatHover != null && chatHover.length > 0) {
                     textComp.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, chatHover));
@@ -580,34 +505,6 @@ public class Shan extends JavaPlugin implements Listener {
             }
             builder.append(component);
         }
-    }
-
-    private ClickEvent resolveChatClickEvent(Player player) {
-        if (!chatSuggestCommands.isEmpty() && !chatRunCommands.isEmpty()) {
-            return new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, joinCommands(player, chatSuggestCommands));
-        }
-        if (!chatSuggestCommands.isEmpty()) {
-            return new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, joinCommands(player, chatSuggestCommands));
-        }
-        if (!chatRunCommands.isEmpty()) {
-            return new ClickEvent(ClickEvent.Action.RUN_COMMAND, joinCommands(player, chatRunCommands));
-        }
-        return null;
-    }
-
-    private String joinCommands(Player player, List<String> commands) {
-        StringBuilder commandBuilder = new StringBuilder();
-        for (int i = 0; i < commands.size(); i++) {
-            String command = commands.get(i).replace("%player%", player.getName());
-            if (!command.startsWith("/")) {
-                command = "/" + command;
-            }
-            commandBuilder.append(command);
-            if (i < commands.size() - 1) {
-                commandBuilder.append("; ");
-            }
-        }
-        return commandBuilder.toString();
     }
 
     private String extractChatGradientPattern(String formatResult) {
@@ -629,7 +526,7 @@ public class Shan extends JavaPlugin implements Listener {
             String section = sections[i];
             if (!section.isEmpty()) {
                 section = section.replace("%player%", player.getName());
-                for (BaseComponent component : parseLegacyTextWithHexColors(section)) {
+                for (BaseComponent component : ChatComponents.parseLegacyTextWithHexColors(section)) {
                     builder.append(component);
                 }
             }
@@ -657,25 +554,12 @@ public class Shan extends JavaPlugin implements Listener {
         int titleId = -1;
         
         if (title != null) {
-            // 处理称号中的颜色变量
             title = processTitleColors(title);
-            
-            // 查找称号 ID
-            for (Map.Entry<Integer, String> entry : playerTitles.entrySet()) {
-                String titlePrefix = entry.getValue();
-                // 处理称号中的颜色变量后再比较
-                String processedPrefix = processTitleColors(titlePrefix);
-                if (processedPrefix.equals(title)) {
-                    titleId = entry.getKey();
-                    // 检查该称号是否有 Lore
-                    List<String> lore = playerTitleLore.get(titleId);
-                    if (lore != null && !lore.isEmpty()) {
-                        needTitleHover = true;
-                    }
-                    break;
-                }
+            titleId = titleDisplayToId.getOrDefault(title, -1);
+            if (titleId > 0) {
+                List<String> lore = playerTitleLore.get(titleId);
+                needTitleHover = lore != null && !lore.isEmpty();
             }
-            
             result = result.replace("%title%", title);
         } else {
             // 玩家没有穿戴称号，不显示称号
@@ -695,7 +579,7 @@ public class Shan extends JavaPlugin implements Listener {
             }
         }
         
-        boolean needHover = result.contains("%player%") && playerHoverLore != null && !playerHoverLore.isEmpty();
+        boolean needHover = result.contains("%player%") && playerRequired.hasHover();
 
         List<ChatMessagePart> messageParts = buildMessageParts(player, message);
         String chatGradientConfig = null;
@@ -789,7 +673,7 @@ public class Shan extends JavaPlugin implements Listener {
                 // 添加称号前面的文本
                 String beforeTitle = beforePlayer.substring(0, titleIndex);
                 if (!beforeTitle.isEmpty()) {
-                    BaseComponent[] beforeComponents = parseLegacyTextWithHexColors(beforeTitle);
+                    BaseComponent[] beforeComponents = ChatComponents.parseLegacyTextWithHexColors(beforeTitle);
                     for (BaseComponent component : beforeComponents) {
                         builder.append(component);
                     }
@@ -797,7 +681,7 @@ public class Shan extends JavaPlugin implements Listener {
                 
                 // 创建称号组件（带悬浮提示）
                 // 称号文本已包含渐变颜色代码，需要正确解析
-                BaseComponent[] titleComponents = parseLegacyTextWithHexColors(title);
+                BaseComponent[] titleComponents = ChatComponents.parseLegacyTextWithHexColors(title);
                 
                 // 获取第一个组件作为主组件
                 TextComponent titleComponent;
@@ -834,7 +718,7 @@ public class Shan extends JavaPlugin implements Listener {
         // 添加 %player% 前面的文本（需要正确解析 16 进制颜色代码）
         if (!beforePlayer.isEmpty()) {
             // 将包含 § 格式的字符串转换为 BaseComponent
-            BaseComponent[] frontComponents = parseLegacyTextWithHexColors(beforePlayer);
+            BaseComponent[] frontComponents = ChatComponents.parseLegacyTextWithHexColors(beforePlayer);
             for (BaseComponent component : frontComponents) {
                 builder.append(component);
             }
@@ -849,7 +733,7 @@ public class Shan extends JavaPlugin implements Listener {
             String gradientText = applyGradient(playerColorGradient, player.getName());
             
             // 将包含渐变颜色的 String 转换为 BaseComponent 数组
-            BaseComponent[] gradientComponents = parseLegacyTextWithHexColors(gradientText);
+            BaseComponent[] gradientComponents = ChatComponents.parseLegacyTextWithHexColors(gradientText);
             
             // 获取第一个组件作为主组件
             if (gradientComponents.length > 0 && gradientComponents[0] instanceof TextComponent) {
@@ -875,62 +759,13 @@ public class Shan extends JavaPlugin implements Listener {
         }
         
         // 设置悬浮提示
-        BaseComponent[] hoverComponents = buildHoverComponents(playerHoverLore);
+        BaseComponent[] hoverComponents = buildHoverComponents(playerRequired.hoverLore);
         if (hoverComponents != null && hoverComponents.length > 0) {
             playerComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverComponents));
         }
-        
-        // 设置点击事件（只支持一种类型：Command 或 RunCommand）
-        // 优先使用 Command（预填），如果没有 Command 才使用 RunCommand（执行）
-        if (!playerSuggestCommands.isEmpty() && !playerRunCommands.isEmpty()) {
-            // 如果同时配置了两种，输出警告并使用 Command
-            getLogger().warning("[警告] 同时配置了 Command 和 RunCommand，只使用 Command（预填）");
-            getLogger().warning("[提示] 请只保留其中一种配置");
-            
-            // 使用 SUGGEST_COMMAND（预填命令到聊天栏）
-            StringBuilder commandBuilder = new StringBuilder();
-            for (int i = 0; i < playerSuggestCommands.size(); i++) {
-                String command = playerSuggestCommands.get(i).replace("%player%", player.getName());
-                if (!command.startsWith("/")) {
-                    command = "/" + command;
-                }
-                commandBuilder.append(command);
-                if (i < playerSuggestCommands.size() - 1) {
-                    commandBuilder.append("; ");
-                }
-            }
-            String finalCommand = commandBuilder.toString();
-            playerComponent.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, finalCommand));
-        } else if (!playerSuggestCommands.isEmpty()) {
-            // 只有 Command，使用 SUGGEST_COMMAND（预填命令到聊天栏）
-            StringBuilder commandBuilder = new StringBuilder();
-            for (int i = 0; i < playerSuggestCommands.size(); i++) {
-                String command = playerSuggestCommands.get(i).replace("%player%", player.getName());
-                if (!command.startsWith("/")) {
-                    command = "/" + command;
-                }
-                commandBuilder.append(command);
-                if (i < playerSuggestCommands.size() - 1) {
-                    commandBuilder.append("; ");
-                }
-            }
-            String finalCommand = commandBuilder.toString();
-            playerComponent.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, finalCommand));
-        } else if (!playerRunCommands.isEmpty()) {
-            // 只有 RunCommand，使用 RUN_COMMAND（直接执行命令）
-            StringBuilder commandBuilder = new StringBuilder();
-            for (int i = 0; i < playerRunCommands.size(); i++) {
-                String command = playerRunCommands.get(i).replace("%player%", player.getName());
-                if (!command.startsWith("/")) {
-                    command = "/" + command;
-                }
-                commandBuilder.append(command);
-                if (i < playerRunCommands.size() - 1) {
-                    commandBuilder.append("; ");
-                }
-            }
-            String finalCommand = commandBuilder.toString();
-            playerComponent.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, finalCommand));
+        ClickEvent playerClick = playerRequired.createClickEvent(player, getLogger(), "player");
+        if (playerClick != null) {
+            playerComponent.setClickEvent(playerClick);
         }
         
         // 添加玩家名称
@@ -963,13 +798,10 @@ public class Shan extends JavaPlugin implements Listener {
         if (section == null || section.isEmpty()) {
             return;
         }
-        BaseComponent[] chatHoverComponents = (chatHoverLore != null && !chatHoverLore.isEmpty())
-                ? buildHoverComponents(chatHoverLore) : null;
-        ClickEvent chatClick = resolveChatClickEvent(player);
-        if (!chatSuggestCommands.isEmpty() && !chatRunCommands.isEmpty()) {
-            getLogger().warning("[警告] chat 同时配置了 Command 和 RunCommand，只使用 Command（预填）");
-        }
-        for (BaseComponent component : parseLegacyTextWithHexColors(section)) {
+        BaseComponent[] chatHoverComponents = chatRequired.hasHover()
+                ? buildHoverComponents(chatRequired.hoverLore) : null;
+        ClickEvent chatClick = chatRequired.createClickEvent(player, getLogger(), "chat");
+        for (BaseComponent component : ChatComponents.parseLegacyTextWithHexColors(section)) {
             if (component instanceof TextComponent textComp) {
                 textComp.setHoverEvent(null);
                 textComp.setClickEvent(null);
@@ -1035,35 +867,24 @@ public class Shan extends JavaPlugin implements Listener {
      * 注意：称号名称和 Lore 已经在加载时转换为 § 格式，这里只处理颜色变量
      */
     public String processTitleColors(String title) {
-        String result = title;
-        
-        // 替换颜色变量
+        return applyGradientPlaceholders(title);
+    }
+
+    private String applyGradientPlaceholders(String text) {
+        String result = text;
         for (Map.Entry<String, String> entry : colorVariables.entrySet()) {
-            if (result.contains(entry.getKey())) {
-                String gradientConfig = entry.getValue();
-                String placeholder = entry.getKey();
-                
-                // 提取占位符后面的称号文本
-                int placeholderIndex = result.indexOf(placeholder);
-                if (placeholderIndex != -1) {
-                    String afterPlaceholder = result.substring(placeholderIndex + placeholder.length());
-                    String beforePlaceholder = result.substring(0, placeholderIndex);
-                    
-                    // 对称号文本应用渐变
-                    String gradientText = applyGradient(gradientConfig, afterPlaceholder);
-                    
-                    // 重新组合：前置文本 + 渐变后的称号
-                    result = beforePlaceholder + gradientText;
-                }
+            String placeholder = entry.getKey();
+            if (!result.contains(placeholder)) {
+                continue;
             }
+            int placeholderIndex = result.indexOf(placeholder);
+            String beforePlaceholder = result.substring(0, placeholderIndex);
+            String afterPlaceholder = result.substring(placeholderIndex + placeholder.length());
+            result = beforePlaceholder + applyGradient(entry.getValue(), afterPlaceholder);
         }
-        
         return result;
     }
 
-    /**
-     * 应用渐变颜色到文本
-     */
     /**
      * 应用渐变颜色到文本（支持任意数量的颜色）
      * @param gradientConfig 颜色配置，格式: "#RRGGBB-#RRGGBB-#RRGGBB..."
@@ -1212,142 +1033,26 @@ public class Shan extends JavaPlugin implements Listener {
         }
     }
 
-    /**
-     * 构建悬浮提示组件
-     */
-    /**
-     * 构建悬浮提示组件
-     * @param hoverLore 悬浮文本列表
-     * @return BaseComponent 数组
-     */
     private BaseComponent[] buildHoverComponents(List<String> hoverLore) {
         if (hoverLore == null || hoverLore.isEmpty()) {
             return null;
         }
-        
         ComponentBuilder builder = new ComponentBuilder();
-        
         for (int i = 0; i < hoverLore.size(); i++) {
-            String line = hoverLore.get(i);
-            
-            // 先处理颜色变量（如 %color4%）
-            String processedLine = line;
-            for (Map.Entry<String, String> entry : colorVariables.entrySet()) {
-                if (processedLine.contains(entry.getKey())) {
-                    String gradientConfig = entry.getValue();
-                    String placeholder = entry.getKey();
-                    
-                    // 提取占位符后面的文本
-                    int placeholderIndex = processedLine.indexOf(placeholder);
-                    if (placeholderIndex != -1) {
-                        String afterPlaceholder = processedLine.substring(placeholderIndex + placeholder.length());
-                        String beforePlaceholder = processedLine.substring(0, placeholderIndex);
-                        
-                        // 对文本应用渐变
-                        String gradientText = applyGradient(gradientConfig, afterPlaceholder);
-                        
-                        // 重新组合
-                        processedLine = beforePlaceholder + gradientText;
-                    }
-                }
-            }
-            
-            // 转换传统颜色代码
-            String translated = ChatColor.translateAlternateColorCodes('&', processedLine);
-            
             if (i > 0) {
                 builder.append("\n");
             }
-            
-            // 关键修改：使用 parseLegacyTextWithHexColors 解析 16 进制颜色代码
-            BaseComponent[] lineComponents = parseLegacyTextWithHexColors(translated);
-            for (BaseComponent component : lineComponents) {
+            String translated = colorize(applyGradientPlaceholders(hoverLore.get(i)));
+            for (BaseComponent component : ChatComponents.parseLegacyTextWithHexColors(translated)) {
                 builder.append(component);
             }
         }
-        
         return builder.create();
     }
 
-    /**
-     * 解析包含 16 进制颜色代码的文本为 BaseComponent 数组
-     * 支持 §x§R§R§G§G§B§B 格式的 16 进制颜色和传统颜色代码
-     */
-    private BaseComponent[] parseLegacyTextWithHexColors(String text) {
-        List<BaseComponent> components = new ArrayList<>();
-        TextComponent currentComponent = new TextComponent("");
-        
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            
-            // 处理 § 格式
-            if (c == '§' && i + 1 < text.length()) {
-                char next = text.charAt(i + 1);
-                
-                // 检查是否是 16 进制颜色代码 §x§R§R§G§G§B§B
-                if (next == 'x' && i + 13 < text.length()) {
-                    // 解析 16 进制颜色
-                    try {
-                        int r = (Character.digit(text.charAt(i + 3), 16) << 4) | Character.digit(text.charAt(i + 5), 16);
-                        int g = (Character.digit(text.charAt(i + 7), 16) << 4) | Character.digit(text.charAt(i + 9), 16);
-                        int b = (Character.digit(text.charAt(i + 11), 16) << 4) | Character.digit(text.charAt(i + 13), 16);
-                        
-                        // 添加当前组件
-                        if (!currentComponent.getText().isEmpty()) {
-                            components.add(currentComponent);
-                        }
-                        
-                        // 创建新组件并设置 16 进制颜色
-                        currentComponent = new TextComponent("");
-                        // 使用 BungeeCord ChatColor 的 of 方法设置 16 进制颜色
-                        String hexColor = String.format("#%02x%02x%02x", r, g, b);
-                        currentComponent.setColor(net.md_5.bungee.api.ChatColor.of(hexColor));
-                        
-                        // 跳过颜色代码
-                        i += 13;
-                        continue;
-                    } catch (Exception e) {
-                        // 如果解析失败，当作普通字符处理
-                    }
-                }
-                // 传统颜色代码处理
-                else if (Character.isLetterOrDigit(next)) {
-                    // 添加当前组件
-                    if (!currentComponent.getText().isEmpty()) {
-                        components.add(currentComponent);
-                    }
-                    
-                    // 创建新组件并设置传统颜色
-                    currentComponent = new TextComponent("");
-                    // 使用 BungeeCord 的 ChatColor 解析传统颜色代码
-                    net.md_5.bungee.api.ChatColor bungeeColor = net.md_5.bungee.api.ChatColor.getByChar(next);
-                    if (bungeeColor != null) {
-                        currentComponent.setColor(bungeeColor);
-                    }
-                    
-                    i++; // 跳过下一个字符
-                    continue;
-                }
-            }
-            
-            // 普通字符，添加到当前组件
-            currentComponent.setText(currentComponent.getText() + c);
-        }
-        
-        // 添加最后一个组件
-        if (!currentComponent.getText().isEmpty()) {
-            components.add(currentComponent);
-        }
-        
-        return components.toArray(new BaseComponent[0]);
-    }
-
-    /**
-     * 广播原始消息（备用方法）
-     */
     private void broadcastMessage(String playerName, String message) {
         String formatted = "&a" + playerName + ": &f" + message;
-        String translated = ChatColor.translateAlternateColorCodes('&', formatted);
+        String translated = colorize(formatted);
         // 将 String 转换为 BaseComponent[]
         BaseComponent[] components = new BaseComponent[]{new TextComponent(translated)};
         broadcastProcessedMessage(components);
@@ -1362,7 +1067,7 @@ public class Shan extends JavaPlugin implements Listener {
             // 检查是否由玩家执行
             if (!(sender instanceof Player player)) {
                 String noPlayerMsg = config.getString("Message.NoPlayer", "&c此命令只能由玩家执行!");
-                sender.sendMessage(ChatColor.translateAlternateColorCodes('&', noPlayerMsg));
+                sender.sendMessage(colorize(noPlayerMsg));
                 return true;
             }
             
@@ -1378,40 +1083,31 @@ public class Shan extends JavaPlugin implements Listener {
             switch (subCommand) {
                 case "cp" -> {
                 if (!player.hasPermission("xlr.command.cp")) {
-                    String noPermMsg = config.getString("Message.NoPermission", "&c你没有权限执行此命令");
-                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', noPermMsg));
+                    sendNoPermission(player);
                     return true;
                 }
-                
                 if (guiManager != null) {
                     guiManager.openTitleGUI(player);
                 } else {
-                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&c称号系统未初始化！"));
+                    player.sendMessage(colorize("&c称号系统未初始化！"));
                 }
                 }
                 
                 // /xlrchat reload - 重载配置
                 case "reload" -> {
                 if (!player.hasPermission("xlr.admin.reload")) {
-                    String noPermMsg = config.getString("Message.NoPermission", "&c你没有权限执行此命令");
-                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', noPermMsg));
+                    sendNoPermission(player);
                     return true;
                 }
-                
                 savePlayerData();
                 reloadConfig();
-
-                // 发送重载消息（支持多行）
                 List<String> reloadMessages = config.getStringList("Command.reload");
                 if (reloadMessages.isEmpty()) {
-                    // 默认消息
-                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7配置已重新加载"));
+                    player.sendMessage(colorize("&7配置已重新加载"));
                 } else {
-                    for (String msg : reloadMessages) {
-                        msg = msg.replace("%chat_format%", String.valueOf(getChatFormatCount()));
-                        msg = msg.replace("%color_config%", String.valueOf(colorVariables.size()));
-                        player.sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
-                    }
+                    sendPlayerMessages(player, reloadMessages, Map.of(
+                            "%chat_format%", String.valueOf(getChatFormatCount()),
+                            "%color_config%", String.valueOf(colorVariables.size())));
                 }
                 }
                 
@@ -1419,10 +1115,8 @@ public class Shan extends JavaPlugin implements Listener {
                 case "help" -> sendHelpMessage(player);
                 
                 // 未知子命令
-                default -> {
-                    String unknownMsg = config.getString("Message.UnknownSubCmd", "&c未知的子命令");
-                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', unknownMsg));
-                }
+                default -> player.sendMessage(colorize(
+                        config.getString("Message.UnknownSubCmd", "&c未知的子命令")));
             }
             return true;
         }
@@ -1433,18 +1127,20 @@ public class Shan extends JavaPlugin implements Listener {
     /**
      * 发送帮助信息
      */
+    private void sendNoPermission(Player player) {
+        player.sendMessage(colorize(config.getString("Message.NoPermission", "&c你没有权限执行此命令")));
+    }
+
     private void sendHelpMessage(Player player) {
         List<String> helpMessages = config.getStringList("Command.help");
         if (helpMessages.isEmpty()) {
-            // 默认帮助信息
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&6===== [XLRightweightChat] ====="));
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7- /xlrchat cp &6打开称号仓库"));
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7- /xlrchat reload &6重载该插件"));
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7- /xlrchat help &6显示帮助"));
+            sendPlayerMessages(player, List.of(
+                    "&6===== [XLRLightweightChat] =====",
+                    "&7- /xlrchat cp &6打开称号仓库",
+                    "&7- /xlrchat reload &6重载该插件",
+                    "&7- /xlrchat help &6显示帮助"), null);
         } else {
-            for (String msg : helpMessages) {
-                player.sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
-            }
+            sendPlayerMessages(player, helpMessages, null);
         }
     }
 }
