@@ -3,6 +3,7 @@ package xlingran;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.md_5.bungee.api.chat.BaseComponent;
+import net.md_5.bungee.api.chat.HoverEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -31,13 +32,10 @@ final class CraftChatBridge {
         return node;
     }
 
-    /**
-     * 物品段 JSON 节点（含 show_item + components）。
-     */
     static JsonObject itemTextNode(String legacyText, ItemStack stack) {
         JsonObject itemJson = ItemHoverUtil.resolveItemJsonForHover(stack);
         if (itemJson == null || !itemJson.has("components")) {
-            LOGGER.warning("[XLRLightweightChat] 无法生成物品 components，悬浮可能显示为原版");
+            LOGGER.warning("[XLRLightweightChat] 无法生成物品 components");
             return textNode(legacyText);
         }
         JsonObject node = new JsonObject();
@@ -49,9 +47,6 @@ final class CraftChatBridge {
         return node;
     }
 
-    /**
-     * 用 extra 数组构建完整聊天组件并 NMS 广播；成功返回 true。
-     */
     static boolean broadcastWithExtra(JsonArray extra) {
         if (extra == null || extra.isEmpty()) {
             return false;
@@ -63,18 +58,43 @@ final class CraftChatBridge {
     }
 
     /**
-     * 将已组装的 Bungee 组件转为 NMS 后发送（仍可能丢失 components，仅作兜底）。
+     * 兜底发送：剥离会导致崩溃的 SHOW_ITEM 悬浮后再用 Spigot 发送。
      */
     static void broadcast(BaseComponent[] components) {
         if (components == null || components.length == 0) {
             return;
         }
-        Object nms = bungeeToNms(components);
+        Object nms = bungeeToNms(stripUnsafeItemHover(components));
         if (nms != null && broadcastNmsComponent(nms)) {
             return;
         }
+        BaseComponent[] safe = stripUnsafeItemHover(components);
         for (Player player : Bukkit.getOnlinePlayers()) {
-            player.spigot().sendMessage(components);
+            try {
+                player.spigot().sendMessage(safe);
+            } catch (Throwable t) {
+                LOGGER.log(Level.WARNING, "[XLRLightweightChat] Spigot 发送聊天失败", t);
+            }
+        }
+    }
+
+    private static BaseComponent[] stripUnsafeItemHover(BaseComponent[] components) {
+        for (BaseComponent component : components) {
+            stripHoverRecursive(component);
+        }
+        return components;
+    }
+
+    private static void stripHoverRecursive(BaseComponent component) {
+        if (component == null) {
+            return;
+        }
+        HoverEvent hover = component.getHoverEvent();
+        if (hover != null && hover.getAction() == HoverEvent.Action.SHOW_ITEM) {
+            component.setHoverEvent(null);
+        }
+        for (BaseComponent extra : component.getExtra()) {
+            stripHoverRecursive(extra);
         }
     }
 
@@ -89,7 +109,6 @@ final class CraftChatBridge {
     private static Object parseJsonToNms(JsonObject root) {
         resolve();
         if (fromJsonMethod == null) {
-            LOGGER.warning("[XLRLightweightChat] CraftChatMessage.fromJSON 不可用，无法发送 components 悬浮");
             return null;
         }
         try {
@@ -102,11 +121,14 @@ final class CraftChatBridge {
 
     private static Object bungeeToNms(BaseComponent[] components) {
         resolve();
+        if (fromJsonMethod == null) {
+            return null;
+        }
         try {
-            Class<?> craftChatMessage = Class.forName("org.bukkit.craftbukkit.util.CraftChatMessage");
+            Class<?> craftChatMessage = SpigotReflection.craftClass("util.CraftChatMessage");
             for (String methodName : new String[]{"fromBungeeMessage", "bungeeToVanilla"}) {
                 try {
-                    Method method = craftChatMessage.getMethod(methodName, BaseComponent[].class);
+                    Method method = SpigotReflection.resolveMethod(craftChatMessage, methodName, BaseComponent[].class);
                     return method.invoke(null, (Object) components);
                 } catch (NoSuchMethodException ignored) {
                     // next
@@ -115,7 +137,7 @@ final class CraftChatBridge {
             if (components.length == 1) {
                 for (String methodName : new String[]{"fromBungeeMessage", "bungeeToVanilla"}) {
                     try {
-                        Method method = craftChatMessage.getMethod(methodName, BaseComponent.class);
+                        Method method = SpigotReflection.resolveMethod(craftChatMessage, methodName, BaseComponent.class);
                         return method.invoke(null, components[0]);
                     } catch (NoSuchMethodException ignored) {
                         // next
@@ -134,7 +156,6 @@ final class CraftChatBridge {
         }
         resolve();
         if (sendSystemMessageMethod == null) {
-            LOGGER.warning("[XLRLightweightChat] ServerPlayer.sendSystemMessage 不可用");
             return false;
         }
         boolean any = false;
@@ -159,17 +180,18 @@ final class CraftChatBridge {
                 return;
             }
             try {
-                Class<?> craftChatMessage = Class.forName("org.bukkit.craftbukkit.util.CraftChatMessage");
-                fromJsonMethod = craftChatMessage.getMethod("fromJSON", String.class);
+                Class<?> craftChatMessage = SpigotReflection.craftClass("util.CraftChatMessage");
+                fromJsonMethod = SpigotReflection.resolveMethod(craftChatMessage, "fromJSON", String.class);
             } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[XLRLightweightChat] 无法解析 CraftChatMessage", t);
+                LOGGER.log(Level.WARNING, "[XLRLightweightChat] 无法解析 CraftChatMessage: " + t.getMessage());
             }
             try {
-                Class<?> componentClass = Class.forName("net.minecraft.network.chat.Component");
-                sendSystemMessageMethod = Class.forName("net.minecraft.server.level.ServerPlayer")
-                        .getMethod("sendSystemMessage", componentClass, boolean.class);
+                Class<?> componentClass = SpigotReflection.serverClass("net.minecraft.network.chat.Component");
+                Class<?> serverPlayerClass = SpigotReflection.serverClass("net.minecraft.server.level.ServerPlayer");
+                sendSystemMessageMethod = SpigotReflection.resolveMethod(serverPlayerClass,
+                        "sendSystemMessage", componentClass, boolean.class);
             } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[XLRLightweightChat] 无法解析 sendSystemMessage", t);
+                LOGGER.log(Level.WARNING, "[XLRLightweightChat] 无法解析 sendSystemMessage: " + t.getMessage());
             }
             resolved = true;
         }

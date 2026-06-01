@@ -1,13 +1,11 @@
 package xlingran;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.bukkit.inventory.meta.PotionMeta;
 import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.ItemTag;
-import net.md_5.bungee.api.chat.hover.content.Content;
 import net.md_5.bungee.api.chat.hover.content.Item;
 import org.bukkit.Bukkit;
 import org.bukkit.inventory.ItemStack;
@@ -57,14 +55,6 @@ public final class ItemHoverUtil {
     }
 
     private static HoverEvent createShowItemHoverInternal(ItemStack stack) {
-        JsonObject itemJson = resolveItemJson(stack);
-        if (itemJson != null && itemJson.has("components")) {
-            String id = itemJson.get("id").getAsString();
-            int count = itemJson.has("count") ? itemJson.get("count").getAsInt() : stack.getAmount();
-            JsonElement components = itemJson.get("components");
-            return new HoverEvent(HoverEvent.Action.SHOW_ITEM,
-                    new ComponentsShowItem(id, count, components));
-        }
         return createLegacyHover(stack);
     }
 
@@ -77,7 +67,29 @@ public final class ItemHoverUtil {
         if (hasComponents(fromNms)) {
             return fromNms;
         }
-        return mergeComponentsFromMeta(minimalItemJson(stack), stack);
+        return tryEncodeRebuiltStack(stack);
+    }
+
+    private static JsonObject tryEncodeRebuiltStack(ItemStack stack) {
+        try {
+            String spec = stack.getType().getKey().toString();
+            ItemMeta meta = stack.getItemMeta();
+            if (meta != null) {
+                String componentSpec = meta.getAsComponentString();
+                if (componentSpec != null && !componentSpec.isEmpty() && !"[]".equals(componentSpec)) {
+                    spec = spec + componentSpec;
+                }
+            }
+            ItemStack rebuilt = Bukkit.getItemFactory().createItemStack(spec);
+            rebuilt.setAmount(stack.getAmount());
+            JsonObject encoded = tryNmsEncodeItemJson(rebuilt);
+            if (hasComponents(encoded)) {
+                return encoded;
+            }
+        } catch (Throwable t) {
+            LOGGER.log(Level.FINE, "[XLRLightweightChat] createItemStack 重建编码失败", t);
+        }
+        return null;
     }
 
     private static boolean hasComponents(JsonObject itemJson) {
@@ -92,91 +104,6 @@ public final class ItemHoverUtil {
         root.addProperty("id", stack.getType().getKey().toString());
         root.addProperty("count", stack.getAmount());
         return root;
-    }
-
-    private static JsonObject mergeComponentsFromMeta(JsonObject base, ItemStack stack) {
-        JsonObject root = base != null ? base.deepCopy() : minimalItemJson(stack);
-        JsonObject components = buildComponentsFromMeta(stack);
-        if (components.isEmpty()) {
-            return hasComponents(root) ? root : null;
-        }
-        JsonObject existing = root.has("components") && root.get("components").isJsonObject()
-                ? root.getAsJsonObject("components")
-                : new JsonObject();
-        for (String key : components.keySet()) {
-            existing.add(key, components.get(key));
-        }
-        root.add("components", existing);
-        return root;
-    }
-
-    private static JsonObject buildComponentsFromMeta(ItemStack stack) {
-        JsonObject components = new JsonObject();
-        if (!stack.hasItemMeta()) {
-            return components;
-        }
-        ItemMeta meta = stack.getItemMeta();
-        if (meta == null) {
-            return components;
-        }
-        if (meta.hasDisplayName()) {
-            String name = meta.getDisplayName();
-            if (name != null && !name.isEmpty()) {
-                components.add("minecraft:custom_name", textComponent(name));
-            }
-        }
-        if (meta.hasLore()) {
-            java.util.List<String> lore = meta.getLore();
-            if (lore != null && !lore.isEmpty()) {
-                JsonArray loreArray = new JsonArray();
-                for (String line : lore) {
-                    if (line != null) {
-                        loreArray.add(textComponent(line));
-                    }
-                }
-                if (!loreArray.isEmpty()) {
-                    components.add("minecraft:lore", loreArray);
-                }
-            }
-        }
-        if (meta instanceof PotionMeta potionMeta) {
-            addPotionContentsComponent(components, potionMeta);
-        }
-        return components;
-    }
-
-    private static JsonObject textComponent(String legacyText) {
-        JsonObject comp = new JsonObject();
-        comp.addProperty("text", legacyText);
-        return comp;
-    }
-
-    private static void addPotionContentsComponent(JsonObject components, PotionMeta meta) {
-        if (meta.getBasePotionType() != null) {
-            String key = meta.getBasePotionType().getKey().getKey();
-            if (!"uncraftable".equals(key)) {
-                JsonObject potionContents = new JsonObject();
-                potionContents.addProperty("potion", "minecraft:" + key);
-                components.add("minecraft:potion_contents", potionContents);
-                return;
-            }
-        }
-        if (meta.hasCustomEffects() && !meta.getCustomEffects().isEmpty()) {
-            JsonObject potionContents = new JsonObject();
-            JsonArray customEffects = new JsonArray();
-            for (org.bukkit.potion.PotionEffect effect : meta.getCustomEffects()) {
-                JsonObject entry = new JsonObject();
-                entry.addProperty("id", effect.getType().getKey().toString());
-                entry.addProperty("amplifier", effect.getAmplifier());
-                entry.addProperty("duration", effect.getDuration());
-                entry.addProperty("ambient", effect.isAmbient());
-                entry.addProperty("show_particles", effect.hasParticles());
-                entry.addProperty("show_icon", effect.hasIcon());
-                customEffects.add(entry);
-            }
-            potionContents.add("custom_effects", customEffects);
-            components.add("minecraft:potion_contents", potionContents);
-        }
     }
 
     private static JsonObject tryPaperSerializeItemAsJson(ItemStack stack) {
@@ -218,7 +145,6 @@ public final class ItemHoverUtil {
     private static JsonObject tryNmsEncodeItemJson(ItemStack stack) {
         NmsItemJsonEncoder encoder = resolveNmsEncoder();
         if (encoder == null) {
-            LOGGER.warning("[XLRLightweightChat] NMS 编码器不可用，将尝试从 ItemMeta 合成 components");
             return null;
         }
         try {
@@ -260,27 +186,6 @@ public final class ItemHoverUtil {
         return new HoverEvent(HoverEvent.Action.SHOW_ITEM, new Item(id, count, tag));
     }
 
-    /**
-     * 1.21 客户端识别的 SHOW_ITEM 载荷；字段必须为 public，供 Gson 序列化。
-     */
-    public static final class ComponentsShowItem extends Content {
-
-        public String id;
-        public int count;
-        public JsonElement components;
-
-        public ComponentsShowItem(String id, int count, JsonElement components) {
-            this.id = id;
-            this.count = count;
-            this.components = components;
-        }
-
-        @Override
-        public HoverEvent.Action requiredAction() {
-            return HoverEvent.Action.SHOW_ITEM;
-        }
-    }
-
     private static final class NmsItemJsonEncoder {
 
         static final NmsItemJsonEncoder UNAVAILABLE = new NmsItemJsonEncoder();
@@ -313,19 +218,19 @@ public final class ItemHoverUtil {
 
         static NmsItemJsonEncoder tryCreate() {
             try {
-                Class<?> craftItemStack = Class.forName("org.bukkit.craftbukkit.inventory.CraftItemStack");
-                Method asNmsCopy = craftItemStack.getMethod("asNMSCopy", ItemStack.class);
+                Class<?> craftItemStack = SpigotReflection.craftClass("inventory.CraftItemStack");
+                Method asNmsCopy = SpigotReflection.resolveMethod(craftItemStack, "asNMSCopy", ItemStack.class);
 
                 Object registryAccess = resolveRegistryAccess();
                 if (registryAccess == null) {
                     return UNAVAILABLE;
                 }
 
-                Class<?> jsonOpsClass = Class.forName("com.mojang.serialization.JsonOps");
+                Class<?> jsonOpsClass = SpigotReflection.serverClass("com.mojang.serialization.JsonOps");
                 Object jsonOpsInstance = jsonOpsClass.getField("INSTANCE").get(null);
-                Class<?> dynamicOpsClass = Class.forName("com.mojang.serialization.DynamicOps");
+                Class<?> dynamicOpsClass = SpigotReflection.serverClass("com.mojang.serialization.DynamicOps");
 
-                Class<?> nmsItemStackClass = Class.forName("net.minecraft.world.item.ItemStack");
+                Class<?> nmsItemStackClass = SpigotReflection.serverClass("net.minecraft.world.item.ItemStack");
                 Object codec = resolveItemStackCodec(nmsItemStackClass);
                 if (codec == null) {
                     return UNAVAILABLE;
@@ -369,16 +274,16 @@ public final class ItemHoverUtil {
                 // try static getServer
             }
             try {
-                Class<?> serverClass = Class.forName("net.minecraft.server.MinecraftServer");
-                Object server = serverClass.getMethod("getServer").invoke(null);
-                if (server != null) {
-                    return serverClass.getMethod("registryAccess").invoke(server);
+                Object craftServer = Bukkit.getServer();
+                Object minecraftServer = craftServer.getClass().getMethod("getServer").invoke(craftServer);
+                if (minecraftServer != null) {
+                    return minecraftServer.getClass().getMethod("registryAccess").invoke(minecraftServer);
                 }
             } catch (Throwable ignored) {
                 // try CraftRegistry
             }
             try {
-                Class<?> craftRegistry = Class.forName("org.bukkit.craftbukkit.CraftRegistry");
+                Class<?> craftRegistry = SpigotReflection.craftClass("CraftRegistry");
                 return craftRegistry.getMethod("getMinecraftRegistry").invoke(null);
             } catch (Throwable ignored) {
                 return null;

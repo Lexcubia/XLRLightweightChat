@@ -440,24 +440,6 @@ public class Shan extends JavaPlugin implements Listener {
         if (!displayItemEnabled || !displayItemHover || !message.contains("[item]")) {
             return false;
         }
-        boolean needPlayerHover = format.contains("%player%")
-                && playerHoverLore != null && !playerHoverLore.isEmpty();
-        boolean needTitleHover = false;
-        String title = getPlayerCurrentTitle(player);
-        if (title != null) {
-            for (Map.Entry<Integer, List<String>> entry : playerTitleLore.entrySet()) {
-                String processedPrefix = processTitleColors(playerTitles.get(entry.getKey()));
-                if (processedPrefix.equals(processTitleColors(title))) {
-                    List<String> lore = entry.getValue();
-                    needTitleHover = lore != null && !lore.isEmpty();
-                    break;
-                }
-            }
-        }
-        if (needPlayerHover || needTitleHover) {
-            getLogger().info("[XLRLightweightChat] 格式含玩家/称号悬浮时暂用 Bungee 发送，[item] 物品悬浮可能不完整");
-            return false;
-        }
         JsonArray extra = buildFullChatJsonExtra(format, player, message);
         if (extra == null || extra.isEmpty()) {
             return false;
