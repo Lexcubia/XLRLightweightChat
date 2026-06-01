@@ -430,8 +430,8 @@ public class GuiManager implements Listener {
             return name;
         }
         
-        // 中文模式：将物品材质名称转换为中文
-        return plugin.getItemChineseName(material);
+        // 中文模式：将物品材质名称转换为中文（en-us 见 config DiaplayLanguage）
+        return plugin.getItemDisplayName(material);
     }
 
     /**
