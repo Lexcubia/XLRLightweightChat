@@ -159,6 +159,7 @@ final class CraftChatBridge {
             return false;
         }
         resolve();
+        resolveSendSystemMessageIfNeeded(nmsComponent);
         if (sendSystemMessageMethod == null) {
             return false;
         }
@@ -184,6 +185,29 @@ final class CraftChatBridge {
         }
     }
 
+    /**
+     * 首次发送时按实际 Component 类型再匹配一次（应对 resolve 时类尚未对齐的情况）。
+     */
+    private static void resolveSendSystemMessageIfNeeded(Object nmsComponent) {
+        if (sendSystemMessageMethod != null || nmsComponent == null) {
+            return;
+        }
+        synchronized (CraftChatBridge.class) {
+            if (sendSystemMessageMethod != null) {
+                return;
+            }
+            Class<?> serverPlayerClass = SpigotReflection.resolveServerPlayerClass();
+            if (serverPlayerClass == null) {
+                LOGGER.warning("[XLRLightweightChat] 无法推断 ServerPlayer 类型（无在线玩家且 CraftPlayer 不可用）");
+                return;
+            }
+            sendSystemMessageMethod = SpigotReflection.findSendSystemMessageForInstance(serverPlayerClass, nmsComponent);
+            if (sendSystemMessageMethod == null) {
+                LOGGER.warning("[XLRLightweightChat] 未找到匹配的 sendSystemMessage 方法");
+            }
+        }
+    }
+
     private static void resolve() {
         if (resolved) {
             return;
@@ -200,25 +224,16 @@ final class CraftChatBridge {
             } catch (Throwable t) {
                 LOGGER.log(Level.WARNING, "[XLRLightweightChat] 无法解析 CraftChatMessage: " + t.getMessage());
             }
-            if (componentClass == null) {
-                try {
-                    componentClass = SpigotReflection.serverClass("net.minecraft.network.chat.Component");
-                } catch (Throwable ignored) {
-                    // try below
-                }
-            }
             if (componentClass != null) {
-                try {
-                    Class<?> serverPlayerClass = SpigotReflection.serverClass("net.minecraft.server.level.ServerPlayer");
+                Class<?> serverPlayerClass = SpigotReflection.resolveServerPlayerClass();
+                if (serverPlayerClass != null) {
                     sendSystemMessageMethod = SpigotReflection.findSendSystemMessage(serverPlayerClass, componentClass);
                     if (sendSystemMessageMethod == null) {
-                        LOGGER.warning("[XLRLightweightChat] 未找到匹配的 sendSystemMessage 方法");
+                        LOGGER.log(Level.FINE, "[XLRLightweightChat] 启动时未匹配 sendSystemMessage，将在首次发送时重试");
                     }
-                } catch (Throwable t) {
-                    LOGGER.log(Level.WARNING, "[XLRLightweightChat] 无法解析 sendSystemMessage: " + t.getMessage());
                 }
             } else {
-                LOGGER.warning("[XLRLightweightChat] 无法加载 NMS Component 类型");
+                LOGGER.warning("[XLRLightweightChat] 无法解析 CraftChatMessage.fromJSON，NMS 聊天不可用");
             }
             resolved = true;
         }
