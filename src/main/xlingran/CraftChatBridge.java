@@ -33,7 +33,7 @@ final class CraftChatBridge {
     }
 
     static JsonObject itemTextNode(String legacyText, ItemStack stack) {
-        JsonObject itemJson = ItemHoverUtil.resolveItemJsonForHover(stack);
+        JsonObject itemJson = Item.resolveItemJsonForHover(stack);
         if (itemJson == null || !itemJson.has("components")) {
             LOGGER.warning("[XLRLightweightChat] 无法生成物品 components");
             return textNode(legacyText);
