@@ -47,10 +47,14 @@ public class GuiManager implements Listener {
      * 创建 GUI 界面
      */
     private Inventory createGUI(Player player, int page) {
-        // 从 Gui.yml 读取标题
+        // 从 Gui.yml 读取标题（任意语言均可，识别界面靠 TitleGuiHolder）
         String pageConfigPath = page == 0 ? "Page1.name" : "Page2.name";
         String guiTitle = plugin.getGuiConfig().getString(pageConfigPath, "&6称号仓库");
-        Inventory gui = Bukkit.createInventory(null, INVENTORY_SIZE, ChatColor.translateAlternateColorCodes('&', guiTitle));
+        TitleGuiHolder holder = new TitleGuiHolder(page);
+        Inventory gui = Bukkit.createInventory(holder, INVENTORY_SIZE,
+                ChatColor.translateAlternateColorCodes('&', guiTitle));
+        holder.bind(gui);
+        playerCurrentPage.put(player.getUniqueId(), page);
 
         // 1. 填充黑色玻璃板边框
         fillBorder(gui);
@@ -304,16 +308,14 @@ public class GuiManager implements Listener {
             return;
         }
         
-        // 通过标题判断是否是称号仓库 GUI
-        String title = event.getView().getTitle();
-        if (!title.contains("称号仓库")) {
+        Inventory topInventory = event.getView().getTopInventory();
+        if (!TitleGuiHolder.isTitleGui(topInventory)) {
             return;
         }
 
         event.setCancelled(true); // 禁止拿取物品
 
         int slot = event.getSlot();
-        Inventory topInventory = event.getView().getTopInventory();
 
         // 1. 点击分页按钮（第6行第5格，索引49）
         if (slot == 49) {
@@ -336,8 +338,7 @@ public class GuiManager implements Listener {
             return;
         }
         
-        String title = event.getView().getTitle();
-        if (title.contains("称号仓库")) {
+        if (TitleGuiHolder.isTitleGui(event.getView().getTopInventory())) {
             event.setCancelled(true);
         }
     }
@@ -347,6 +348,9 @@ public class GuiManager implements Listener {
      */
     private void handlePageButton(Player player, Inventory gui) {
         int currentPage = playerCurrentPage.getOrDefault(player.getUniqueId(), 0);
+        if (gui.getHolder() instanceof TitleGuiHolder titleHolder) {
+            currentPage = titleHolder.getPage();
+        }
 
         if (currentPage == 0) {
             // 第1页点击下一页按钮 → 打开第2页
@@ -375,6 +379,9 @@ public class GuiManager implements Listener {
         int titleIndex = row * 7 + col;
 
         int currentPage = playerCurrentPage.getOrDefault(player.getUniqueId(), 0);
+        if (gui.getHolder() instanceof TitleGuiHolder titleHolder) {
+            currentPage = titleHolder.getPage();
+        }
         List<TitleInfo> availableTitles = getAvailableTitles(player);
         int globalIndex = currentPage * TITLES_PER_PAGE + titleIndex;
 
@@ -417,21 +424,24 @@ public class GuiManager implements Listener {
      * @return 处理后的名称
      */
     private String processItemName(String name, Material material) {
-        // 如果名称包含颜色代码或不是默认的物品名称格式，直接返回
-        if (name == null || name.contains("&") || name.contains("§")) {
+        if (name == null || name.isEmpty()) {
             return name;
         }
-        
-        // 获取语言配置
+        // 配置里写了 & / § 或任意自定义文案时，一律使用配置原文（不受 DiaplayLanguage 影响）
+        if (name.contains("&") || name.contains("§")) {
+            return name;
+        }
+
         String language = plugin.getConfig().getString("DiaplayLanguage", "zh-cn").toLowerCase();
-        
-        // 如果是英文模式，直接返回英文名称
         if (language.equals("en-us")) {
             return name;
         }
-        
-        // 中文模式：将物品材质名称转换为中文（en-us 见 config DiaplayLanguage）
-        return plugin.getItemDisplayName(material);
+
+        // 仅当配置名为空或等于材质枚举英文名时，才替换为中文材质名
+        if (name.equalsIgnoreCase(material.name())) {
+            return plugin.getItemDisplayName(material);
+        }
+        return name;
     }
 
     /**

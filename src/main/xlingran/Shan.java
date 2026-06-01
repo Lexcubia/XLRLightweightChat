@@ -46,6 +46,8 @@ public class Shan extends JavaPlugin implements Listener {
 
     /** 聊天组件插入点（不参与 & 色码转换） */
     private static final String CHAT_PART_MARKER = "\uE000XLRCHAT\uE001";
+    /** 称号段插入点（用于悬浮 Lore，避免渐变后 indexOf 失败） */
+    private static final String TITLE_PART_MARKER = "\uE000XLRTITLE\uE001";
 
     @Override
     public void onEnable() {
@@ -110,6 +112,13 @@ public class Shan extends JavaPlugin implements Listener {
             try {
                 UUID uuid = UUID.fromString(entry.getKey());
                 String title = entry.getValue().toString();
+                int matchedId = resolveTitleId(title);
+                if (matchedId > 0) {
+                    String canonical = playerTitles.get(matchedId);
+                    if (canonical != null) {
+                        title = canonical;
+                    }
+                }
                 playerCurrentTitles.put(uuid, title);
             } catch (IllegalArgumentException e) {
                 String uuidErrMsg = config.getString("Cmd.playerUUIDNo", "无效的玩家UUID: %uuid%");
@@ -556,7 +565,11 @@ public class Shan extends JavaPlugin implements Listener {
                 List<String> lore = playerTitleLore.get(titleId);
                 needTitleHover = lore != null && !lore.isEmpty();
             }
-            result = result.replace("%title%", title);
+            if (needTitleHover) {
+                result = result.replace("%title%", TITLE_PART_MARKER);
+            } else {
+                result = result.replace("%title%", title);
+            }
         } else {
             // 玩家没有穿戴称号，不显示称号
             result = result.replace("%title%", "");
@@ -661,40 +674,31 @@ public class Shan extends JavaPlugin implements Listener {
         
         ComponentBuilder builder = new ComponentBuilder();
         
-        // 处理称号悬浮提示（在 %player% 之前）
+        // 处理称号悬浮提示（在 %player% 之前，通过 TITLE_PART_MARKER 定位）
         if (needTitleHover && titleId > 0 && title != null) {
-            // 在 beforePlayer 中查找称号的位置
-            int titleIndex = beforePlayer.indexOf(title);
-            if (titleIndex != -1) {
-                // 添加称号前面的文本
-                String beforeTitle = beforePlayer.substring(0, titleIndex);
+            int titleMarkerIndex = beforePlayer.indexOf(TITLE_PART_MARKER);
+            if (titleMarkerIndex != -1) {
+                String beforeTitle = beforePlayer.substring(0, titleMarkerIndex);
                 if (!beforeTitle.isEmpty()) {
                     BaseComponent[] beforeComponents = ChatComponents.parseLegacyTextWithHexColors(beforeTitle);
                     for (BaseComponent component : beforeComponents) {
                         builder.append(component);
                     }
                 }
-                
-                // 创建称号组件（带悬浮提示）
-                // 称号文本已包含渐变颜色代码，需要正确解析
+
                 BaseComponent[] titleComponents = ChatComponents.parseLegacyTextWithHexColors(title);
-                
-                // 获取第一个组件作为主组件
                 TextComponent titleComponent;
                 if (titleComponents.length > 0 && titleComponents[0] instanceof TextComponent) {
                     titleComponent = (TextComponent) titleComponents[0];
                 } else {
                     titleComponent = new TextComponent(title);
                 }
-                
-                // 如果有多个组件，将剩余的附加到第一个组件的 extra 中
                 if (titleComponents.length > 1) {
                     for (int i = 1; i < titleComponents.length; i++) {
                         titleComponent.addExtra(titleComponents[i]);
                     }
                 }
-                
-                // 获取称号 Lore 并设置为悬浮提示
+
                 List<String> titleLore = playerTitleLore.get(titleId);
                 if (titleLore != null && !titleLore.isEmpty()) {
                     BaseComponent[] titleHoverComponents = buildHoverComponents(titleLore);
@@ -702,12 +706,8 @@ public class Shan extends JavaPlugin implements Listener {
                         titleComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, titleHoverComponents));
                     }
                 }
-                
-                // 添加称号组件
                 builder.append(titleComponent);
-                
-                // 更新 beforePlayer，移除已处理的部分（称号 + 称号前的文本）
-                beforePlayer = beforePlayer.substring(titleIndex + title.length());
+                beforePlayer = beforePlayer.substring(titleMarkerIndex + TITLE_PART_MARKER.length());
             }
         }
         
