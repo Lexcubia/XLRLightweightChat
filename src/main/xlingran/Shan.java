@@ -8,6 +8,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
@@ -531,10 +532,18 @@ public class Shan extends JavaPlugin implements Listener {
                     content = applyGradient(gradientConfig, content);
                 }
                 content = ChatColor.translateAlternateColorCodes('&', content);
+                ItemStack snapshot = itemPart.segment().snapshot();
+                if (displayItemHover) {
+                    BaseComponent craftItem = CraftChatBridge.textWithItemHover(content, snapshot);
+                    if (craftItem != null) {
+                        builder.append(craftItem);
+                        continue;
+                    }
+                }
                 HoverEvent itemHover = null;
                 if (displayItemHover) {
                     try {
-                        itemHover = itemService.createItemHoverEvent(itemPart.segment().snapshot());
+                        itemHover = itemService.createItemHoverEvent(snapshot);
                     } catch (Throwable t) {
                         getLogger().log(java.util.logging.Level.WARNING,
                                 "[XLRLightweightChat] 物品悬浮构建失败", t);
@@ -1197,9 +1206,7 @@ public class Shan extends JavaPlugin implements Listener {
      * 广播处理后的消息（支持 BaseComponent）
      */
     private void broadcastProcessedMessage(BaseComponent[] components) {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            player.spigot().sendMessage(components);
-        }
+        CraftChatBridge.broadcast(components);
     }
 
     /**

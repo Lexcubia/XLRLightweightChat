@@ -1,25 +1,45 @@
 package xlingran;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.ItemTag;
+import net.md_5.bungee.api.chat.hover.content.Content;
 import net.md_5.bungee.api.chat.hover.content.Item;
 import org.bukkit.Bukkit;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.PotionMeta;
 
-import java.util.List;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * 聊天 SHOW_ITEM 悬浮。兼容 Spigot 1.21.1 内置 bungeecord-chat 1.20-R0.2（标准 Item + ItemTag）。
+ * 1.21+ SHOW_ITEM：通过 NMS/Paper 序列化 components，避免客户端显示原版/不可合成药水。
  */
 public final class ItemHoverUtil {
 
     private static final Logger LOGGER = Bukkit.getLogger();
+    private static volatile Method serializeItemAsJsonMethod;
+    private static volatile boolean serializeMethodResolved;
+    private static volatile NmsItemJsonEncoder nmsEncoder;
 
     private ItemHoverUtil() {
+    }
+
+    public static JsonObject resolveItemJsonForHover(ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) {
+            return null;
+        }
+        try {
+            return resolveItemJson(stack.clone());
+        } catch (Throwable t) {
+            LOGGER.log(Level.FINE, "[XLRLightweightChat] 解析物品 JSON 失败", t);
+            return null;
+        }
     }
 
     public static HoverEvent createShowItemHover(ItemStack stack) {
@@ -35,165 +55,266 @@ public final class ItemHoverUtil {
     }
 
     private static HoverEvent createShowItemHoverInternal(ItemStack stack) {
-        String id = stack.getType().getKey().toString();
-        int count = stack.getAmount();
-        ItemTag tag = resolveItemTag(stack);
-        Item item = tag != null ? new Item(id, count, tag) : new Item(id, count, null);
-        return new HoverEvent(HoverEvent.Action.SHOW_ITEM, item);
+        JsonObject itemJson = resolveItemJson(stack);
+        if (itemJson != null && itemJson.has("components")) {
+            String id = itemJson.get("id").getAsString();
+            int count = itemJson.has("count") ? itemJson.get("count").getAsInt() : stack.getAmount();
+            JsonElement components = itemJson.get("components");
+            return new HoverEvent(HoverEvent.Action.SHOW_ITEM,
+                    new ComponentsShowItem(id, count, components));
+        }
+        return createLegacyHover(stack);
     }
 
-    /**
-     * 优先 legacy NBT（Bungee ItemTag），否则用 ItemMeta 合成 SNBT 风格展示数据。
-     */
-    private static ItemTag resolveItemTag(ItemStack stack) {
-        ItemTag fromMeta = tryItemTagFromMeta(stack);
-        if (fromMeta != null) {
-            return fromMeta;
+    private static JsonObject resolveItemJson(ItemStack stack) {
+        JsonObject fromPaper = tryPaperSerializeItemAsJson(stack);
+        if (fromPaper != null) {
+            return fromPaper;
         }
-        return tryItemTagFromRebuiltStack(stack);
+        return tryNmsEncodeItemJson(stack);
     }
 
-    private static ItemTag tryItemTagFromMeta(ItemStack stack) {
-        if (!stack.hasItemMeta()) {
-            return null;
-        }
-        ItemMeta meta = stack.getItemMeta();
-        if (meta == null) {
+    private static JsonObject tryPaperSerializeItemAsJson(ItemStack stack) {
+        Method method = resolveSerializeItemAsJson();
+        if (method == null) {
             return null;
         }
         try {
-            String nbt = meta.getAsString();
-            if (nbt != null && !nbt.isBlank()) {
-                return ItemTag.ofNbt(nbt);
+            Object result = method.invoke(Bukkit.getUnsafe(), stack);
+            if (result instanceof JsonObject jsonObject) {
+                return jsonObject;
+            }
+            if (result instanceof String json && !json.isBlank()) {
+                return JsonParser.parseString(json).getAsJsonObject();
             }
         } catch (Throwable t) {
-            LOGGER.log(Level.FINE, "[XLRLightweightChat] getAsString 失败", t);
+            LOGGER.log(Level.FINE, "[XLRLightweightChat] serializeItemAsJson 不可用", t);
         }
         return null;
     }
 
-    private static ItemTag tryItemTagFromRebuiltStack(ItemStack stack) {
-        try {
-            String spec = stack.getType().getKey().toString();
-            ItemMeta meta = stack.getItemMeta();
-            if (meta != null) {
-                String componentSpec = meta.getAsComponentString();
-                if (componentSpec != null && !componentSpec.isEmpty() && !"[]".equals(componentSpec)) {
-                    spec = spec + componentSpec;
+    private static Method resolveSerializeItemAsJson() {
+        if (!serializeMethodResolved) {
+            synchronized (ItemHoverUtil.class) {
+                if (!serializeMethodResolved) {
+                    try {
+                        serializeItemAsJsonMethod = Bukkit.getUnsafe().getClass()
+                                .getMethod("serializeItemAsJson", ItemStack.class);
+                    } catch (NoSuchMethodException ignored) {
+                        serializeItemAsJsonMethod = null;
+                    }
+                    serializeMethodResolved = true;
                 }
             }
-            ItemStack rebuilt = Bukkit.getItemFactory().createItemStack(spec);
-            rebuilt.setAmount(stack.getAmount());
-            ItemTag tag = tryItemTagFromMeta(rebuilt);
-            if (tag != null) {
-                return tag;
-            }
-        } catch (Throwable t) {
-            LOGGER.log(Level.FINE, "[XLRLightweightChat] createItemStack 重建失败", t);
         }
-        return buildLegacyDisplayTag(stack);
+        return serializeItemAsJsonMethod;
+    }
+
+    private static JsonObject tryNmsEncodeItemJson(ItemStack stack) {
+        NmsItemJsonEncoder encoder = resolveNmsEncoder();
+        if (encoder == null) {
+            return null;
+        }
+        try {
+            return encoder.encode(stack);
+        } catch (Throwable t) {
+            LOGGER.log(Level.FINE, "[XLRLightweightChat] NMS 物品 JSON 编码失败", t);
+            return null;
+        }
+    }
+
+    private static NmsItemJsonEncoder resolveNmsEncoder() {
+        if (nmsEncoder == null) {
+            synchronized (ItemHoverUtil.class) {
+                if (nmsEncoder == null) {
+                    nmsEncoder = NmsItemJsonEncoder.tryCreate();
+                }
+            }
+        }
+        return nmsEncoder == NmsItemJsonEncoder.UNAVAILABLE ? null : nmsEncoder;
+    }
+
+    private static HoverEvent createLegacyHover(ItemStack stack) {
+        String id = stack.getType().getKey().toString();
+        int count = stack.getAmount();
+        ItemTag tag = null;
+        if (stack.hasItemMeta()) {
+            ItemMeta meta = stack.getItemMeta();
+            if (meta != null) {
+                try {
+                    String nbt = meta.getAsString();
+                    if (nbt != null && !nbt.isBlank()) {
+                        tag = ItemTag.ofNbt(nbt);
+                    }
+                } catch (Throwable ignored) {
+                    // ignore
+                }
+            }
+        }
+        return new HoverEvent(HoverEvent.Action.SHOW_ITEM, new Item(id, count, tag));
     }
 
     /**
-     * 将 displayName / lore / 药水信息写成 Bungee ItemTag 可识别的 legacy display 结构。
+     * 1.21 客户端识别的 SHOW_ITEM 载荷；字段必须为 public，供 Gson 序列化。
      */
-    private static ItemTag buildLegacyDisplayTag(ItemStack stack) {
-        if (!stack.hasItemMeta()) {
-            return null;
+    public static final class ComponentsShowItem extends Content {
+
+        public String id;
+        public int count;
+        public JsonElement components;
+
+        public ComponentsShowItem(String id, int count, JsonElement components) {
+            this.id = id;
+            this.count = count;
+            this.components = components;
         }
-        ItemMeta meta = stack.getItemMeta();
-        if (meta == null) {
-            return null;
+
+        @Override
+        public HoverEvent.Action requiredAction() {
+            return HoverEvent.Action.SHOW_ITEM;
         }
-        boolean hasDisplay = meta.hasDisplayName();
-        boolean hasLore = meta.hasLore();
-        boolean hasPotion = meta instanceof PotionMeta potionMeta && hasPotionData(potionMeta);
-        if (!hasDisplay && !hasLore && !hasPotion) {
-            return null;
+    }
+
+    private static final class NmsItemJsonEncoder {
+
+        static final NmsItemJsonEncoder UNAVAILABLE = new NmsItemJsonEncoder();
+
+        private final Method asNmsCopy;
+        private final Method createSerializationContext;
+        private final Object registryAccess;
+        private final Object jsonOpsInstance;
+        private final Method encodeStart;
+        private final Object codec;
+
+        private NmsItemJsonEncoder() {
+            this.asNmsCopy = null;
+            this.createSerializationContext = null;
+            this.registryAccess = null;
+            this.jsonOpsInstance = null;
+            this.encodeStart = null;
+            this.codec = null;
         }
-        StringBuilder nbt = new StringBuilder("{");
-        boolean needComma = false;
-        if (hasDisplay || hasLore) {
-            nbt.append("display:{");
-            if (hasDisplay) {
-                nbt.append("Name:").append(jsonQuoted(meta.getDisplayName()));
-            }
-            if (hasLore) {
-                if (hasDisplay) {
-                    nbt.append(',');
+
+        private NmsItemJsonEncoder(Method asNmsCopy, Method createSerializationContext, Object registryAccess,
+                                   Object jsonOpsInstance, Method encodeStart, Object codec) {
+            this.asNmsCopy = asNmsCopy;
+            this.createSerializationContext = createSerializationContext;
+            this.registryAccess = registryAccess;
+            this.jsonOpsInstance = jsonOpsInstance;
+            this.encodeStart = encodeStart;
+            this.codec = codec;
+        }
+
+        static NmsItemJsonEncoder tryCreate() {
+            try {
+                Class<?> craftItemStack = Class.forName("org.bukkit.craftbukkit.inventory.CraftItemStack");
+                Method asNmsCopy = craftItemStack.getMethod("asNMSCopy", ItemStack.class);
+
+                Object registryAccess = resolveRegistryAccess();
+                if (registryAccess == null) {
+                    return UNAVAILABLE;
                 }
-                nbt.append("Lore:[");
-                List<String> lore = meta.getLore();
-                if (lore != null) {
-                    for (int i = 0; i < lore.size(); i++) {
-                        if (i > 0) {
-                            nbt.append(',');
-                        }
-                        nbt.append(jsonQuoted(lore.get(i)));
+
+                Class<?> jsonOpsClass = Class.forName("com.mojang.serialization.JsonOps");
+                Object jsonOpsInstance = jsonOpsClass.getField("INSTANCE").get(null);
+                Class<?> dynamicOpsClass = Class.forName("com.mojang.serialization.DynamicOps");
+
+                Class<?> nmsItemStackClass = Class.forName("net.minecraft.world.item.ItemStack");
+                Object codec = resolveItemStackCodec(nmsItemStackClass);
+                if (codec == null) {
+                    return UNAVAILABLE;
+                }
+
+                Method createSerializationContext = registryAccess.getClass()
+                        .getMethod("createSerializationContext", dynamicOpsClass);
+                Method encodeStart = codec.getClass().getMethod("encodeStart", dynamicOpsClass, Object.class);
+
+                return new NmsItemJsonEncoder(asNmsCopy, createSerializationContext, registryAccess,
+                        jsonOpsInstance, encodeStart, codec);
+            } catch (Throwable t) {
+                LOGGER.log(Level.FINE, "[XLRLightweightChat] 初始化 NMS 编码器失败: " + t.getMessage());
+                return UNAVAILABLE;
+            }
+        }
+
+        JsonObject encode(ItemStack stack) throws ReflectiveOperationException {
+            Object nmsStack = asNmsCopy.invoke(null, stack);
+            Object ops = createSerializationContext.invoke(registryAccess, jsonOpsInstance);
+            Object dataResult = encodeStart.invoke(codec, ops, nmsStack);
+            JsonElement element = unwrapDataResult(dataResult);
+            if (element == null || !element.isJsonObject()) {
+                return null;
+            }
+            return element.getAsJsonObject();
+        }
+
+        private static Object resolveRegistryAccess() {
+            try {
+                Class<?> serverClass = Class.forName("net.minecraft.server.MinecraftServer");
+                Object server = serverClass.getMethod("getServer").invoke(null);
+                if (server != null) {
+                    return serverClass.getMethod("registryAccess").invoke(server);
+                }
+            } catch (Throwable ignored) {
+                // try CraftRegistry
+            }
+            try {
+                Class<?> craftRegistry = Class.forName("org.bukkit.craftbukkit.CraftRegistry");
+                return craftRegistry.getMethod("getMinecraftRegistry").invoke(null);
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+
+        private static Object resolveItemStackCodec(Class<?> nmsItemStackClass) throws ReflectiveOperationException {
+            for (String fieldName : new String[]{"CODEC", "MAP_CODEC"}) {
+                try {
+                    Field field = nmsItemStackClass.getField(fieldName);
+                    Object codec = field.get(null);
+                    if (codec != null) {
+                        return codec;
                     }
+                } catch (NoSuchFieldException ignored) {
+                    // next
                 }
-                nbt.append(']');
             }
-            nbt.append('}');
-            needComma = true;
-        }
-        if (hasPotion && meta instanceof PotionMeta potionMeta) {
-            if (needComma) {
-                nbt.append(',');
-            }
-            appendPotionNbt(nbt, potionMeta);
-        }
-        nbt.append('}');
-        try {
-            return ItemTag.ofNbt(nbt.toString());
-        } catch (Throwable t) {
-            LOGGER.log(Level.FINE, "[XLRLightweightChat] ItemTag.ofNbt 失败", t);
             return null;
         }
-    }
 
-    private static boolean hasPotionData(PotionMeta meta) {
-        if (meta.getBasePotionType() != null
-                && !"uncraftable".equals(meta.getBasePotionType().getKey().getKey())) {
-            return true;
-        }
-        return meta.hasCustomEffects() && !meta.getCustomEffects().isEmpty();
-    }
-
-    private static void appendPotionNbt(StringBuilder nbt, PotionMeta meta) {
-        if (meta.getBasePotionType() != null) {
-            String key = meta.getBasePotionType().getKey().getKey();
-            if (!"uncraftable".equals(key)) {
-                nbt.append("Potion:\"minecraft:").append(key).append('"');
-                return;
+        private static JsonElement unwrapDataResult(Object dataResult) throws ReflectiveOperationException {
+            if (dataResult == null) {
+                return null;
             }
-        }
-        if (meta.hasCustomEffects() && !meta.getCustomEffects().isEmpty()) {
-            nbt.append("CustomPotionEffects:[");
-            List<org.bukkit.potion.PotionEffect> effects = meta.getCustomEffects();
-            for (int i = 0; i < effects.size(); i++) {
-                if (i > 0) {
-                    nbt.append(',');
+            try {
+                Method resultMethod = dataResult.getClass().getMethod("result");
+                Object optional = resultMethod.invoke(dataResult);
+                if (optional instanceof Optional<?> opt && opt.isPresent()) {
+                    Object value = opt.get();
+                    if (value instanceof JsonElement jsonElement) {
+                        return jsonElement;
+                    }
+                    return JsonParser.parseString(value.toString());
                 }
-                org.bukkit.potion.PotionEffect effect = effects.get(i);
-                nbt.append('{');
-                nbt.append("Id:").append(effect.getType().getId());
-                nbt.append(",Amplifier:").append(effect.getAmplifier());
-                nbt.append(",Duration:").append(effect.getDuration());
-                nbt.append(",Ambient:").append(effect.isAmbient() ? 1 : 0);
-                nbt.append(",ShowParticles:").append(effect.hasParticles() ? 1 : 0);
-                nbt.append(",ShowIcon:").append(effect.hasIcon() ? 1 : 0);
-                nbt.append('}');
+            } catch (NoSuchMethodException ignored) {
+                // try getOrThrow
             }
-            nbt.append(']');
+            try {
+                Method getOrThrow = dataResult.getClass().getMethod("getOrThrow");
+                Object value = getOrThrow.invoke(dataResult);
+                if (value instanceof JsonElement jsonElement) {
+                    return jsonElement;
+                }
+                return JsonParser.parseString(value.toString());
+            } catch (NoSuchMethodException e) {
+                Method getOrThrow = dataResult.getClass().getMethod("getOrThrow", java.util.function.Function.class);
+                Object value = getOrThrow.invoke(dataResult, (java.util.function.Function<Object, ?>) err -> {
+                    throw new IllegalStateException(String.valueOf(err));
+                });
+                if (value instanceof JsonElement jsonElement) {
+                    return jsonElement;
+                }
+                return JsonParser.parseString(value.toString());
+            }
         }
-    }
-
-    private static String jsonQuoted(String value) {
-        if (value == null) {
-            return "\"\"";
-        }
-        String escaped = value.replace("\\", "\\\\").replace("\"", "\\\"");
-        return '"' + escaped + '"';
     }
 }
