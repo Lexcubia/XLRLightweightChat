@@ -67,7 +67,7 @@ Command:
     - "&7已加载 &6%chat_format% &7个聊天格式"
     - "&7已加载 &6%color_config% &7个变量颜色配置"
   help:
-    - "&6===== [XLRightweightChat] ====="
+    - "&6===== [XLRLightweightChat] ====="
     - "&7- /xlrchat cp &6打开称号仓库"
     - "&7- /xlrchat reload &6重载该插件"
 
