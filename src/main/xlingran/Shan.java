@@ -531,9 +531,15 @@ public class Shan extends JavaPlugin implements Listener {
                     content = applyGradient(gradientConfig, content);
                 }
                 content = ChatColor.translateAlternateColorCodes('&', content);
-                HoverEvent itemHover = displayItemHover
-                        ? itemService.createItemHoverEvent(itemPart.segment().snapshot())
-                        : null;
+                HoverEvent itemHover = null;
+                if (displayItemHover) {
+                    try {
+                        itemHover = itemService.createItemHoverEvent(itemPart.segment().snapshot());
+                    } catch (Throwable t) {
+                        getLogger().log(java.util.logging.Level.WARNING,
+                                "[XLRLightweightChat] 物品悬浮构建失败", t);
+                    }
+                }
                 for (BaseComponent component : parseLegacyTextWithHexColors(content)) {
                     if (component instanceof TextComponent textComp && itemHover != null) {
                         textComp.setHoverEvent(itemHover);
