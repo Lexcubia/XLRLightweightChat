@@ -115,8 +115,10 @@ public class Shan extends JavaPlugin implements Listener {
         } else {
             playerData = YamlConfiguration.loadConfiguration(playerDataFile);
         }
-        
-        // 加载所有在线玩家的称号数据
+
+        playerCurrentTitles.clear();
+
+        // 从文件加载玩家称号数据
         for (Map.Entry<String, Object> entry : playerData.getValues(false).entrySet()) {
             try {
                 UUID uuid = UUID.fromString(entry.getKey());
@@ -186,8 +188,18 @@ public class Shan extends JavaPlugin implements Listener {
         loadPlayerTitles();
         loadPlayerHoverConfig();
         loadDisplayItemConfig();
-        // 重新加载玩家数据
         loadPlayerData();
+    }
+
+    /**
+     * 获取配置中的聊天格式数量
+     */
+    private int getChatFormatCount() {
+        if (!config.contains("Chat")) {
+            return 0;
+        }
+        ConfigurationSection section = config.getConfigurationSection("Chat");
+        return section != null ? section.getKeys(false).size() : 0;
     }
 
     /**
@@ -2023,8 +2035,9 @@ public class Shan extends JavaPlugin implements Listener {
                     return true;
                 }
                 
+                savePlayerData();
                 reloadConfig();
-                
+
                 // 发送重载消息（支持多行）
                 List<String> reloadMessages = config.getStringList("Command.reload");
                 if (reloadMessages.isEmpty()) {
@@ -2032,9 +2045,8 @@ public class Shan extends JavaPlugin implements Listener {
                     player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7配置已重新加载"));
                 } else {
                     for (String msg : reloadMessages) {
-                        // 替换占位符
-                        msg = msg.replace("%chat_format%", String.valueOf(colorVariables.size()));
-                        msg = msg.replace("%color_config%", String.valueOf(playerTitles.size()));
+                        msg = msg.replace("%chat_format%", String.valueOf(getChatFormatCount()));
+                        msg = msg.replace("%color_config%", String.valueOf(colorVariables.size()));
                         player.sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
                     }
                 }
