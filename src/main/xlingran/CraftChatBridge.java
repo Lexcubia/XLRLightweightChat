@@ -20,7 +20,6 @@ final class CraftChatBridge {
 
     private static final Logger LOGGER = Bukkit.getLogger();
     private static volatile Method fromJsonMethod;
-    private static volatile Method sendSystemMessageMethod;
     private static volatile boolean resolved;
 
     private CraftChatBridge() {
@@ -159,53 +158,7 @@ final class CraftChatBridge {
             return false;
         }
         resolve();
-        resolveSendSystemMessageIfNeeded(nmsComponent);
-        if (sendSystemMessageMethod == null) {
-            return false;
-        }
-        boolean any = false;
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            try {
-                Object handle = player.getClass().getMethod("getHandle").invoke(player);
-                invokeSendSystemMessage(handle, nmsComponent);
-                any = true;
-            } catch (Throwable t) {
-                LOGGER.log(Level.WARNING, "[XLRLightweightChat] NMS 发送失败: " + player.getName(), t);
-            }
-        }
-        return any;
-    }
-
-    private static void invokeSendSystemMessage(Object handle, Object nmsComponent) throws ReflectiveOperationException {
-        Class<?>[] params = sendSystemMessageMethod.getParameterTypes();
-        if (params.length == 1) {
-            sendSystemMessageMethod.invoke(handle, nmsComponent);
-        } else {
-            sendSystemMessageMethod.invoke(handle, nmsComponent, false);
-        }
-    }
-
-    /**
-     * 首次发送时按实际 Component 类型再匹配一次（应对 resolve 时类尚未对齐的情况）。
-     */
-    private static void resolveSendSystemMessageIfNeeded(Object nmsComponent) {
-        if (sendSystemMessageMethod != null || nmsComponent == null) {
-            return;
-        }
-        synchronized (CraftChatBridge.class) {
-            if (sendSystemMessageMethod != null) {
-                return;
-            }
-            Class<?> serverPlayerClass = SpigotReflection.resolveServerPlayerClass();
-            if (serverPlayerClass == null) {
-                LOGGER.warning("[XLRLightweightChat] 无法推断 ServerPlayer 类型（无在线玩家且 CraftPlayer 不可用）");
-                return;
-            }
-            sendSystemMessageMethod = SpigotReflection.findSendSystemMessageForInstance(serverPlayerClass, nmsComponent);
-            if (sendSystemMessageMethod == null) {
-                LOGGER.warning("[XLRLightweightChat] 未找到匹配的 sendSystemMessage 方法");
-            }
-        }
+        return NmsSystemChat.broadcast(nmsComponent);
     }
 
     private static void resolve() {
@@ -216,23 +169,13 @@ final class CraftChatBridge {
             if (resolved) {
                 return;
             }
-            Class<?> componentClass = null;
             try {
                 Class<?> craftChatMessage = SpigotReflection.craftClass("util.CraftChatMessage");
                 fromJsonMethod = SpigotReflection.resolveMethod(craftChatMessage, "fromJSON", String.class);
-                componentClass = fromJsonMethod.getReturnType();
             } catch (Throwable t) {
                 LOGGER.log(Level.WARNING, "[XLRLightweightChat] 无法解析 CraftChatMessage: " + t.getMessage());
             }
-            if (componentClass != null) {
-                Class<?> serverPlayerClass = SpigotReflection.resolveServerPlayerClass();
-                if (serverPlayerClass != null) {
-                    sendSystemMessageMethod = SpigotReflection.findSendSystemMessage(serverPlayerClass, componentClass);
-                    if (sendSystemMessageMethod == null) {
-                        LOGGER.log(Level.FINE, "[XLRLightweightChat] 启动时未匹配 sendSystemMessage，将在首次发送时重试");
-                    }
-                }
-            } else {
+            if (fromJsonMethod == null) {
                 LOGGER.warning("[XLRLightweightChat] 无法解析 CraftChatMessage.fromJSON，NMS 聊天不可用");
             }
             resolved = true;
