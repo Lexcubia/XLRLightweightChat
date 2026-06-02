@@ -43,7 +43,9 @@ public class Shan extends JavaPlugin {
 
         PluginCommand cmd = getCommand("xlrhopper");
         if (cmd != null) {
-            cmd.setExecutor(new HopperCommand(gui));
+            HopperCommand hopperCommand = new HopperCommand(gui);
+            cmd.setExecutor(hopperCommand);
+            cmd.setTabCompleter(hopperCommand);
         }
 
         getServer().getPluginManager().registerEvents(gui, this);

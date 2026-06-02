@@ -9,8 +9,7 @@ commands:
   xlrhopper:
     description: XLRHopper 漏斗模板
     usage: /xlrhopper <mode|create mode <名称>|edit mode <名称>>
-    permission: xlrhopper.mode
-    permission-message: "&c你没有权限执行此命令"
+    # 子命令权限在 HopperCommand 内分别校验，勿在此绑定单一 permission
 
 permissions:
   xlrhopper.create.mode:
