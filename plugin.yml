@@ -1,0 +1,6 @@
+name: XLRHopper
+version: 1.0.0
+main: xlingran.Shan
+api-version: 1.21.1
+author: Shan
+description: 高级漏斗传输插件

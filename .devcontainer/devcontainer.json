@@ -1,0 +1,15 @@
+{
+  "name": "XLRHopper",
+  "image": "mcr.microsoft.com/devcontainers/java:21",
+  "features": {
+    "ghcr.io/devcontainers/features/maven:1": {}
+  },
+  "postCreateCommand": "mvn -q -DskipTests package",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-java-pack"
+      ]
+    }
+  }
+}
