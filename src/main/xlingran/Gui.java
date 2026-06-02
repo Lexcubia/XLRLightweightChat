@@ -347,6 +347,12 @@ public class Gui implements Listener {
         if (click == ClickType.LEFT || click == ClickType.SHIFT_LEFT) {
             templateManager.toggleTemplateEnabled(player, templateName);
             saveData();
+            if (templateManager.isTemplateEnabled(player.getUniqueId(), templateName)) {
+                player.sendMessage(color("&a已启用模板: &b" + templateName));
+                player.sendMessage(color("&7仅影响此后新放置的漏斗；已套用其它模板的漏斗不会改变"));
+            } else {
+                player.sendMessage(color("&7已关闭模板: &b" + templateName));
+            }
             openTemplateList(player);
         } else if (click == ClickType.RIGHT) {
             openTemplateSettings(player, templateName);
