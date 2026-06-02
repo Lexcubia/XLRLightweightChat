@@ -1,9 +1,12 @@
 package xlingran;
 
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.enchantments.Enchantment;
 
 import java.io.File;
 import java.io.IOException;
@@ -57,6 +60,10 @@ final class DataStore {
                         }
                         template.getTitleRules().addAll(tSec.getStringList("title-rules"));
                         template.getLoreRules().addAll(tSec.getStringList("lore-rules"));
+                        if (tSec.contains("durability-threshold")) {
+                            template.setDurabilityThreshold(tSec.getInt("durability-threshold"));
+                        }
+                        loadEnchantFilters(tSec, template);
                         manager.putTemplate(uuid, templateName, template);
                     }
                 }
@@ -68,6 +75,32 @@ final class DataStore {
                 logger.warning("[XLRHopper] 无效 UUID: " + uuidStr);
             }
         }
+    }
+
+    private void loadEnchantFilters(ConfigurationSection tSec, HopperTemplate template) {
+        ConfigurationSection enchants = tSec.getConfigurationSection("enchant-filters");
+        if (enchants == null) {
+            return;
+        }
+        for (String key : enchants.getKeys(false)) {
+            Enchantment enchant = resolveEnchantment(key);
+            if (enchant == null) {
+                logger.warning("[XLRHopper] 未知附魔: " + key);
+                continue;
+            }
+            int level = enchants.getInt(key);
+            if (level > 0) {
+                template.setEnchantMinLevel(enchant, level);
+            }
+        }
+    }
+
+    private static Enchantment resolveEnchantment(String key) {
+        if (key == null || key.isEmpty()) {
+            return null;
+        }
+        NamespacedKey namespacedKey = NamespacedKey.minecraft(key.toLowerCase());
+        return Registry.ENCHANTMENT.get(namespacedKey);
     }
 
     void save(HopperTemplateManager manager) {
@@ -88,6 +121,16 @@ final class DataStore {
                 config.set(base + ".materials", mats);
                 config.set(base + ".title-rules", t.getTitleRules());
                 config.set(base + ".lore-rules", t.getLoreRules());
+                if (t.getDurabilityThreshold() != null) {
+                    config.set(base + ".durability-threshold", t.getDurabilityThreshold());
+                }
+                Map<String, Integer> enchantMap = new HashMap<>();
+                for (Map.Entry<Enchantment, Integer> enchEntry : t.getEnchantMinLevels().entrySet()) {
+                    enchantMap.put(enchEntry.getKey().getKey().getKey(), enchEntry.getValue());
+                }
+                if (!enchantMap.isEmpty()) {
+                    config.set(base + ".enchant-filters", enchantMap);
+                }
             }
         }
         try {

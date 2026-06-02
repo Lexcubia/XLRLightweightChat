@@ -3,6 +3,7 @@ package xlingran;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.Registry;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -16,6 +17,7 @@ import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import xlingran.gui.GuiType;
@@ -30,10 +32,15 @@ import java.util.UUID;
 public class Gui implements Listener {
 
     private static final int TEMPLATE_LIST_SIZE = 27;
+    private static final int TEMPLATE_SETTINGS_SIZE = 45;
     private static final int SETTINGS_SLOT_NAME = 10;
     private static final int SETTINGS_SLOT_LORE = 12;
     private static final int SETTINGS_SLOT_ITEMS = 14;
     private static final int SETTINGS_SLOT_MODE = 16;
+    private static final int SETTINGS_SLOT_ENCHANT = 28;
+    private static final int SETTINGS_SLOT_DURABILITY = 30;
+    private static final int SETTINGS_SLOT_REMOTE = 32;
+    private static final int SETTINGS_SLOT_BATCH = 34;
 
     private final Shan plugin;
     private final HopperTemplateManager templateManager;
@@ -65,12 +72,12 @@ public class Gui implements Listener {
 
     public void openTemplateSettings(Player player, String templateName) {
         sessions.setEditingTemplate(player.getUniqueId(), templateName);
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.TEMPLATE_SETTINGS), 27,
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.TEMPLATE_SETTINGS), TEMPLATE_SETTINGS_SIZE,
                 color("&e模板设置: &b" + templateName));
         bindHolder(inv, GuiType.TEMPLATE_SETTINGS);
 
         ItemStack glass = blackGlass();
-        for (int i = 0; i < 27; i++) {
+        for (int i = 0; i < TEMPLATE_SETTINGS_SIZE; i++) {
             inv.setItem(i, glass);
         }
 
@@ -87,7 +94,30 @@ public class Gui implements Listener {
         inv.setItem(SETTINGS_SLOT_ITEMS, button(Material.CHEST, "&e过滤物品",
                 List.of("&a将过滤你添加的物品")));
         inv.setItem(SETTINGS_SLOT_MODE, modeButton(template));
+        inv.setItem(SETTINGS_SLOT_ENCHANT, button(Material.ENCHANTED_BOOK, "&e附魔过滤",
+                List.of("&7点击进入附魔属性过滤")));
+        inv.setItem(SETTINGS_SLOT_DURABILITY, durabilityButton(template));
+        inv.setItem(SETTINGS_SLOT_REMOTE, button(Material.STRING, "&e远程传输",
+                List.of("&7暂未开放")));
+        inv.setItem(SETTINGS_SLOT_BATCH, button(Material.ENDER_EYE, "&e批量设置",
+                List.of("&7点击后为漏斗批量套用本模板")));
 
+        player.openInventory(inv);
+    }
+
+    public void openFilterEnchants(Player player, String templateName) {
+        sessions.setEditingTemplate(player.getUniqueId(), templateName);
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.FILTER_ENCHANTS), 54,
+                color("&6过滤附魔属性"));
+        bindHolder(inv, GuiType.FILTER_ENCHANTS);
+
+        HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
+        List<Enchantment> enchants = listRegistryEnchantments();
+        for (int i = 0; i < enchants.size() && i < 54; i++) {
+            Enchantment enchant = enchants.get(i);
+            Integer minLevel = template != null ? template.getEnchantMinLevels().get(enchant) : null;
+            inv.setItem(i, createEnchantFilterBook(enchant, minLevel));
+        }
         player.openInventory(inv);
     }
 
@@ -166,6 +196,7 @@ public class Gui implements Listener {
             case TEMPLATE_SETTINGS -> handleSettingsClick(player, slot, event.getClick());
             case FILTER_TITLES -> handleRuleListClick(player, slot, event.getClick(), true);
             case FILTER_LORES -> handleRuleListClick(player, slot, event.getClick(), false);
+            case FILTER_ENCHANTS -> handleFilterEnchantsClick(player, slot);
             default -> {
             }
         }
@@ -221,28 +252,87 @@ public class Gui implements Listener {
             sessions.clearInput(player.getUniqueId());
             return;
         }
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            if (message.equalsIgnoreCase("xlrquit")) {
+        Bukkit.getScheduler().runTask(plugin, () -> handleChatInput(player, message, templateName, mode));
+    }
+
+    private void handleChatInput(Player player, String message, String templateName, PlayerGuiSession.InputMode mode) {
+        if (message.equalsIgnoreCase("xlrquit")) {
+            if (mode == PlayerGuiSession.InputMode.BATCH_APPLY) {
                 sessions.clearInput(player.getUniqueId());
-                player.sendMessage(color("&7已取消输入，返回模板设置"));
+                player.sendMessage(color("&7已退出批量设置模式"));
                 openTemplateSettings(player, templateName);
                 return;
             }
-            HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
-            if (template == null) {
+            if (mode == PlayerGuiSession.InputMode.ENCHANT_LEVEL) {
                 sessions.clearInput(player.getUniqueId());
+                player.sendMessage(color("&7已取消输入，返回过滤附魔属性"));
+                openFilterEnchants(player, templateName);
                 return;
             }
-            if (mode == PlayerGuiSession.InputMode.TITLE) {
-                template.addTitleRule(message);
-            } else if (mode == PlayerGuiSession.InputMode.LORE) {
-                template.addLoreRule(message);
-            }
+            sessions.clearInput(player.getUniqueId());
+            player.sendMessage(color("&7已取消输入，返回模板设置"));
+            openTemplateSettings(player, templateName);
+            return;
+        }
+
+        if (mode == PlayerGuiSession.InputMode.BATCH_APPLY) {
+            player.sendMessage(color("&7批量设置模式中，输入 xlrquit 退出"));
+            return;
+        }
+
+        HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
+        if (template == null) {
+            sessions.clearInput(player.getUniqueId());
+            return;
+        }
+
+        if (mode == PlayerGuiSession.InputMode.TITLE) {
+            template.addTitleRule(message);
             sessions.clearInput(player.getUniqueId());
             saveData();
             player.sendMessage(color("&a已添加过滤规则"));
             openTemplateSettings(player, templateName);
-        });
+            return;
+        }
+        if (mode == PlayerGuiSession.InputMode.LORE) {
+            template.addLoreRule(message);
+            sessions.clearInput(player.getUniqueId());
+            saveData();
+            player.sendMessage(color("&a已添加过滤规则"));
+            openTemplateSettings(player, templateName);
+            return;
+        }
+        if (mode == PlayerGuiSession.InputMode.DURABILITY) {
+            Integer value = parsePositiveInt(message);
+            if (value == null) {
+                player.sendMessage(color("&c输入错误，请输入纯数字耐久度，或输入 xlrquit 退出设置"));
+                return;
+            }
+            template.setDurabilityThreshold(value);
+            sessions.clearInput(player.getUniqueId());
+            saveData();
+            player.sendMessage(color("&a已设置过滤耐久度: &b" + value));
+            openTemplateSettings(player, templateName);
+            return;
+        }
+        if (mode == PlayerGuiSession.InputMode.ENCHANT_LEVEL) {
+            Enchantment pending = sessions.getPendingEnchant(player.getUniqueId());
+            if (pending == null) {
+                sessions.clearInput(player.getUniqueId());
+                openFilterEnchants(player, templateName);
+                return;
+            }
+            Integer level = parsePositiveInt(message);
+            if (level == null) {
+                player.sendMessage(color("&c输入错误，请重新输入附魔等级，或输入 xlrquit 退出设置"));
+                return;
+            }
+            template.setEnchantMinLevel(pending, level);
+            sessions.clearInput(player.getUniqueId());
+            saveData();
+            player.sendMessage(color("&a已设置附魔过滤: &e" + formatEnchantName(pending) + " &a" + level));
+            openFilterEnchants(player, templateName);
+        }
     }
 
     private void handleTemplateListClick(Player player, int slot, ClickType click) {
@@ -299,9 +389,47 @@ public class Gui implements Listener {
                     openTemplateSettings(player, templateName);
                 }
             }
+            case SETTINGS_SLOT_ENCHANT -> openFilterEnchants(player, templateName);
+            case SETTINGS_SLOT_DURABILITY -> {
+                player.closeInventory();
+                sessions.clearInput(player.getUniqueId());
+                sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.DURABILITY);
+                player.sendMessage(color("&a请在聊天栏输入数字耐久度 &7(低于该剩余耐久的物品将被过滤，输入 xlrquit 退出设置)"));
+            }
+            case SETTINGS_SLOT_REMOTE -> player.sendMessage(color("&7暂未开放"));
+            case SETTINGS_SLOT_BATCH -> {
+                player.closeInventory();
+                sessions.clearInput(player.getUniqueId());
+                sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.BATCH_APPLY);
+                player.sendMessage(color("&a已进入批量设置模式，左键或右键点击漏斗套用模板"));
+                player.sendMessage(color("&7输入 xlrquit 退出批量设置模式"));
+            }
             default -> {
             }
         }
+    }
+
+    private void handleFilterEnchantsClick(Player player, int slot) {
+        if (slot < 0 || slot >= 54) {
+            return;
+        }
+        String templateName = sessions.getEditingTemplate(player.getUniqueId());
+        if (templateName == null) {
+            return;
+        }
+        HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
+        if (template == null) {
+            return;
+        }
+        List<Enchantment> enchants = listRegistryEnchantments();
+        if (slot >= enchants.size()) {
+            return;
+        }
+        Enchantment selected = enchants.get(slot);
+        player.closeInventory();
+        sessions.setPendingEnchant(player.getUniqueId(), selected);
+        sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.ENCHANT_LEVEL);
+        player.sendMessage(color("&a请输入附魔等级 &7(低于该等级的附魔将被过滤，输入 xlrquit 退出设置)"));
     }
 
     private void handleRuleListClick(Player player, int slot, ClickType click, boolean titleRules) {
@@ -382,6 +510,73 @@ public class Gui implements Listener {
         meta.setLore(lore);
         item.setItemMeta(meta);
         return item;
+    }
+
+    private ItemStack durabilityButton(HopperTemplate template) {
+        List<String> lore = new ArrayList<>();
+        lore.add("&7点击设置最低剩余耐久");
+        if (template.getDurabilityThreshold() != null) {
+            lore.add("&a过滤耐久度: &b" + template.getDurabilityThreshold());
+        }
+        return button(Material.EMERALD, "&e耐久过滤", lore);
+    }
+
+    private ItemStack createEnchantFilterBook(Enchantment enchant, Integer minLevel) {
+        ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
+        ItemMeta meta = book.getItemMeta();
+        if (!(meta instanceof EnchantmentStorageMeta storageMeta)) {
+            return book;
+        }
+        storageMeta.addStoredEnchant(enchant, 1, true);
+        storageMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        storageMeta.setDisplayName(color("&e" + formatEnchantName(enchant)));
+        List<String> lore = new ArrayList<>();
+        if (minLevel != null) {
+            lore.add(color("&a当前过滤: &e" + formatEnchantName(enchant) + " " + minLevel));
+        }
+        lore.add(color("&7点击设置最低等级"));
+        storageMeta.setLore(lore);
+        book.setItemMeta(storageMeta);
+        return book;
+    }
+
+    private static String formatEnchantName(Enchantment enchant) {
+        String key = enchant.getKey().getKey();
+        StringBuilder sb = new StringBuilder();
+        for (String part : key.split("_")) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            sb.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) {
+                sb.append(part.substring(1));
+            }
+            sb.append(' ');
+        }
+        return sb.toString().trim();
+    }
+
+    private List<Enchantment> listRegistryEnchantments() {
+        List<Enchantment> enchants = new ArrayList<>();
+        for (Enchantment enchant : Registry.ENCHANTMENT) {
+            enchants.add(enchant);
+            if (enchants.size() >= 54) {
+                plugin.getLogger().warning("[XLRHopper] 附魔数量超过 54，部分附魔未显示");
+                break;
+            }
+        }
+        return enchants;
+    }
+
+    private static Integer parsePositiveInt(String text) {
+        if (text == null || !text.matches("[0-9]+")) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(text);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private ItemStack modeButton(HopperTemplate template) {

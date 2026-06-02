@@ -5,5 +5,6 @@ public enum GuiType {
     TEMPLATE_SETTINGS,
     FILTER_ITEMS,
     FILTER_TITLES,
-    FILTER_LORES
+    FILTER_LORES,
+    FILTER_ENCHANTS
 }

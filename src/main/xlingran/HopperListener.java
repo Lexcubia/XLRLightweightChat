@@ -69,18 +69,9 @@ public class HopperListener implements Listener {
 
     private boolean applyHopperTemplate(Location location, Player player, String enabledName) {
         Block block = location.getBlock();
-        if (block.getType() != Material.HOPPER) {
+        if (!HopperPdc.applyTemplate(block, keys, player.getUniqueId(), enabledName)) {
             return false;
         }
-        BlockState state = block.getState();
-        if (!(state instanceof TileState tileState)) {
-            return false;
-        }
-        PersistentDataContainer pdc = tileState.getPersistentDataContainer();
-        pdc.set(keys.template, PersistentDataType.STRING, enabledName);
-        pdc.set(keys.owner, PersistentDataType.STRING, player.getUniqueId().toString());
-        tileState.update(true);
-
         player.sendMessage(PLACE_MESSAGE_PREFIX + ChatColor.AQUA + enabledName);
         return true;
     }

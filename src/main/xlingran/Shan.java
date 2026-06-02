@@ -50,6 +50,7 @@ public class Shan extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(gui, this);
         getServer().getPluginManager().registerEvents(new HopperListener(this, templateManager, hopperKeys), this);
+        getServer().getPluginManager().registerEvents(new BatchModeListener(hopperKeys, playerGuiSession), this);
 
         Bukkit.getConsoleSender().sendMessage(
                 ChatColor.GREEN + "欢迎使用寄寄の家 "
