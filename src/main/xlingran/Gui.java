@@ -29,7 +29,7 @@ import java.util.UUID;
 
 public class Gui implements Listener {
 
-    private static final int[] LIST_SLOTS = {10, 11, 12, 13, 14, 15, 16};
+    private static final int TEMPLATE_LIST_SIZE = 27;
     private static final int SETTINGS_SLOT_NAME = 10;
     private static final int SETTINGS_SLOT_LORE = 12;
     private static final int SETTINGS_SLOT_ITEMS = 14;
@@ -57,9 +57,8 @@ public class Gui implements Listener {
         bindHolder(inv, GuiType.TEMPLATE_LIST);
 
         List<String> names = new ArrayList<>(templateManager.getTemplates(player.getUniqueId()).keySet());
-        for (int i = 0; i < LIST_SLOTS.length && i < names.size(); i++) {
-            String name = names.get(i);
-            inv.setItem(LIST_SLOTS[i], createTemplateListItem(player, name));
+        for (int i = 0; i < names.size() && i < TEMPLATE_LIST_SIZE; i++) {
+            inv.setItem(i, createTemplateListItem(player, names.get(i)));
         }
         player.openInventory(inv);
     }
@@ -241,15 +240,14 @@ public class Gui implements Listener {
     }
 
     private void handleTemplateListClick(Player player, int slot, ClickType click) {
-        int index = listSlotIndex(slot);
-        if (index < 0) {
+        if (slot < 0 || slot >= TEMPLATE_LIST_SIZE) {
             return;
         }
         List<String> names = new ArrayList<>(templateManager.getTemplates(player.getUniqueId()).keySet());
-        if (index >= names.size()) {
+        if (slot >= names.size()) {
             return;
         }
-        String templateName = names.get(index);
+        String templateName = names.get(slot);
         if (click == ClickType.LEFT || click == ClickType.SHIFT_LEFT) {
             templateManager.toggleTemplateEnabled(player, templateName);
             saveData();
@@ -425,15 +423,6 @@ public class Gui implements Listener {
             item.setItemMeta(meta);
         }
         return item;
-    }
-
-    private static int listSlotIndex(int slot) {
-        for (int i = 0; i < LIST_SLOTS.length; i++) {
-            if (LIST_SLOTS[i] == slot) {
-                return i;
-            }
-        }
-        return -1;
     }
 
     private static void bindHolder(Inventory inv, GuiType type) {

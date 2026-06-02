@@ -23,6 +23,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | 指令 | 权限节点 | 说明 |
 |------|----------|------|
 | `/xlrhopper create mode <名称>` | `xlrhopper.create.mode` | 创建名为 `<名称>` 的模板（默认未启用、白名单），并打开「模板设置」 |
+| `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode` | 编辑已有模板，打开「模板设置」 |
 | `/xlrhopper mode` | `xlrhopper.mode` | 打开「漏斗模板」列表 GUI |
 
 - 根命令 `xlrhopper` 在 `plugin.yml` 绑定 `xlrhopper.mode`。
@@ -92,7 +93,7 @@ players:
 | 条件 | 显示 |
 |------|------|
 | 无任何模板 | 27 格**全部为空**，不填充玻璃或任何物品 |
-| 有模板 | 第 2 行中间 7 格（slot 10–16）放命名牌；其余格**保持空** |
+| 有模板 | 从 **第 1 行第 1 格（slot 0）** 起顺序放置命名牌，最多 27 个；未使用格**保持空** |
 
 **命名牌**
 
