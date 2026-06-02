@@ -26,8 +26,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode` | 编辑已有模板，打开「模板设置」 |
 | `/xlrhopper mode` | `xlrhopper.mode` | 打开「漏斗模板」列表 GUI |
 
-- 根命令 `xlrhopper` 在 `plugin.yml` 绑定 `xlrhopper.mode`。
-- `create mode` 在代码内额外校验 `xlrhopper.create.mode`。
+- 根命令不在 `plugin.yml` 绑定单一 permission；各子命令在代码内分别校验。
 - 无权限时发送对应拒绝提示（硬编码）。
 
 ---
@@ -180,7 +179,19 @@ players:
 允许进入漏斗 = passItem(材质, 可切换白/黑名单) ∧ passTitle(名称黑名单) ∧ passLore(描述黑名单)
 ```
 
-任一维度不通过 → `InventoryMoveItemEvent` 取消（目标为漏斗时）。
+任一维度不通过 → 取消对应进入路径的事件。
+
+**进入路径（事件不同，逻辑相同）**
+
+| 方式 | 主要事件 |
+|------|----------|
+| 容器 → 漏斗 | `InventoryMoveItemEvent` |
+| 地上物品实体 → 漏斗吸入 | `InventoryPickupItemEvent`（含死亡掉落、Q/背包丢弃后落地） |
+| 按 Q 丢弃（未开背包） | `PlayerDropItemEvent` |
+| 开背包后 Q 丢槽位 / 拖到界面外 / 点界面外丢光标 | `InventoryClickEvent` |
+| 打开漏斗 GUI 放入 | `InventoryClickEvent` / `InventoryDragEvent` |
+
+- 按 Q 与背包内丢弃**不是**同一 Bukkit 事件；死亡掉落**不**走 `PlayerDropItemEvent`，但最终都会变成地上 `Item`，由漏斗的 `InventoryPickupItemEvent` 统一拦截。
 
 ### 6.2 材质（FilterItem）— 受白/黑名单影响
 

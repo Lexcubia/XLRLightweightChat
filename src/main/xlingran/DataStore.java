@@ -39,31 +39,30 @@ final class DataStore {
                 if (playerSec == null) {
                     continue;
                 }
+                ConfigurationSection templates = playerSec.getConfigurationSection("templates");
+                if (templates != null) {
+                    for (String templateName : templates.getKeys(false)) {
+                        ConfigurationSection tSec = templates.getConfigurationSection(templateName);
+                        if (tSec == null) {
+                            continue;
+                        }
+                        HopperTemplate template = new HopperTemplate();
+                        template.setWhitelist(tSec.getBoolean("whitelist", true));
+                        List<String> matNames = tSec.getStringList("materials");
+                        for (String matName : matNames) {
+                            Material mat = Material.matchMaterial(matName);
+                            if (mat != null) {
+                                template.getMaterials().add(mat);
+                            }
+                        }
+                        template.getTitleRules().addAll(tSec.getStringList("title-rules"));
+                        template.getLoreRules().addAll(tSec.getStringList("lore-rules"));
+                        manager.putTemplate(uuid, templateName, template);
+                    }
+                }
                 String enabled = playerSec.getString("enabled-template");
                 if (enabled != null && !enabled.isEmpty()) {
                     manager.setEnabledTemplate(uuid, enabled);
-                }
-                ConfigurationSection templates = playerSec.getConfigurationSection("templates");
-                if (templates == null) {
-                    continue;
-                }
-                for (String templateName : templates.getKeys(false)) {
-                    ConfigurationSection tSec = templates.getConfigurationSection(templateName);
-                    if (tSec == null) {
-                        continue;
-                    }
-                    HopperTemplate template = new HopperTemplate();
-                    template.setWhitelist(tSec.getBoolean("whitelist", true));
-                    List<String> matNames = tSec.getStringList("materials");
-                    for (String matName : matNames) {
-                        Material mat = Material.matchMaterial(matName);
-                        if (mat != null) {
-                            template.getMaterials().add(mat);
-                        }
-                    }
-                    template.getTitleRules().addAll(tSec.getStringList("title-rules"));
-                    template.getLoreRules().addAll(tSec.getStringList("lore-rules"));
-                    manager.putTemplate(uuid, templateName, template);
                 }
             } catch (IllegalArgumentException ex) {
                 logger.warning("[XLRHopper] 无效 UUID: " + uuidStr);
