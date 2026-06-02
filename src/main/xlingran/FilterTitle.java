@@ -15,14 +15,13 @@ public final class FilterTitle {
         if (rules == null || rules.isEmpty()) {
             return true;
         }
-        if (stack == null || !stack.hasItemMeta()) {
+        if (stack == null || stack.getType().isAir()) {
             return true;
         }
-        ItemMeta meta = stack.getItemMeta();
-        if (meta == null || !meta.hasDisplayName()) {
+        String display = resolveMatchText(stack);
+        if (display.isEmpty()) {
             return true;
         }
-        String display = TextUtil.stripForMatch(meta.getDisplayName());
         for (String rule : rules) {
             if (rule == null || rule.isEmpty()) {
                 continue;
@@ -32,5 +31,13 @@ public final class FilterTitle {
             }
         }
         return true;
+    }
+
+    private static String resolveMatchText(ItemStack stack) {
+        ItemMeta meta = stack.getItemMeta();
+        if (meta != null && meta.hasDisplayName()) {
+            return TextUtil.stripForMatch(meta.getDisplayName());
+        }
+        return TextUtil.stripForMatch(stack.getType().name().replace('_', ' '));
     }
 }

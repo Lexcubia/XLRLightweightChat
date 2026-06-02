@@ -15,7 +15,7 @@ public final class FilterLore {
         if (rules == null || rules.isEmpty()) {
             return true;
         }
-        if (stack == null || !stack.hasItemMeta()) {
+        if (stack == null || stack.getType().isAir()) {
             return true;
         }
         ItemMeta meta = stack.getItemMeta();
@@ -23,16 +23,20 @@ public final class FilterLore {
             return true;
         }
         List<String> lore = meta.getLore();
-        if (lore == null) {
+        if (lore == null || lore.isEmpty()) {
             return true;
         }
         for (String line : lore) {
             String strippedLine = TextUtil.stripForMatch(line);
+            if (strippedLine.isEmpty()) {
+                continue;
+            }
             for (String rule : rules) {
                 if (rule == null || rule.isEmpty()) {
                     continue;
                 }
-                if (strippedLine.contains(TextUtil.stripForMatch(rule))) {
+                String strippedRule = TextUtil.stripForMatch(rule);
+                if (strippedLine.contains(strippedRule)) {
                     return false;
                 }
             }
