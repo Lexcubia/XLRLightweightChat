@@ -6,14 +6,25 @@ import org.bukkit.inventory.InventoryHolder;
 public final class XlrGuiHolder implements InventoryHolder {
 
     private final GuiType type;
+    private final String templateName;
     private Inventory inventory;
 
     public XlrGuiHolder(GuiType type) {
+        this(type, null);
+    }
+
+    public XlrGuiHolder(GuiType type, String templateName) {
         this.type = type;
+        this.templateName = templateName;
     }
 
     public GuiType getType() {
         return type;
+    }
+
+    /** 打开该界面时绑定的模板名；列表等界面为 null。 */
+    public String getTemplateName() {
+        return templateName;
     }
 
     public void bind(Inventory inventory) {

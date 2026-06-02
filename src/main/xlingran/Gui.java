@@ -72,8 +72,8 @@ public class Gui implements Listener {
 
     public void openTemplateSettings(Player player, String templateName) {
         sessions.setEditingTemplate(player.getUniqueId(), templateName);
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.TEMPLATE_SETTINGS), TEMPLATE_SETTINGS_SIZE,
-                color("&e模板设置: &b" + templateName));
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.TEMPLATE_SETTINGS, templateName),
+                TEMPLATE_SETTINGS_SIZE, color("&e模板设置: &b" + templateName));
         bindHolder(inv, GuiType.TEMPLATE_SETTINGS);
 
         ItemStack glass = blackGlass();
@@ -107,7 +107,7 @@ public class Gui implements Listener {
 
     public void openFilterEnchants(Player player, String templateName) {
         sessions.setEditingTemplate(player.getUniqueId(), templateName);
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.FILTER_ENCHANTS), 54,
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.FILTER_ENCHANTS, templateName), 54,
                 color("&6过滤附魔属性"));
         bindHolder(inv, GuiType.FILTER_ENCHANTS);
 
@@ -123,7 +123,7 @@ public class Gui implements Listener {
 
     public void openFilterItems(Player player, String templateName) {
         sessions.setEditingTemplate(player.getUniqueId(), templateName);
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.FILTER_ITEMS), 54,
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.FILTER_ITEMS, templateName), 54,
                 color("&6过滤的物品"));
         bindHolder(inv, GuiType.FILTER_ITEMS);
 
@@ -156,7 +156,7 @@ public class Gui implements Listener {
 
     private void openRuleList(Player player, String templateName, GuiType type, String title, List<String> rules) {
         sessions.setEditingTemplate(player.getUniqueId(), templateName);
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(type), 54, color(title));
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(type, templateName), 54, color(title));
         bindHolder(inv, type);
         for (int i = 0; i < rules.size() && i < 54; i++) {
             inv.setItem(i, ruleNameTag(rules.get(i)));
@@ -193,10 +193,10 @@ public class Gui implements Listener {
 
         switch (holder.getType()) {
             case TEMPLATE_LIST -> handleTemplateListClick(player, slot, event.getClick());
-            case TEMPLATE_SETTINGS -> handleSettingsClick(player, slot, event.getClick());
-            case FILTER_TITLES -> handleRuleListClick(player, slot, event.getClick(), true);
-            case FILTER_LORES -> handleRuleListClick(player, slot, event.getClick(), false);
-            case FILTER_ENCHANTS -> handleFilterEnchantsClick(player, slot);
+            case TEMPLATE_SETTINGS -> handleSettingsClick(player, slot, event.getClick(), holder);
+            case FILTER_TITLES -> handleRuleListClick(player, slot, event.getClick(), true, holder);
+            case FILTER_LORES -> handleRuleListClick(player, slot, event.getClick(), false, holder);
+            case FILTER_ENCHANTS -> handleFilterEnchantsClick(player, slot, holder);
             default -> {
             }
         }
@@ -226,7 +226,7 @@ public class Gui implements Listener {
             return;
         }
         if (holder.getType() == GuiType.FILTER_ITEMS) {
-            String templateName = sessions.getEditingTemplate(player.getUniqueId());
+            String templateName = resolveTemplateName(holder, player);
             if (templateName != null) {
                 processFilterItemsClose(player, event.getInventory(), templateName);
                 saveData();
@@ -247,7 +247,7 @@ public class Gui implements Listener {
         }
         event.setCancelled(true);
         String message = event.getMessage().trim();
-        String templateName = sessions.getEditingTemplate(player.getUniqueId());
+        String templateName = sessions.getChatTemplate(player.getUniqueId());
         if (templateName == null) {
             sessions.clearInput(player.getUniqueId());
             return;
@@ -353,8 +353,15 @@ public class Gui implements Listener {
         }
     }
 
-    private void handleSettingsClick(Player player, int slot, ClickType click) {
-        String templateName = sessions.getEditingTemplate(player.getUniqueId());
+    private String resolveTemplateName(XlrGuiHolder holder, Player player) {
+        if (holder != null && holder.getTemplateName() != null && !holder.getTemplateName().isEmpty()) {
+            return holder.getTemplateName();
+        }
+        return sessions.getEditingTemplate(player.getUniqueId());
+    }
+
+    private void handleSettingsClick(Player player, int slot, ClickType click, XlrGuiHolder holder) {
+        String templateName = resolveTemplateName(holder, player);
         if (templateName == null) {
             return;
         }
@@ -368,7 +375,7 @@ public class Gui implements Listener {
                     openFilterTitles(player, templateName);
                 } else if (click == ClickType.RIGHT) {
                     player.closeInventory();
-                    sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.TITLE);
+                    sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.TITLE, templateName);
                     player.sendMessage(color("&a请输入要过滤的物品名称 &7(输入 xlrquit 取消)"));
                 }
             }
@@ -377,7 +384,7 @@ public class Gui implements Listener {
                     openFilterLores(player, templateName);
                 } else if (click == ClickType.RIGHT) {
                     player.closeInventory();
-                    sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.LORE);
+                    sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.LORE, templateName);
                     player.sendMessage(color("&a请输入要过滤的物品描述 &7(输入 xlrquit 取消)"));
                 }
             }
@@ -393,14 +400,14 @@ public class Gui implements Listener {
             case SETTINGS_SLOT_DURABILITY -> {
                 player.closeInventory();
                 sessions.clearInput(player.getUniqueId());
-                sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.DURABILITY);
+                sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.DURABILITY, templateName);
                 player.sendMessage(color("&a请在聊天栏输入数字耐久度 &7(低于该剩余耐久的物品将被过滤，输入 xlrquit 退出设置)"));
             }
             case SETTINGS_SLOT_REMOTE -> player.sendMessage(color("&7暂未开放"));
             case SETTINGS_SLOT_BATCH -> {
                 player.closeInventory();
                 sessions.clearInput(player.getUniqueId());
-                sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.BATCH_APPLY);
+                sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.BATCH_APPLY, templateName);
                 player.sendMessage(color("&a已进入批量设置模式，左键或右键点击漏斗套用模板"));
                 player.sendMessage(color("&7输入 xlrquit 退出批量设置模式"));
             }
@@ -409,11 +416,11 @@ public class Gui implements Listener {
         }
     }
 
-    private void handleFilterEnchantsClick(Player player, int slot) {
+    private void handleFilterEnchantsClick(Player player, int slot, XlrGuiHolder holder) {
         if (slot < 0 || slot >= 54) {
             return;
         }
-        String templateName = sessions.getEditingTemplate(player.getUniqueId());
+        String templateName = resolveTemplateName(holder, player);
         if (templateName == null) {
             return;
         }
@@ -428,15 +435,15 @@ public class Gui implements Listener {
         Enchantment selected = enchants.get(slot);
         player.closeInventory();
         sessions.setPendingEnchant(player.getUniqueId(), selected);
-        sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.ENCHANT_LEVEL);
+        sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.ENCHANT_LEVEL, templateName);
         player.sendMessage(color("&a请输入附魔等级 &7(低于该等级的附魔将被过滤，输入 xlrquit 退出设置)"));
     }
 
-    private void handleRuleListClick(Player player, int slot, ClickType click, boolean titleRules) {
+    private void handleRuleListClick(Player player, int slot, ClickType click, boolean titleRules, XlrGuiHolder holder) {
         if (click != ClickType.LEFT) {
             return;
         }
-        String templateName = sessions.getEditingTemplate(player.getUniqueId());
+        String templateName = resolveTemplateName(holder, player);
         if (templateName == null) {
             return;
         }

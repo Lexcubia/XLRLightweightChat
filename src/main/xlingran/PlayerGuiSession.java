@@ -18,6 +18,8 @@ public final class PlayerGuiSession {
     }
 
     private final Map<UUID, String> editingTemplate = new java.util.HashMap<>();
+    /** 聊天输入开始时绑定的模板名，避免切换界面后写入错误模板 */
+    private final Map<UUID, String> chatTemplate = new HashMap<>();
     private final Map<UUID, InputMode> inputMode = new HashMap<>();
     private final Map<UUID, Long> lastClickMillis = new java.util.HashMap<>();
     private final Map<UUID, Enchantment> pendingEnchant = new HashMap<>();
@@ -39,12 +41,28 @@ public final class PlayerGuiSession {
     }
 
     public void setInputMode(UUID playerId, InputMode mode) {
+        setInputMode(playerId, mode, null);
+    }
+
+    public void setInputMode(UUID playerId, InputMode mode, String templateName) {
         if (mode == null || mode == InputMode.NONE) {
             inputMode.remove(playerId);
+            chatTemplate.remove(playerId);
             pendingEnchant.remove(playerId);
         } else {
             inputMode.put(playerId, mode);
+            if (templateName != null && !templateName.isEmpty()) {
+                chatTemplate.put(playerId, templateName);
+            }
         }
+    }
+
+    public String getChatTemplate(UUID playerId) {
+        String bound = chatTemplate.get(playerId);
+        if (bound != null && !bound.isEmpty()) {
+            return bound;
+        }
+        return editingTemplate.get(playerId);
     }
 
     public Enchantment getPendingEnchant(UUID playerId) {
@@ -71,6 +89,7 @@ public final class PlayerGuiSession {
 
     public void clearInput(UUID playerId) {
         inputMode.remove(playerId);
+        chatTemplate.remove(playerId);
         pendingEnchant.remove(playerId);
     }
 
