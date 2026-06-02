@@ -26,8 +26,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode` | 编辑已有模板，打开「模板设置」 |
 | `/xlrhopper mode` | `xlrhopper.mode` | 打开「漏斗模板」列表 GUI |
 
-- 根命令 `xlrhopper` 在 `plugin.yml` 绑定 `xlrhopper.mode`。
-- `create mode` 在代码内额外校验 `xlrhopper.create.mode`。
+- 根命令 **不在** `plugin.yml` 绑定单一 permission；各子命令在代码内分别校验 `xlrhopper.mode` / `xlrhopper.create.mode` / `xlrhopper.edit.mode`。
+- `/xlrhopper edit <名称>` 与 `/xlrhopper edit mode <名称>` 等价。
 - 无权限时发送对应拒绝提示（硬编码）。
 
 ---

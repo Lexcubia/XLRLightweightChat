@@ -13,12 +13,16 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.inventory.InventoryAction;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
@@ -27,6 +31,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.util.UUID;
 
 public class HopperListener implements Listener {
+
+    private static final String DENY_MESSAGE = ChatColor.RED + "该物品不符合当前漏斗模板过滤规则";
+    private static final String PLACE_MESSAGE_PREFIX = ChatColor.GREEN + "当前使用漏斗模板: ";
 
     private final JavaPlugin plugin;
     private final HopperTemplateManager templateManager;
@@ -51,25 +58,29 @@ public class HopperListener implements Listener {
         if (templateManager.getTemplate(player.getUniqueId(), enabledName) == null) {
             return;
         }
-        Location placeLoc = event.getBlockPlaced().getLocation();
+        Location placeLoc = event.getBlockPlaced().getLocation().clone();
+        if (applyHopperTemplate(placeLoc, player, enabledName)) {
+            return;
+        }
         Bukkit.getScheduler().runTask(plugin, () -> applyHopperTemplate(placeLoc, player, enabledName));
     }
 
-    private void applyHopperTemplate(Location location, Player player, String enabledName) {
+    private boolean applyHopperTemplate(Location location, Player player, String enabledName) {
         Block block = location.getBlock();
         if (block.getType() != Material.HOPPER) {
-            return;
+            return false;
         }
         BlockState state = block.getState();
         if (!(state instanceof TileState tileState)) {
-            return;
+            return false;
         }
         PersistentDataContainer pdc = tileState.getPersistentDataContainer();
         pdc.set(keys.template, PersistentDataType.STRING, enabledName);
         pdc.set(keys.owner, PersistentDataType.STRING, player.getUniqueId().toString());
         tileState.update(true);
 
-        player.sendMessage(ChatColor.GREEN + "当前使用漏斗模板: " + ChatColor.AQUA + enabledName);
+        player.sendMessage(PLACE_MESSAGE_PREFIX + ChatColor.AQUA + enabledName);
+        return true;
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
@@ -95,24 +106,86 @@ public class HopperListener implements Listener {
         }
     }
 
-  /**
-     * 玩家 Q 丢物品到漏斗附近：在拾取事件之前拦截（取消则物品不会掉落）。
+    /**
+     * 玩家 Q 丢物：优先根据视线瞄准的漏斗判断；否则在落点周围搜索漏斗。
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPlayerDrop(PlayerDropItemEvent event) {
+        Player player = event.getPlayer();
         ItemStack stack = event.getItemDrop().getItemStack();
-        Block hopper = findHopperNear(event.getItemDrop().getLocation());
+        Block hopper = findHopperFromTarget(player);
+        if (hopper == null) {
+            hopper = findHopperNear(event.getItemDrop().getLocation());
+        }
         if (hopper == null) {
             return;
         }
-        HopperTemplate template = resolveTemplate(hopper);
-        if (template == null) {
+        if (rejectIfFiltered(player, hopper, stack)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** 玩家打开漏斗界面手动放入、Shift 放入、拖拽放入 */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
             return;
         }
-        if (!template.allows(stack.clone())) {
-            event.setCancelled(true);
-            event.getPlayer().sendMessage(ChatColor.RED + "该物品不符合当前漏斗模板过滤规则");
+        InventoryView view = event.getView();
+        if (view.getTopInventory().getType() != InventoryType.HOPPER) {
+            return;
         }
+        Block hopperBlock = getHopperBlock(view.getTopInventory());
+        ItemStack incoming = extractItemEnteringHopper(event);
+        if (incoming == null || incoming.getType().isAir()) {
+            return;
+        }
+        if (rejectIfFiltered(player, hopperBlock, incoming)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+        InventoryView view = event.getView();
+        if (view.getTopInventory().getType() != InventoryType.HOPPER) {
+            return;
+        }
+        Inventory top = view.getTopInventory();
+        int topSize = top.getSize();
+        ItemStack dragged = event.getOldCursor();
+        if (dragged == null || dragged.getType().isAir()) {
+            return;
+        }
+        boolean touchesHopper = false;
+        for (int rawSlot : event.getRawSlots()) {
+            if (rawSlot >= 0 && rawSlot < topSize) {
+                touchesHopper = true;
+                break;
+            }
+        }
+        if (!touchesHopper) {
+            return;
+        }
+        Block hopperBlock = getHopperBlock(top);
+        if (rejectIfFiltered(player, hopperBlock, dragged)) {
+            event.setCancelled(true);
+        }
+    }
+
+    private boolean rejectIfFiltered(Player player, Block hopperBlock, ItemStack stack) {
+        HopperTemplate template = resolveTemplate(hopperBlock);
+        if (template == null) {
+            return false;
+        }
+        if (!template.allows(stack.clone())) {
+            player.sendMessage(DENY_MESSAGE);
+            return true;
+        }
+        return false;
     }
 
     private boolean shouldAllowTransfer(Inventory hopperInventory, ItemStack stack) {
@@ -167,27 +240,80 @@ public class HopperListener implements Listener {
         return null;
     }
 
+    private Block findHopperFromTarget(Player player) {
+        Block target = player.getTargetBlockExact(6);
+        if (target != null && target.getType() == Material.HOPPER) {
+            return target;
+        }
+        return null;
+    }
+
     private Block findHopperNear(Location location) {
         if (location == null || location.getWorld() == null) {
             return null;
         }
-        Block center = location.getBlock();
-        if (center.getType() == Material.HOPPER) {
-            return center;
+        int baseX = location.getBlockX();
+        int baseY = location.getBlockY();
+        int baseZ = location.getBlockZ();
+        var world = location.getWorld();
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    Block block = world.getBlockAt(baseX + dx, baseY + dy, baseZ + dz);
+                    if (block.getType() == Material.HOPPER) {
+                        return block;
+                    }
+                }
+            }
         }
-        Block below = center.getRelative(BlockFace.DOWN);
+        Block below = world.getBlockAt(baseX, baseY - 1, baseZ);
         if (below.getType() == Material.HOPPER) {
             return below;
         }
-        Block above = center.getRelative(BlockFace.UP);
+        Block above = world.getBlockAt(baseX, baseY + 1, baseZ);
         if (above.getType() == Material.HOPPER) {
             return above;
         }
         for (BlockFace face : new BlockFace[]{BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST}) {
-            Block relative = center.getRelative(face);
+            Block relative = world.getBlockAt(baseX, baseY, baseZ).getRelative(face);
             if (relative.getType() == Material.HOPPER) {
                 return relative;
             }
+        }
+        return null;
+    }
+
+    private ItemStack extractItemEnteringHopper(InventoryClickEvent event) {
+        InventoryView view = event.getView();
+        Inventory top = view.getTopInventory();
+        Inventory clicked = event.getClickedInventory();
+        if (clicked == null) {
+            return null;
+        }
+
+        InventoryAction action = event.getAction();
+        ItemStack cursor = event.getCursor();
+        ItemStack current = event.getCurrentItem();
+
+        if (clicked.equals(top)) {
+            if (cursor != null && !cursor.getType().isAir()) {
+                switch (action) {
+                    case PLACE_ALL, PLACE_ONE, PLACE_SOME, SWAP_WITH_CURSOR -> {
+                        return cursor;
+                    }
+                    default -> {
+                    }
+                }
+            }
+            if (action == InventoryAction.HOTBAR_SWAP && event.getHotbarButton() >= 0
+                    && event.getWhoClicked() instanceof Player player) {
+                return player.getInventory().getItem(event.getHotbarButton());
+            }
+            return null;
+        }
+
+        if (action == InventoryAction.MOVE_TO_OTHER_INVENTORY && current != null && !current.getType().isAir()) {
+            return current;
         }
         return null;
     }
