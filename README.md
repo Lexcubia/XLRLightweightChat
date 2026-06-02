@@ -1,5 +1,8 @@
 # XLRHopper
 
+> **主要开发分支**：`XLRHopper`（本分支）。克隆/ Codespace / PR 请以此分支为准。  
+> 聊天插件见分支 `XLRLightweightChat`。详见 [docs/主要开发分支.md](docs/主要开发分支.md)。
+
 高级漏斗传输插件（Spigot / Paper **1.21.1**）
 
 - **作者**: Shan  
@@ -22,6 +25,8 @@ mvn clean package
 
 推荐使用 GitHub Codespace（仓库内已配置 `.devcontainer`）或本地 JDK 21 + Maven。
 
-## 仓库分支
+## 仓库与分支
 
-本插件位于 **XLRLightweightChat** 仓库的 **`XLRHopper`** 分支（仅含漏斗插件，无聊天插件文件）。聊天插件请使用 **`XLRLightweightChat`** 分支。
+- 远程仓库：`Lexcubia/XLRLightweightChat`（单仓多分支）
+- **当前主要开发**：`XLRHopper`（本目录即漏斗插件根项目）
+- **聊天插件维护**：`XLRLightweightChat` 分支

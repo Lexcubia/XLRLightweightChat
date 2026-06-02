@@ -4,7 +4,7 @@
   "features": {
     "ghcr.io/devcontainers/features/maven:1": {}
   },
-  "postCreateCommand": "mvn -q -DskipTests package",
+  "postCreateCommand": "git fetch origin XLRHopper 2>/dev/null || true; git checkout XLRHopper 2>/dev/null || true; mvn -q -DskipTests package",
   "customizations": {
     "vscode": {
       "extensions": [
