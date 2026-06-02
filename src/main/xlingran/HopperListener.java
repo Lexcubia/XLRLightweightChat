@@ -5,7 +5,6 @@ import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.TileState;
 import org.bukkit.entity.Player;
@@ -13,14 +12,12 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.inventory.InventoryType;
-import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.InventoryView;
@@ -29,10 +26,12 @@ import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import xlingran.gui.XlrGuiHolder;
-
 import java.util.UUID;
 
+/**
+ * 漏斗 PDC 仅存模板名与所有者；过滤规则始终从 {@link HopperTemplateManager} 按名读取，
+ * 修改模板后所有绑定该名的漏斗立即生效。
+ */
 public class HopperListener implements Listener {
 
     private static final String DENY_MESSAGE = ChatColor.RED + "该物品不符合当前漏斗模板过滤规则";
@@ -98,7 +97,7 @@ public class HopperListener implements Listener {
     }
 
     /**
-     * 地上物品实体被漏斗吸入（含死亡掉落、Q 丢出后落地、背包拖出后落地等）。
+     * 地上物品被漏斗吸入时过滤（Q 丢、背包丢出、死亡掉落等均可正常落地，仅取消漏斗拾取）。
      */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     public void onInventoryPickup(InventoryPickupItemEvent event) {
@@ -112,47 +111,7 @@ public class HopperListener implements Listener {
         }
     }
 
-    /** 玩家按 Q 丢弃（未打开背包界面时） */
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onPlayerDrop(PlayerDropItemEvent event) {
-        Player player = event.getPlayer();
-        ItemStack stack = event.getItemDrop().getItemStack();
-        Block hopper = findHopperForPlayerDrop(player, event.getItemDrop().getLocation());
-        if (hopper == null) {
-            return;
-        }
-        if (rejectIfFiltered(player, hopper, stack)) {
-            event.setCancelled(true);
-        }
-    }
-
-    /**
-     * 打开背包后：拖到界面外丢弃、按 Q 丢槽位物品、点击界面外丢弃光标物品等。
-     * 与 {@link #onPlayerDrop} 不是同一 Bukkit 事件，但最终都会生成地上物品实体，由
-     * {@link #onInventoryPickup} 在漏斗吸入时再次校验。
-     */
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onInventoryDiscard(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player player)) {
-            return;
-        }
-        if (XlrGuiHolder.from(event.getView().getTopInventory()) != null) {
-            return;
-        }
-        ItemStack dropping = resolveDiscardStack(event);
-        if (dropping == null || dropping.getType().isAir()) {
-            return;
-        }
-        Block hopper = findHopperForPlayerDrop(player, player.getLocation());
-        if (hopper == null) {
-            return;
-        }
-        if (rejectIfFiltered(player, hopper, dropping)) {
-            event.setCancelled(true);
-        }
-    }
-
-    /** 玩家打开漏斗界面：手动放入、Shift 放入 */
+    /** 玩家打开漏斗 GUI 直接放入（非地上丢弃） */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onHopperInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) {
@@ -201,14 +160,6 @@ public class HopperListener implements Listener {
         if (rejectIfFiltered(player, hopperBlock, dragged)) {
             event.setCancelled(true);
         }
-    }
-
-    private Block findHopperForPlayerDrop(Player player, Location dropLocation) {
-        Block hopper = findHopperFromTarget(player);
-        if (hopper == null) {
-            hopper = findHopperNear(dropLocation);
-        }
-        return hopper;
     }
 
     private boolean rejectIfFiltered(Player player, Block hopperBlock, ItemStack stack) {
@@ -273,76 +224,6 @@ public class HopperListener implements Listener {
             return location.getBlock();
         }
         return null;
-    }
-
-    private Block findHopperFromTarget(Player player) {
-        Block target = player.getTargetBlockExact(6);
-        if (target != null && target.getType() == Material.HOPPER) {
-            return target;
-        }
-        return null;
-    }
-
-    private Block findHopperNear(Location location) {
-        if (location == null || location.getWorld() == null) {
-            return null;
-        }
-        int baseX = location.getBlockX();
-        int baseY = location.getBlockY();
-        int baseZ = location.getBlockZ();
-        var world = location.getWorld();
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    Block block = world.getBlockAt(baseX + dx, baseY + dy, baseZ + dz);
-                    if (block.getType() == Material.HOPPER) {
-                        return block;
-                    }
-                }
-            }
-        }
-        Block below = world.getBlockAt(baseX, baseY - 1, baseZ);
-        if (below.getType() == Material.HOPPER) {
-            return below;
-        }
-        Block above = world.getBlockAt(baseX, baseY + 1, baseZ);
-        if (above.getType() == Material.HOPPER) {
-            return above;
-        }
-        for (BlockFace face : new BlockFace[]{BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST}) {
-            Block relative = world.getBlockAt(baseX, baseY, baseZ).getRelative(face);
-            if (relative.getType() == Material.HOPPER) {
-                return relative;
-            }
-        }
-        return null;
-    }
-
-    private ItemStack resolveDiscardStack(InventoryClickEvent event) {
-        ClickType click = event.getClick();
-        if (click == ClickType.DROP || click == ClickType.CONTROL_DROP) {
-            ItemStack current = event.getCurrentItem();
-            if (current != null && !current.getType().isAir()) {
-                return current;
-            }
-        }
-        if (click == ClickType.WINDOW_BORDER_LEFT || click == ClickType.WINDOW_BORDER_RIGHT) {
-            ItemStack cursor = event.getCursor();
-            if (cursor != null && !cursor.getType().isAir()) {
-                return cursor;
-            }
-        }
-        return switch (event.getAction()) {
-            case DROP_ALL_CURSOR, DROP_ONE_CURSOR -> {
-                ItemStack cursor = event.getCursor();
-                yield cursor != null && !cursor.getType().isAir() ? cursor : null;
-            }
-            case DROP_ALL_SLOT, DROP_ONE_SLOT -> {
-                ItemStack current = event.getCurrentItem();
-                yield current != null && !current.getType().isAir() ? current : null;
-            }
-            default -> null;
-        };
     }
 
     private ItemStack extractItemEnteringHopper(InventoryClickEvent event) {

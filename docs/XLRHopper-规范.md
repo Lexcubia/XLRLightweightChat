@@ -117,7 +117,7 @@ players:
 
 ### 4.2 模板设置（3 行 × 9 列）
 
-- **标题**：`&6模板设置`
+- **标题**：`&e模板设置: &b<模板名称>`
 - **打开**：创建模板后 / 列表右键 / 编辑流程
 
 | Slot | 材质 | 名称 | 行为 |
@@ -187,11 +187,10 @@ players:
 |------|----------|
 | 容器 → 漏斗 | `InventoryMoveItemEvent` |
 | 地上物品实体 → 漏斗吸入 | `InventoryPickupItemEvent`（含死亡掉落、Q/背包丢弃后落地） |
-| 按 Q 丢弃（未开背包） | `PlayerDropItemEvent` |
-| 开背包后 Q 丢槽位 / 拖到界面外 / 点界面外丢光标 | `InventoryClickEvent` |
+| 玩家丢弃（Q / 背包丢出 / 死亡掉落等） | 不取消丢弃；物品正常落地后由 `InventoryPickupItemEvent` 决定是否吸入 |
 | 打开漏斗 GUI 放入 | `InventoryClickEvent` / `InventoryDragEvent` |
 
-- 按 Q 与背包内丢弃**不是**同一 Bukkit 事件；死亡掉落**不**走 `PlayerDropItemEvent`，但最终都会变成地上 `Item`，由漏斗的 `InventoryPickupItemEvent` 统一拦截。
+- 漏斗 PDC 仅存模板名与所有者 UUID；过滤规则**不写入方块**，修改模板后所有绑定该模板名的漏斗立即按新规则过滤。
 
 ### 6.2 材质（FilterItem）— 受白/黑名单影响
 

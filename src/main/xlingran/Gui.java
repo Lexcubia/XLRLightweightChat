@@ -66,7 +66,7 @@ public class Gui implements Listener {
     public void openTemplateSettings(Player player, String templateName) {
         sessions.setEditingTemplate(player.getUniqueId(), templateName);
         Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.TEMPLATE_SETTINGS), 27,
-                color("&6模板设置"));
+                color("&e模板设置: &b" + templateName));
         bindHolder(inv, GuiType.TEMPLATE_SETTINGS);
 
         ItemStack glass = blackGlass();
