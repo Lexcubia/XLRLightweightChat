@@ -522,38 +522,34 @@ public class Gui implements Listener {
     }
 
     private ItemStack createEnchantFilterBook(Enchantment enchant, Integer minLevel) {
-        ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
+        String displayName = EnchantNameTable.getChineseName(enchant);
+        boolean configured = minLevel != null;
+
+        Material material = configured ? Material.ENCHANTED_BOOK : Material.BOOK;
+        ItemStack book = new ItemStack(material);
         ItemMeta meta = book.getItemMeta();
-        if (!(meta instanceof EnchantmentStorageMeta storageMeta)) {
+        if (meta == null) {
             return book;
         }
-        storageMeta.addStoredEnchant(enchant, 1, true);
-        storageMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        storageMeta.setDisplayName(color("&e" + formatEnchantName(enchant)));
+
+        meta.setDisplayName(color("&e" + displayName));
         List<String> lore = new ArrayList<>();
-        if (minLevel != null) {
-            lore.add(color("&a当前过滤: &e" + formatEnchantName(enchant) + " " + minLevel));
+        if (configured) {
+            if (meta instanceof EnchantmentStorageMeta storageMeta) {
+                storageMeta.addStoredEnchant(enchant, 1, true);
+                storageMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+                meta = storageMeta;
+            }
+            lore.add(color("&a当前过滤: &e" + displayName + " " + minLevel));
         }
         lore.add(color("&7点击设置最低等级"));
-        storageMeta.setLore(lore);
-        book.setItemMeta(storageMeta);
+        meta.setLore(lore);
+        book.setItemMeta(meta);
         return book;
     }
 
     private static String formatEnchantName(Enchantment enchant) {
-        String key = enchant.getKey().getKey();
-        StringBuilder sb = new StringBuilder();
-        for (String part : key.split("_")) {
-            if (part.isEmpty()) {
-                continue;
-            }
-            sb.append(Character.toUpperCase(part.charAt(0)));
-            if (part.length() > 1) {
-                sb.append(part.substring(1));
-            }
-            sb.append(' ');
-        }
-        return sb.toString().trim();
+        return EnchantNameTable.getChineseName(enchant);
     }
 
     private List<Enchantment> listRegistryEnchantments() {
