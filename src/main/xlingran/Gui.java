@@ -222,6 +222,12 @@ public class Gui implements Listener {
             return;
         }
         Bukkit.getScheduler().runTask(plugin, () -> {
+            if (message.equalsIgnoreCase("xlrquit")) {
+                sessions.clearInput(player.getUniqueId());
+                player.sendMessage(color("&7已取消输入，返回模板设置"));
+                openTemplateSettings(player, templateName);
+                return;
+            }
             HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
             if (template == null) {
                 sessions.clearInput(player.getUniqueId());
@@ -273,7 +279,7 @@ public class Gui implements Listener {
                 } else if (click == ClickType.RIGHT) {
                     player.closeInventory();
                     sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.TITLE);
-                    player.sendMessage(color("&a请输入要过滤的物品名称"));
+                    player.sendMessage(color("&a请输入要过滤的物品名称 &7(输入 xlrquit 取消)"));
                 }
             }
             case SETTINGS_SLOT_LORE -> {
@@ -282,7 +288,7 @@ public class Gui implements Listener {
                 } else if (click == ClickType.RIGHT) {
                     player.closeInventory();
                     sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.LORE);
-                    player.sendMessage(color("&a请输入要过滤的物品描述"));
+                    player.sendMessage(color("&a请输入要过滤的物品描述 &7(输入 xlrquit 取消)"));
                 }
             }
             case SETTINGS_SLOT_ITEMS -> openFilterItems(player, templateName);
