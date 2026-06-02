@@ -28,10 +28,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.UUID;
 
-/**
- * 漏斗 PDC 仅存模板名与所有者；过滤规则始终从 {@link HopperTemplateManager} 按名读取，
- * 修改模板后所有绑定该名的漏斗立即生效。
- */
 public class HopperListener implements Listener {
 
     private static final String DENY_MESSAGE = ChatColor.RED + "该物品不符合当前漏斗模板过滤规则";
@@ -79,30 +75,34 @@ public class HopperListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     public void onInventoryMove(InventoryMoveItemEvent event) {
         Inventory dest = event.getDestination();
-        if (dest.getType() != InventoryType.HOPPER) {
-            return;
+        Inventory src = event.getSource();
+        if (dest.getType() == InventoryType.HOPPER) {
+            Block hopperBlock = getHopperBlock(dest);
+            if (!shouldAllowTransfer(hopperBlock, event.getItem())) {
+                event.setCancelled(true);
+            }
         }
-        if (!shouldAllowTransfer(dest, event.getItem())) {
-            event.setCancelled(true);
+        if (src.getType() == InventoryType.HOPPER) {
+            Block hopperBlock = getHopperBlock(src);
+            if (!shouldAllowTransfer(hopperBlock, event.getItem())) {
+                event.setCancelled(true);
+            }
         }
     }
 
-    /**
-     * 地上物品被漏斗吸入时过滤（Q 丢、背包丢出、死亡掉落等均可正常落地，仅取消漏斗拾取）。
-     */
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     public void onInventoryPickup(InventoryPickupItemEvent event) {
         Inventory inventory = event.getInventory();
         if (inventory.getType() != InventoryType.HOPPER) {
             return;
         }
+        Block hopperBlock = getHopperBlock(inventory);
         ItemStack stack = event.getItem().getItemStack();
-        if (!shouldAllowTransfer(inventory, stack)) {
+        if (!shouldAllowTransfer(hopperBlock, stack)) {
             event.setCancelled(true);
         }
     }
 
-    /** 玩家打开漏斗 GUI 直接放入（非地上丢弃） */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onHopperInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) {
@@ -158,26 +158,22 @@ public class HopperListener implements Listener {
         if (template == null) {
             return false;
         }
-        if (!template.allows(stack.clone())) {
+        if (!template.allows(stack.clone(), hopperBlock)) {
             player.sendMessage(DENY_MESSAGE);
             return true;
         }
         return false;
     }
 
-    private boolean shouldAllowTransfer(Inventory hopperInventory, ItemStack stack) {
-        HopperTemplate template = resolveTemplate(hopperInventory);
+    private boolean shouldAllowTransfer(Block hopperBlock, ItemStack stack) {
+        HopperTemplate template = resolveTemplate(hopperBlock);
         if (template == null) {
             return true;
         }
         if (stack == null || stack.getType().isAir()) {
             return false;
         }
-        return template.allows(stack.clone());
-    }
-
-    private HopperTemplate resolveTemplate(Inventory hopperInventory) {
-        return resolveTemplate(getHopperBlock(hopperInventory));
+        return template.allows(stack.clone(), hopperBlock);
     }
 
     private HopperTemplate resolveTemplate(Block block) {

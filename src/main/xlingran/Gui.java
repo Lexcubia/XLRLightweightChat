@@ -15,6 +15,7 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
@@ -33,8 +34,8 @@ public class Gui implements Listener {
 
     private static final int TEMPLATE_LIST_SIZE = 27;
     private static final int TEMPLATE_SETTINGS_SIZE = 45;
-    private static final int SETTINGS_SLOT_NAME = 10;
-    private static final int SETTINGS_SLOT_LORE = 12;
+    private static final int SETTINGS_SLOT_REVERSE = 10;
+    private static final int SETTINGS_SLOT_REDSTONE_LIST = 12;
     private static final int SETTINGS_SLOT_ITEMS = 14;
     private static final int SETTINGS_SLOT_MODE = 16;
     private static final int SETTINGS_SLOT_ENCHANT = 28;
@@ -87,10 +88,10 @@ public class Gui implements Listener {
             return;
         }
 
-        inv.setItem(SETTINGS_SLOT_NAME, button(Material.GRASS_BLOCK, "&e名称过滤",
-                List.of("&a将过滤你输入的名称", "&a左键点击查看过滤条件", "&a右键点击新增过滤条件")));
-        inv.setItem(SETTINGS_SLOT_LORE, button(Material.BARRIER, "&eLore过滤",
-                List.of("&a将过滤你输入的Lore", "&a左键点击查看过滤条件", "&a右键点击新增过滤条件")));
+        inv.setItem(SETTINGS_SLOT_REVERSE, toggleStateButton(Material.GOLDEN_CARROT, "&e反向吸取",
+                template.isReverseSuction()));
+        inv.setItem(SETTINGS_SLOT_REDSTONE_LIST, toggleStateButton(Material.REDSTONE, "&e允许红石开关名单模式",
+                template.isRedstoneListToggle()));
         inv.setItem(SETTINGS_SLOT_ITEMS, button(Material.CHEST, "&e过滤物品",
                 List.of("&a将过滤你添加的物品")));
         inv.setItem(SETTINGS_SLOT_MODE, modeButton(template));
@@ -130,36 +131,15 @@ public class Gui implements Listener {
         HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
         if (template != null) {
             int slot = 0;
-            for (Material mat : template.getMaterials()) {
+            for (ItemStack proto : template.getFilterPrototypes()) {
                 if (slot >= 54) {
                     break;
                 }
-                inv.setItem(slot++, new ItemStack(mat, 1));
+                ItemStack display = ItemStackUtil.clonePrototype(proto);
+                if (display != null) {
+                    inv.setItem(slot++, display);
+                }
             }
-        }
-        player.openInventory(inv);
-    }
-
-    public void openFilterTitles(Player player, String templateName) {
-        openRuleList(player, templateName, GuiType.FILTER_TITLES, "&6过滤的名称",
-                templateManager.getTemplate(player.getUniqueId(), templateName) != null
-                        ? templateManager.getTemplate(player.getUniqueId(), templateName).getTitleRules()
-                        : List.of());
-    }
-
-    public void openFilterLores(Player player, String templateName) {
-        openRuleList(player, templateName, GuiType.FILTER_LORES, "&6过滤的描述",
-                templateManager.getTemplate(player.getUniqueId(), templateName) != null
-                        ? templateManager.getTemplate(player.getUniqueId(), templateName).getLoreRules()
-                        : List.of());
-    }
-
-    private void openRuleList(Player player, String templateName, GuiType type, String title, List<String> rules) {
-        sessions.setEditingTemplate(player.getUniqueId(), templateName);
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(type, templateName), 54, color(title));
-        bindHolder(inv, type);
-        for (int i = 0; i < rules.size() && i < 54; i++) {
-            inv.setItem(i, ruleNameTag(rules.get(i)));
         }
         player.openInventory(inv);
     }
@@ -176,6 +156,7 @@ public class Gui implements Listener {
         }
 
         if (holder.getType() == GuiType.FILTER_ITEMS) {
+            handleFilterItemsClick(event);
             return;
         }
 
@@ -194,8 +175,6 @@ public class Gui implements Listener {
         switch (holder.getType()) {
             case TEMPLATE_LIST -> handleTemplateListClick(player, slot, event.getClick());
             case TEMPLATE_SETTINGS -> handleSettingsClick(player, slot, event.getClick(), holder);
-            case FILTER_TITLES -> handleRuleListClick(player, slot, event.getClick(), true, holder);
-            case FILTER_LORES -> handleRuleListClick(player, slot, event.getClick(), false, holder);
             case FILTER_ENCHANTS -> handleFilterEnchantsClick(player, slot, holder);
             default -> {
             }
@@ -286,22 +265,6 @@ public class Gui implements Listener {
             return;
         }
 
-        if (mode == PlayerGuiSession.InputMode.TITLE) {
-            template.addTitleRule(message);
-            sessions.clearInput(player.getUniqueId());
-            saveData();
-            player.sendMessage(color("&a已添加过滤规则"));
-            openTemplateSettings(player, templateName);
-            return;
-        }
-        if (mode == PlayerGuiSession.InputMode.LORE) {
-            template.addLoreRule(message);
-            sessions.clearInput(player.getUniqueId());
-            saveData();
-            player.sendMessage(color("&a已添加过滤规则"));
-            openTemplateSettings(player, templateName);
-            return;
-        }
         if (mode == PlayerGuiSession.InputMode.DURABILITY) {
             Integer value = parsePositiveInt(message);
             if (value == null) {
@@ -376,22 +339,18 @@ public class Gui implements Listener {
             return;
         }
         switch (slot) {
-            case SETTINGS_SLOT_NAME -> {
-                if (click == ClickType.LEFT) {
-                    openFilterTitles(player, templateName);
-                } else if (click == ClickType.RIGHT) {
-                    player.closeInventory();
-                    sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.TITLE, templateName);
-                    player.sendMessage(color("&a请输入要过滤的物品名称 &7(输入 xlrquit 取消)"));
+            case SETTINGS_SLOT_REVERSE -> {
+                if (click == ClickType.LEFT || click == ClickType.RIGHT) {
+                    template.toggleReverseSuction();
+                    saveData();
+                    openTemplateSettings(player, templateName);
                 }
             }
-            case SETTINGS_SLOT_LORE -> {
-                if (click == ClickType.LEFT) {
-                    openFilterLores(player, templateName);
-                } else if (click == ClickType.RIGHT) {
-                    player.closeInventory();
-                    sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.LORE, templateName);
-                    player.sendMessage(color("&a请输入要过滤的物品描述 &7(输入 xlrquit 取消)"));
+            case SETTINGS_SLOT_REDSTONE_LIST -> {
+                if (click == ClickType.LEFT || click == ClickType.RIGHT) {
+                    template.toggleRedstoneListToggle();
+                    saveData();
+                    openTemplateSettings(player, templateName);
                 }
             }
             case SETTINGS_SLOT_ITEMS -> openFilterItems(player, templateName);
@@ -445,28 +404,14 @@ public class Gui implements Listener {
         player.sendMessage(color("&a请输入附魔等级 &7(低于该等级的附魔将被过滤，输入 xlrquit 退出设置)"));
     }
 
-    private void handleRuleListClick(Player player, int slot, ClickType click, boolean titleRules, XlrGuiHolder holder) {
-        if (click != ClickType.LEFT) {
+    private void handleFilterItemsClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
             return;
         }
-        String templateName = resolveTemplateName(holder, player);
-        if (templateName == null) {
-            return;
-        }
-        HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
-        if (template == null) {
-            return;
-        }
-        List<String> rules = titleRules ? template.getTitleRules() : template.getLoreRules();
-        if (slot < 0 || slot >= rules.size()) {
-            return;
-        }
-        rules.remove(slot);
-        saveData();
-        if (titleRules) {
-            openFilterTitles(player, templateName);
-        } else {
-            openFilterLores(player, templateName);
+        InventoryView view = event.getView();
+        int topSize = view.getTopInventory().getSize();
+        if (event.getClick() == ClickType.NUMBER_KEY && event.getRawSlot() < topSize) {
+            event.setCancelled(true);
         }
     }
 
@@ -475,24 +420,40 @@ public class Gui implements Listener {
         if (template == null) {
             return;
         }
-        Map<Material, Integer> counts = new HashMap<>();
+        List<ItemStack> snapshot = new ArrayList<>();
         for (int i = 0; i < inventory.getSize(); i++) {
             ItemStack stack = inventory.getItem(i);
             if (stack == null || stack.getType().isAir()) {
                 continue;
             }
-            counts.merge(stack.getType(), stack.getAmount(), Integer::sum);
+            snapshot.add(stack.clone());
         }
 
-        template.getMaterials().clear();
+        List<ItemStack> uniqueRules = new ArrayList<>();
         List<ItemStack> toReturn = new ArrayList<>();
-        for (Map.Entry<Material, Integer> entry : counts.entrySet()) {
-            Material mat = entry.getKey();
-            int total = entry.getValue();
-            template.getMaterials().add(mat);
-            if (total > 1) {
-                toReturn.add(new ItemStack(mat, total - 1));
+        for (ItemStack stack : snapshot) {
+            ItemStack proto = ItemStackUtil.clonePrototype(stack);
+            if (proto == null) {
+                continue;
             }
+            boolean duplicate = false;
+            for (ItemStack existing : uniqueRules) {
+                if (FilterItemMatcher.sameRule(proto, existing)) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate) {
+                toReturn.add(stack.clone());
+            } else {
+                uniqueRules.add(proto);
+            }
+        }
+
+        template.setFilterPrototypes(uniqueRules);
+
+        for (int i = 0; i < inventory.getSize(); i++) {
+            inventory.setItem(i, null);
         }
 
         for (ItemStack stack : toReturn) {
@@ -597,17 +558,9 @@ public class Gui implements Listener {
                 "当前模式: " + modeLine));
     }
 
-    private ItemStack ruleNameTag(String rule) {
-        ItemStack item = new ItemStack(Material.NAME_TAG);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName(color("&a" + rule));
-            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
-            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-            meta.setLore(List.of(color("&7左键删除")));
-            item.setItemMeta(meta);
-        }
-        return item;
+    private ItemStack toggleStateButton(Material material, String name, boolean enabled) {
+        String stateLine = enabled ? "&a当前状态: &a开" : "&a当前状态: &c关";
+        return button(material, name, List.of(stateLine, "&7左键或右键点击切换"));
     }
 
     private ItemStack button(Material material, String name, List<String> loreLines) {

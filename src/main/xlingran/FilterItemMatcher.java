@@ -1,0 +1,93 @@
+package xlingran;
+
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+
+import java.util.List;
+import java.util.Map;
+
+/** 按样板 ItemStack 匹配（样板有设置的字段才参与比较）。 */
+public final class FilterItemMatcher {
+
+    private FilterItemMatcher() {
+    }
+
+    public static boolean allows(ItemStack stack, boolean whitelist, List<ItemStack> prototypes) {
+        if (stack == null || stack.getType().isAir()) {
+            return false;
+        }
+        if (prototypes == null || prototypes.isEmpty()) {
+            return !whitelist;
+        }
+        boolean anyMatch = false;
+        for (ItemStack prototype : prototypes) {
+            if (matches(stack, prototype)) {
+                anyMatch = true;
+                break;
+            }
+        }
+        return whitelist ? anyMatch : !anyMatch;
+    }
+
+    public static boolean matches(ItemStack stack, ItemStack prototype) {
+        if (stack == null || prototype == null || stack.getType().isAir() || prototype.getType().isAir()) {
+            return false;
+        }
+        if (stack.getType() != prototype.getType()) {
+            return false;
+        }
+        ItemMeta stackMeta = stack.getItemMeta();
+        ItemMeta protoMeta = prototype.getItemMeta();
+        if (protoMeta == null) {
+            return true;
+        }
+        if (stackMeta == null) {
+            return !protoMeta.hasDisplayName() && !protoMeta.hasLore() && !protoMeta.hasEnchants()
+                    && !protoMeta.hasCustomModelData();
+        }
+        if (protoMeta.hasDisplayName()) {
+            String stackName = stackMeta.hasDisplayName() ? stackMeta.getDisplayName() : "";
+            if (!TextUtil.stripForMatch(stackName).equals(TextUtil.stripForMatch(protoMeta.getDisplayName()))) {
+                return false;
+            }
+        }
+        if (protoMeta.hasLore() && protoMeta.getLore() != null) {
+            List<String> stackLore = stackMeta.hasLore() && stackMeta.getLore() != null
+                    ? stackMeta.getLore() : List.of();
+            for (String protoLine : protoMeta.getLore()) {
+                String need = TextUtil.stripForMatch(protoLine);
+                boolean found = false;
+                for (String line : stackLore) {
+                    if (TextUtil.stripForMatch(line).contains(need) || need.contains(TextUtil.stripForMatch(line))) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    return false;
+                }
+            }
+        }
+        if (protoMeta.hasEnchants()) {
+            for (Map.Entry<Enchantment, Integer> entry : protoMeta.getEnchants().entrySet()) {
+                if (!stackMeta.hasEnchant(entry.getKey())
+                        || stackMeta.getEnchantLevel(entry.getKey()) < entry.getValue()) {
+                    return false;
+                }
+            }
+        }
+        if (protoMeta.hasCustomModelData()) {
+            if (!stackMeta.hasCustomModelData()
+                    || stackMeta.getCustomModelData() != protoMeta.getCustomModelData()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** 两条规则是否为同一样板（用于 GUI 去重）。 */
+    public static boolean sameRule(ItemStack a, ItemStack b) {
+        return matches(a, b) && matches(b, a);
+    }
+}

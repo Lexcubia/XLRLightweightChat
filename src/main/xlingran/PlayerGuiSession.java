@@ -10,15 +10,12 @@ public final class PlayerGuiSession {
 
     public enum InputMode {
         NONE,
-        TITLE,
-        LORE,
         DURABILITY,
         ENCHANT_LEVEL,
         BATCH_APPLY
     }
 
     private final Map<UUID, String> editingTemplate = new java.util.HashMap<>();
-    /** 聊天输入开始时绑定的模板名，避免切换界面后写入错误模板 */
     private final Map<UUID, String> chatTemplate = new HashMap<>();
     private final Map<UUID, InputMode> inputMode = new HashMap<>();
     private final Map<UUID, Long> lastClickMillis = new java.util.HashMap<>();

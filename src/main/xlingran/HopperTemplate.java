@@ -1,22 +1,20 @@
 package xlingran;
 
-import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class HopperTemplate {
 
     private boolean whitelist = true;
-    private final Set<Material> materials = new HashSet<>();
-    private final List<String> titleRules = new ArrayList<>();
-    private final List<String> loreRules = new ArrayList<>();
+    private boolean reverseSuction;
+    private boolean redstoneListToggle;
+    private final List<ItemStack> filterPrototypes = new ArrayList<>();
     private Integer durabilityThreshold;
     private final Map<Enchantment, Integer> enchantMinLevels = new LinkedHashMap<>();
 
@@ -32,23 +30,44 @@ public class HopperTemplate {
         this.whitelist = !this.whitelist;
     }
 
-    public Set<Material> getMaterials() {
-        return materials;
+    public boolean isReverseSuction() {
+        return reverseSuction;
     }
 
-    public void setMaterials(Set<Material> materials) {
-        this.materials.clear();
-        if (materials != null) {
-            this.materials.addAll(materials);
+    public void setReverseSuction(boolean reverseSuction) {
+        this.reverseSuction = reverseSuction;
+    }
+
+    public void toggleReverseSuction() {
+        this.reverseSuction = !this.reverseSuction;
+    }
+
+    public boolean isRedstoneListToggle() {
+        return redstoneListToggle;
+    }
+
+    public void setRedstoneListToggle(boolean redstoneListToggle) {
+        this.redstoneListToggle = redstoneListToggle;
+    }
+
+    public void toggleRedstoneListToggle() {
+        this.redstoneListToggle = !this.redstoneListToggle;
+    }
+
+    public List<ItemStack> getFilterPrototypes() {
+        return filterPrototypes;
+    }
+
+    public void setFilterPrototypes(List<ItemStack> prototypes) {
+        filterPrototypes.clear();
+        if (prototypes != null) {
+            for (ItemStack stack : prototypes) {
+                ItemStack proto = ItemStackUtil.clonePrototype(stack);
+                if (proto != null) {
+                    filterPrototypes.add(proto);
+                }
+            }
         }
-    }
-
-    public List<String> getTitleRules() {
-        return titleRules;
-    }
-
-    public List<String> getLoreRules() {
-        return loreRules;
     }
 
     public Integer getDurabilityThreshold() {
@@ -63,18 +82,6 @@ public class HopperTemplate {
         return enchantMinLevels;
     }
 
-    public void addTitleRule(String rule) {
-        if (rule != null && !rule.isBlank()) {
-            titleRules.add(rule.trim());
-        }
-    }
-
-    public void addLoreRule(String rule) {
-        if (rule != null && !rule.isBlank()) {
-            loreRules.add(rule.trim());
-        }
-    }
-
     public void setEnchantMinLevel(Enchantment enchant, int minLevel) {
         if (enchant == null || minLevel <= 0) {
             return;
@@ -82,15 +89,21 @@ public class HopperTemplate {
         enchantMinLevels.put(enchant, minLevel);
     }
 
-    public boolean allows(ItemStack stack) {
+    public boolean getEffectiveWhitelist(Block hopperBlock) {
+        if (redstoneListToggle && hopperBlock != null) {
+            return hopperBlock.isBlockPowered();
+        }
+        return whitelist;
+    }
+
+    public boolean allows(ItemStack stack, Block hopperBlock) {
         if (stack == null || stack.getType().isAir()) {
             return false;
         }
-        boolean passItem = FilterItem.allows(stack, whitelist, materials);
-        boolean passTitle = FilterTitle.allows(stack, titleRules);
-        boolean passLore = FilterLore.allows(stack, loreRules);
+        boolean effectiveWhitelist = getEffectiveWhitelist(hopperBlock);
+        boolean passItem = FilterItem.allows(stack, effectiveWhitelist, filterPrototypes);
         boolean passDurability = FilterDurability.allows(stack, durabilityThreshold);
         boolean passEnchant = FilterEnchant.allows(stack, enchantMinLevels);
-        return passItem && passTitle && passLore && passDurability && passEnchant;
+        return passItem && passDurability && passEnchant;
     }
 }

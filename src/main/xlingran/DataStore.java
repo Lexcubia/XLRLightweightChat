@@ -7,6 +7,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
 import java.io.IOException;
@@ -51,15 +52,9 @@ final class DataStore {
                         }
                         HopperTemplate template = new HopperTemplate();
                         template.setWhitelist(tSec.getBoolean("whitelist", true));
-                        List<String> matNames = tSec.getStringList("materials");
-                        for (String matName : matNames) {
-                            Material mat = Material.matchMaterial(matName);
-                            if (mat != null) {
-                                template.getMaterials().add(mat);
-                            }
-                        }
-                        template.getTitleRules().addAll(tSec.getStringList("title-rules"));
-                        template.getLoreRules().addAll(tSec.getStringList("lore-rules"));
+                        template.setReverseSuction(tSec.getBoolean("reverse-suction", false));
+                        template.setRedstoneListToggle(tSec.getBoolean("redstone-list-toggle", false));
+                        loadFilterItems(tSec, template);
                         if (tSec.contains("durability-threshold")) {
                             template.setDurabilityThreshold(tSec.getInt("durability-threshold"));
                         }
@@ -75,6 +70,26 @@ final class DataStore {
                 logger.warning("[XLRHopper] 无效 UUID: " + uuidStr);
             }
         }
+    }
+
+    private void loadFilterItems(ConfigurationSection tSec, HopperTemplate template) {
+        List<?> serialized = tSec.getList("filter-items");
+        if (serialized != null && !serialized.isEmpty()) {
+            template.setFilterPrototypes(ItemStackUtil.deserializeList(serialized));
+            return;
+        }
+        List<String> matNames = tSec.getStringList("materials");
+        if (matNames.isEmpty()) {
+            return;
+        }
+        List<ItemStack> migrated = new java.util.ArrayList<>();
+        for (String matName : matNames) {
+            Material mat = Material.matchMaterial(matName);
+            if (mat != null) {
+                migrated.add(new ItemStack(mat, 1));
+            }
+        }
+        template.setFilterPrototypes(migrated);
     }
 
     private void loadEnchantFilters(ConfigurationSection tSec, HopperTemplate template) {
@@ -117,10 +132,9 @@ final class DataStore {
                 HopperTemplate t = templateEntry.getValue();
                 String base = path + ".templates." + name;
                 config.set(base + ".whitelist", t.isWhitelist());
-                List<String> mats = t.getMaterials().stream().map(Enum::name).toList();
-                config.set(base + ".materials", mats);
-                config.set(base + ".title-rules", t.getTitleRules());
-                config.set(base + ".lore-rules", t.getLoreRules());
+                config.set(base + ".reverse-suction", t.isReverseSuction());
+                config.set(base + ".redstone-list-toggle", t.isRedstoneListToggle());
+                config.set(base + ".filter-items", ItemStackUtil.serializeList(t.getFilterPrototypes()));
                 if (t.getDurabilityThreshold() != null) {
                     config.set(base + ".durability-threshold", t.getDurabilityThreshold());
                 }
