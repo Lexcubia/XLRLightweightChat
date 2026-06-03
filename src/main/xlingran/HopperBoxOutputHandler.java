@@ -1,5 +1,6 @@
 package xlingran;
 
+import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
@@ -11,22 +12,25 @@ import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.HashMap;
 import java.util.UUID;
 
 /**
- * 双路按比例拆分：漏斗转出 N 个物品时，按下方/仓库剩余空间比例分配，总量仍为 N（不复制）。
+ * 双路按比例拆分：在事件下一 tick 从方块实体库存扣减并分配，避免事件内改库存不生效导致刷物品。
  */
 public class HopperBoxOutputHandler implements Listener {
 
+    private final JavaPlugin plugin;
     private final HopperTemplateManager templateManager;
     private final HopperKeys keys;
     private final PlayerBoxManager boxManager;
     private final Runnable persistBoxes;
 
-    public HopperBoxOutputHandler(HopperTemplateManager templateManager, HopperKeys keys,
+    public HopperBoxOutputHandler(JavaPlugin plugin, HopperTemplateManager templateManager, HopperKeys keys,
                                   PlayerBoxManager boxManager, Runnable persistBoxes) {
+        this.plugin = plugin;
         this.templateManager = templateManager;
         this.keys = keys;
         this.boxManager = boxManager;
@@ -38,12 +42,12 @@ public class HopperBoxOutputHandler implements Listener {
         if (event.getSource().getType() != InventoryType.HOPPER) {
             return;
         }
-        Inventory hopperInv = event.getSource();
-        Block hopperBlock = getHopperBlock(hopperInv);
+        Block hopperBlock = getHopperBlock(event.getSource());
         if (hopperBlock == null) {
             return;
         }
-        if (!isInventoryBelowHopper(hopperBlock, event.getDestination())) {
+        Block belowBlock = hopperBlock.getRelative(BlockFace.DOWN);
+        if (!(belowBlock.getState() instanceof Container) || !isBlockInventory(event.getDestination(), belowBlock)) {
             return;
         }
         HopperTemplate template = HopperTemplateResolver.resolve(hopperBlock, keys, templateManager);
@@ -66,82 +70,122 @@ public class HopperBoxOutputHandler implements Listener {
             return;
         }
 
-        Inventory dest = event.getDestination();
-        int total = moving.getAmount();
-        int belowCap = InventoryCapacity.maxFit(dest, moving);
         int boxCap = boxManager.maxFit(owner, boxName, moving);
-
         if (boxCap <= 0) {
-            return;
-        }
-
-        int sumCap = belowCap + boxCap;
-        if (sumCap <= 0) {
             return;
         }
 
         event.setCancelled(true);
 
-        int planMove = Math.min(total, sumCap);
-        int removed = removeFromHopper(hopperInv, moving, planMove);
+        Location hopperLoc = hopperBlock.getLocation().clone();
+        Location belowLoc = belowBlock.getLocation().clone();
+        ItemStack snapshot = moving.clone();
+        int planAmount = snapshot.getAmount();
+
+        plugin.getServer().getScheduler().runTask(plugin, () -> executeSplit(
+                hopperLoc, belowLoc, owner, boxName, snapshot, planAmount));
+    }
+
+    private void executeSplit(Location hopperLoc, Location belowLoc, UUID owner, String boxName,
+                              ItemStack prototype, int planAmount) {
+        Block hopperBlock = hopperLoc.getBlock();
+        if (hopperBlock.getType() != org.bukkit.Material.HOPPER) {
+            return;
+        }
+        HopperTemplate template = HopperTemplateResolver.resolve(hopperBlock, keys, templateManager);
+        if (template == null || !template.allows(prototype, hopperBlock, keys)) {
+            return;
+        }
+
+        Inventory hopperInv = getContainerInventory(hopperBlock);
+        if (hopperInv == null) {
+            return;
+        }
+
+        Block belowBlock = belowLoc.getBlock();
+        Inventory belowInv = getContainerInventory(belowBlock);
+        if (belowInv == null) {
+            return;
+        }
+
+        int belowCap = InventoryCapacity.maxFit(belowInv, prototype);
+        int boxCap = boxManager.maxFit(owner, boxName, prototype);
+        if (boxCap <= 0) {
+            return;
+        }
+        int sumCap = belowCap + boxCap;
+        if (sumCap <= 0) {
+            return;
+        }
+
+        int planMove = Math.min(planAmount, sumCap);
+        int removed = removeFromHopper(hopperInv, prototype, planMove);
         if (removed <= 0) {
             return;
         }
 
         int toBelow = splitAmount(removed, belowCap, boxCap);
         int toBox = removed - toBelow;
-        if (toBox > boxCap) {
-            toBelow += toBox - boxCap;
-            toBox = boxCap;
-            toBelow = Math.min(toBelow, belowCap);
-        }
-        if (toBelow > belowCap) {
-            toBox += toBelow - belowCap;
-            toBelow = belowCap;
-            toBox = Math.min(toBox, boxCap);
+        toBelow = Math.min(toBelow, belowCap);
+        toBox = Math.min(toBox, boxCap);
+        if (toBelow + toBox > removed) {
+            toBox = removed - toBelow;
         }
 
         boolean boxChanged = false;
         int distributed = 0;
 
         if (toBelow > 0) {
-            ItemStack forBelow = moving.clone();
+            ItemStack forBelow = prototype.clone();
             forBelow.setAmount(toBelow);
-            HashMap<Integer, ItemStack> belowLeft = dest.addItem(forBelow);
-            int addedBelow = toBelow;
-            for (ItemStack left : belowLeft.values()) {
-                addedBelow -= left.getAmount();
-                returnToHopper(hopperInv, left);
-            }
+            int addedBelow = addToInventory(belowInv, forBelow);
             distributed += addedBelow;
+            if (addedBelow < toBelow) {
+                ItemStack refund = forBelow.clone();
+                refund.setAmount(toBelow - addedBelow);
+                returnToHopper(hopperInv, refund, hopperBlock);
+            }
         }
         if (toBox > 0) {
-            ItemStack forBox = moving.clone();
+            ItemStack forBox = prototype.clone();
             forBox.setAmount(toBox);
             HashMap<Integer, ItemStack> boxLeft = boxManager.addItem(owner, boxName, forBox);
             boxChanged = true;
             int addedBox = toBox;
             for (ItemStack left : boxLeft.values()) {
                 addedBox -= left.getAmount();
-                returnToHopper(hopperInv, left);
+                returnToHopper(hopperInv, left, hopperBlock);
             }
             distributed += addedBox;
         }
 
         int notPlaced = removed - distributed;
         if (notPlaced > 0) {
-            ItemStack refund = moving.clone();
+            ItemStack refund = prototype.clone();
             refund.setAmount(notPlaced);
-            returnToHopper(hopperInv, refund);
+            returnToHopper(hopperInv, refund, hopperBlock);
         }
 
-        syncHopper(hopperInv);
+        syncContainer(hopperBlock);
+        syncContainer(belowBlock);
         if (boxChanged && persistBoxes != null) {
             persistBoxes.run();
         }
     }
 
-    /** 按两路剩余空间比例分配实际已从漏斗取出的数量。 */
+    private static int addToInventory(Inventory inventory, ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) {
+            return 0;
+        }
+        int wanted = stack.getAmount();
+        HashMap<Integer, ItemStack> left = inventory.addItem(stack);
+        int remaining = wanted;
+        for (ItemStack l : left.values()) {
+            remaining -= l.getAmount();
+        }
+        return remaining;
+    }
+
     private static int splitAmount(int removed, int belowCap, int boxCap) {
         if (removed <= 0) {
             return 0;
@@ -152,25 +196,25 @@ public class HopperBoxOutputHandler implements Listener {
         if (belowCap <= 0) {
             return 0;
         }
-        int sumCap = belowCap + boxCap;
-        return (int) ((long) removed * belowCap / sumCap);
+        return (int) ((long) removed * belowCap / (belowCap + boxCap));
     }
 
-    /**
-     * 从漏斗扣除物品，返回实际扣除数量。
-     */
-    private static int removeFromHopper(Inventory hopperInv, ItemStack moving, int amount) {
+    private static int removeFromHopper(Inventory hopperInv, ItemStack prototype, int amount) {
         int left = amount;
         int removed = 0;
         for (int i = 0; i < hopperInv.getSize() && left > 0; i++) {
             ItemStack slot = hopperInv.getItem(i);
-            if (!slotMatchesForRemoval(slot, moving)) {
+            if (!slotMatchesForRemoval(slot, prototype)) {
                 continue;
             }
             int take = Math.min(left, slot.getAmount());
-            slot.setAmount(slot.getAmount() - take);
-            if (slot.getAmount() <= 0) {
+            int newAmount = slot.getAmount() - take;
+            if (newAmount <= 0) {
                 hopperInv.setItem(i, null);
+            } else {
+                ItemStack updated = slot.clone();
+                updated.setAmount(newAmount);
+                hopperInv.setItem(i, updated);
             }
             left -= take;
             removed += take;
@@ -178,32 +222,47 @@ public class HopperBoxOutputHandler implements Listener {
         return removed;
     }
 
-    private static boolean slotMatchesForRemoval(ItemStack slot, ItemStack moving) {
-        if (slot == null || slot.getType().isAir() || moving == null || moving.getType().isAir()) {
+    private static boolean slotMatchesForRemoval(ItemStack slot, ItemStack prototype) {
+        if (slot == null || slot.getType().isAir() || prototype == null || prototype.getType().isAir()) {
             return false;
         }
-        if (slot.isSimilar(moving)) {
+        if (slot.isSimilar(prototype)) {
             return true;
         }
-        return slot.getType() == moving.getType()
-                && FilterItemMatcher.matches(slot, moving)
-                && FilterItemMatcher.matches(moving, slot);
+        return slot.getType() == prototype.getType()
+                && FilterItemMatcher.matches(slot, prototype)
+                && FilterItemMatcher.matches(prototype, slot);
     }
 
-    private static void syncHopper(Inventory hopperInv) {
-        if (hopperInv.getHolder() instanceof Container container) {
-            container.getBlock().getState().update(true, false);
+    private static Inventory getContainerInventory(Block block) {
+        if (block == null) {
+            return null;
+        }
+        BlockState state = block.getState();
+        if (state instanceof Container container) {
+            return container.getInventory();
+        }
+        return null;
+    }
+
+    private static void syncContainer(Block block) {
+        if (block == null) {
+            return;
+        }
+        BlockState state = block.getState();
+        if (state instanceof Container) {
+            state.update(true, false);
         }
     }
 
-    private static void returnToHopper(Inventory hopperInv, ItemStack stack) {
+    private static void returnToHopper(Inventory hopperInv, ItemStack stack, Block hopperBlock) {
         if (stack == null || stack.getType().isAir()) {
             return;
         }
         HashMap<Integer, ItemStack> left = hopperInv.addItem(stack);
-        if (!left.isEmpty() && hopperInv.getHolder() instanceof BlockState blockState) {
+        if (!left.isEmpty()) {
             for (ItemStack drop : left.values()) {
-                blockState.getWorld().dropItemNaturally(blockState.getLocation().add(0.5, 0.5, 0.5), drop);
+                hopperBlock.getWorld().dropItemNaturally(hopperBlock.getLocation().add(0.5, 0.5, 0.5), drop);
             }
         }
     }
@@ -228,9 +287,12 @@ public class HopperBoxOutputHandler implements Listener {
         }
     }
 
-    private static boolean isInventoryBelowHopper(Block hopper, Inventory other) {
-        Block otherBlock = getInventoryBlock(other);
-        return otherBlock != null && otherBlock.equals(hopper.getRelative(BlockFace.DOWN));
+    private static boolean isBlockInventory(Inventory inventory, Block expectedBlock) {
+        if (inventory == null || expectedBlock == null) {
+            return false;
+        }
+        Block invBlock = getInventoryBlock(inventory);
+        return invBlock != null && invBlock.equals(expectedBlock);
     }
 
     private static Block getHopperBlock(Inventory inventory) {
