@@ -47,6 +47,11 @@ public class GuiManager implements Listener {
      * 创建 GUI 界面
      */
     private Inventory createGUI(Player player, int page) {
+        // 先按玩家实际可见称号归一化页码，避免 holder 与展示内容不同步。
+        List<TitleInfo> availableTitles = getAvailableTitles(player);
+        int totalPages = getTotalPages(availableTitles.size());
+        page = normalizePage(page, totalPages);
+
         // 从 Gui.yml 读取标题（任意语言均可，识别界面靠 TitleGuiHolder）
         String pageConfigPath = page == 0 ? "Page1.name" : "Page2.name";
         String guiTitle = plugin.getGuiConfig().getString(pageConfigPath, "&6称号仓库");
@@ -59,22 +64,25 @@ public class GuiManager implements Listener {
         // 1. 填充黑色玻璃板边框
         fillBorder(gui);
 
-        // 2. 获取玩家有权限的称号列表
-        List<TitleInfo> availableTitles = getAvailableTitles(player);
-
-        // 3. 分页处理
-        int totalPages = (int) Math.ceil((double) availableTitles.size() / TITLES_PER_PAGE);
-        if (page >= totalPages) {
-            page = Math.max(0, totalPages - 1);
-        }
-
-        // 4. 显示称号
+        // 2. 显示称号
         displayTitles(gui, player, availableTitles, page);
 
-        // 5. 设置分页按钮（第6行第5格，索引49）
+        // 3. 设置分页按钮（第6行第5格，索引49）
         setupPageButton(gui, player, page, totalPages);
 
         return gui;
+    }
+
+    static int getTotalPages(int titleCount) {
+        return Math.max(1, (int) Math.ceil((double) titleCount / TITLES_PER_PAGE));
+    }
+
+    static int normalizePage(int page, int totalPages) {
+        int lastPage = Math.max(0, totalPages - 1);
+        if (page < 0) {
+            return 0;
+        }
+        return Math.min(page, lastPage);
     }
 
     /**
@@ -351,15 +359,19 @@ public class GuiManager implements Listener {
         if (gui.getHolder() instanceof TitleGuiHolder titleHolder) {
             currentPage = titleHolder.getPage();
         }
+        int totalPages = getTotalPages(getAvailableTitles(player).size());
+        currentPage = normalizePage(currentPage, totalPages);
+
+        if (totalPages <= 1) {
+            return;
+        }
 
         if (currentPage == 0) {
             // 第1页点击下一页按钮 → 打开第2页
-            playerCurrentPage.put(player.getUniqueId(), 1);
             openTitleGUI(player, 1);
         } else {
             // 第2页点击返回上一页按钮 → 返回第1页
-            playerCurrentPage.put(player.getUniqueId(), 0);
-            openTitleGUI(player, 0);
+            openTitleGUI(player, currentPage - 1);
         }
     }
 
@@ -383,6 +395,7 @@ public class GuiManager implements Listener {
             currentPage = titleHolder.getPage();
         }
         List<TitleInfo> availableTitles = getAvailableTitles(player);
+        currentPage = normalizePage(currentPage, getTotalPages(availableTitles.size()));
         int globalIndex = currentPage * TITLES_PER_PAGE + titleIndex;
 
         if (globalIndex >= availableTitles.size()) {
