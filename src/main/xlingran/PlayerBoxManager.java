@@ -64,6 +64,14 @@ public final class PlayerBoxManager {
         boxes.put(name, copy);
     }
 
+    public int maxFit(UUID playerId, String boxName, ItemStack stack) {
+        ItemStack[] slots = getBoxContents(playerId, boxName);
+        if (slots == null) {
+            return 0;
+        }
+        return InventoryCapacity.maxFit(slots, stack);
+    }
+
     public HashMap<Integer, ItemStack> addItem(UUID playerId, String boxName, ItemStack stack) {
         HashMap<Integer, ItemStack> leftover = new HashMap<>();
         if (stack == null || stack.getType().isAir() || boxName == null) {

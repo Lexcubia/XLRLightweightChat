@@ -62,7 +62,11 @@ public class Shan extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new HopperListener(this, templateManager, hopperKeys), this);
         getServer().getPluginManager().registerEvents(new HopperReverseHandler(this, templateManager, hopperKeys), this);
         getServer().getPluginManager().registerEvents(
-                new HopperBoxOutputHandler(templateManager, hopperKeys, boxManager), this);
+                new HopperBoxOutputHandler(templateManager, hopperKeys, boxManager, () -> {
+                    if (dataStore != null && templateManager != null && boxManager != null) {
+                        dataStore.save(templateManager, boxManager);
+                    }
+                }), this);
         getServer().getPluginManager().registerEvents(new BatchModeListener(hopperKeys, playerGuiSession), this);
         getServer().getPluginManager().registerEvents(new HopperSettingsListener(gui, templateManager, hopperKeys), this);
 
