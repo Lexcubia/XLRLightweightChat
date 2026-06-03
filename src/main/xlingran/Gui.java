@@ -45,6 +45,7 @@ public class Gui implements Listener {
     private static final int SETTINGS_SLOT_ITEMS = 14;
     private static final int SETTINGS_SLOT_MODE = 16;
     private static final int BOX_LIST_SIZE = 27;
+    private static final int BOX_STORAGE_SIZE = 54;
     private static final int SETTINGS_SLOT_ENCHANT = 28;
     private static final int SETTINGS_SLOT_DURABILITY = 30;
     private static final int SETTINGS_SLOT_REMOTE = 32;
@@ -139,6 +140,27 @@ public class Gui implements Listener {
         player.openInventory(inv);
     }
 
+    public void openBoxStorage(Player player, String boxName) {
+        UUID playerId = player.getUniqueId();
+        if (!boxManager.hasBox(playerId, boxName)) {
+            player.sendMessage(color("&c仓库不存在: &b" + boxName));
+            return;
+        }
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.BOX_STORAGE, boxName),
+                BOX_STORAGE_SIZE, color("&e仓库: &b" + boxName));
+        bindHolder(inv, GuiType.BOX_STORAGE);
+
+        ItemStack[] contents = boxManager.getBoxContents(playerId, boxName);
+        if (contents != null) {
+            for (int i = 0; i < BOX_STORAGE_SIZE && i < contents.length; i++) {
+                if (contents[i] != null && !contents[i].getType().isAir()) {
+                    inv.setItem(i, contents[i].clone());
+                }
+            }
+        }
+        player.openInventory(inv);
+    }
+
     public void openHopperSettings(Player player, Block hopperBlock) {
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER) {
             return;
@@ -220,6 +242,10 @@ public class Gui implements Listener {
             handleFilterItemsClick(event);
             return;
         }
+        if (holder.getType() == GuiType.BOX_STORAGE) {
+            handleBoxStorageClick(event);
+            return;
+        }
         event.setCancelled(true);
         if (GuiClickGuard.shouldIgnoreClick(sessions, player)) {
             return;
@@ -252,7 +278,7 @@ public class Gui implements Listener {
         if (holder == null) {
             return;
         }
-        if (holder.getType() != GuiType.FILTER_ITEMS) {
+        if (holder.getType() != GuiType.FILTER_ITEMS && holder.getType() != GuiType.BOX_STORAGE) {
             GuiClickGuard.cancelDrag(event);
         }
     }
@@ -276,6 +302,13 @@ public class Gui implements Listener {
         }
         if (holder.getType() == GuiType.TEMPLATE_SETTINGS) {
             saveData();
+        }
+        if (holder.getType() == GuiType.BOX_STORAGE) {
+            String boxName = holder.getTemplateName();
+            if (boxName != null) {
+                saveBoxStorage(player, event.getInventory(), boxName);
+                saveData();
+            }
         }
     }
 
@@ -462,7 +495,32 @@ public class Gui implements Listener {
             openTemplateSettings(player, linkingTemplate);
             return;
         }
-        player.sendMessage(color("&7漏斗仓库界面无法打开储物，请在模板设置中链接使用"));
+        openBoxStorage(player, boxName);
+    }
+
+    private void handleBoxStorageClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player)) {
+            return;
+        }
+        InventoryView view = event.getView();
+        int topSize = view.getTopInventory().getSize();
+        if (event.getClick() == ClickType.NUMBER_KEY && event.getRawSlot() < topSize) {
+            event.setCancelled(true);
+        }
+    }
+
+    private void saveBoxStorage(Player player, Inventory inventory, String boxName) {
+        if (!boxManager.hasBox(player.getUniqueId(), boxName)) {
+            return;
+        }
+        ItemStack[] contents = new ItemStack[PlayerBoxManager.BOX_CAPACITY];
+        for (int i = 0; i < BOX_STORAGE_SIZE && i < contents.length; i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (stack != null && !stack.getType().isAir()) {
+                contents[i] = stack.clone();
+            }
+        }
+        boxManager.setBoxContents(player.getUniqueId(), boxName, contents);
     }
 
     private void handleHopperSettingsClick(Player player, int slot, ClickType click, XlrGuiHolder holder) {
@@ -684,8 +742,8 @@ public class Gui implements Listener {
 
     private ItemStack boxListItem(String boxName) {
         return button(Material.ENDER_CHEST, "&b" + boxName, List.of(
-                "&7模板链接时左键选择",
-                "&7无法在此界面打开储物"));
+                "&7左键打开仓库（6行）",
+                "&7模板链接时左键选择"));
     }
 
     private ItemStack modeButton(HopperTemplate template) {

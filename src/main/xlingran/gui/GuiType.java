@@ -6,5 +6,6 @@ public enum GuiType {
     FILTER_ITEMS,
     FILTER_ENCHANTS,
     HOPPER_SETTINGS,
-    BOX_LIST
+    BOX_LIST,
+    BOX_STORAGE
 }

@@ -26,7 +26,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode` | 编辑已有模板，打开「模板设置」 |
 | `/xlrhopper mode` | `xlrhopper.mode` | 打开「漏斗模板」列表 GUI |
 | `/xlrhopper box` | `xlrhopper.box` | 打开「漏斗仓库」列表 GUI |
-| `/xlrhopper create box <名称>` | `xlrhopper.create.box` | 创建名为 `<名称>` 的漏斗仓库（27 格，仅漏斗输出存入） |
+| `/xlrhopper create box <名称>` | `xlrhopper.create.box` | 创建名为 `<名称>` 的漏斗仓库（6 行 54 格） |
 
 - 根命令不在 `plugin.yml` 绑定单一 permission；各子命令在代码内分别校验。
 - 无权限时发送对应拒绝提示（硬编码）。
@@ -57,7 +57,7 @@ players:
         durability-threshold: 100    # 可选
     boxes:
       <仓库名>:
-        0: {ItemStack 序列化}        # 槽位索引 0–26
+        0: {ItemStack 序列化}        # 槽位索引 0–53
         enchant-filters:             # 可选，key 为附魔 registry 名
           sharpness: 5
 ```
@@ -173,9 +173,10 @@ players:
 
 ### 4.6 漏斗仓库
 
-- **列表**：`&e漏斗仓库`（3 行 × 9 = **27 格**），`/xlrhopper box` 仅查看已创建仓库名
-- **不可** 在列表界面左键打开储物；仅在「模板设置 → 链接漏斗仓库」流程中左键 **选择链接**
-- 仓库 **27 格** 数据由链接漏斗的 **双路输出** 写入，不提供玩家手动打开编辑界面
+- **列表**：`&e漏斗仓库`（3 行 × 9 = **27 格**），`/xlrhopper box`；左键打开 **自己创建** 的对应仓库
+- **单仓**：`&e仓库: <名称>`，**6 行 × 9 = 54 格**；可自由放入/拿出；关闭时保存；交互规则同「过滤的物品」
+- 「模板设置 → 链接漏斗仓库」流程中，在列表左键为 **选择链接**（不打开储物）
+- 链接漏斗的 **双路输出** 仍会向仓库写入物品
 
 ---
 
