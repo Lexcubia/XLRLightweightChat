@@ -50,17 +50,17 @@ public final class HopperDualPathTransfer {
             return TransferResult.NONE;
         }
 
-        int belowCap = InventoryCapacity.maxFit(belowInv, prototype);
-        int boxCap = boxManager.maxFit(owner, boxName, prototype);
-        if (boxCap <= 0) {
+        int planMove = Math.min(requestedAmount, available);
+        int belowCap = InventoryCapacity.maxFit(belowInv, prototype, planMove);
+        int boxCap = boxManager.maxFit(owner, boxName, prototype, planMove);
+        if (boxCap <= 0 && belowCap <= 0) {
             return TransferResult.NONE;
         }
-        int sumCap = belowCap + boxCap;
-        if (sumCap <= 0) {
+        planMove = Math.min(planMove, belowCap + boxCap);
+        if (planMove <= 0) {
             return TransferResult.NONE;
         }
 
-        int planMove = Math.min(requestedAmount, Math.min(available, sumCap));
         int countBefore = countMatching(hopperInv, prototype);
         int removed = removeFromHopper(hopperInv, prototype, planMove);
         int countAfter = countMatching(hopperInv, prototype);
@@ -74,13 +74,11 @@ public final class HopperDualPathTransfer {
             removed = verifiedRemoved;
         }
 
-        int toBelow = splitAmount(removed, belowCap, boxCap);
-        int toBox = removed - toBelow;
-        toBelow = Math.min(toBelow, belowCap);
-        toBox = Math.min(toBox, boxCap);
-        if (toBelow + toBox > removed) {
-            toBox = removed - toBelow;
-        }
+        belowCap = InventoryCapacity.maxFit(belowInv, prototype, removed);
+        boxCap = boxManager.maxFit(owner, boxName, prototype, removed);
+        int[] split = allocateWarehouseFirst(removed, belowCap, boxCap);
+        int toBox = split[0];
+        int toBelow = split[1];
 
         int distributed = 0;
         boolean boxChanged = false;
@@ -159,17 +157,13 @@ public final class HopperDualPathTransfer {
         return remaining;
     }
 
-    private static int splitAmount(int removed, int belowCap, int boxCap) {
-        if (removed <= 0) {
-            return 0;
-        }
-        if (boxCap <= 0) {
-            return Math.min(removed, belowCap);
-        }
-        if (belowCap <= 0) {
-            return 0;
-        }
-        return (int) ((long) removed * belowCap / (belowCap + boxCap));
+    /**
+     * 链接仓库优先：先填满仓库，仅当仓库放不下时才写入下方容器。
+     */
+    private static int[] allocateWarehouseFirst(int removed, int belowCap, int boxCap) {
+        int toBox = Math.min(removed, Math.max(0, boxCap));
+        int toBelow = Math.min(removed - toBox, Math.max(0, belowCap));
+        return new int[]{toBox, toBelow};
     }
 
     private static int removeFromHopper(Inventory hopperInv, ItemStack prototype, int amount) {

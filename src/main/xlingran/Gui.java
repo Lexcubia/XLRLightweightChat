@@ -146,11 +146,13 @@ public class Gui implements Listener {
             player.sendMessage(color("&c仓库不存在: &b" + boxName));
             return;
         }
+        ItemStack[] contents = boxManager.getBoxContents(playerId, boxName);
+        sessions.setOpenBoxSnapshot(playerId, boxName, contents);
+
         Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.BOX_STORAGE, boxName),
                 BOX_STORAGE_SIZE, color("&e仓库: &b" + boxName));
         bindHolder(inv, GuiType.BOX_STORAGE);
 
-        ItemStack[] contents = boxManager.getBoxContents(playerId, boxName);
         if (contents != null) {
             for (int i = 0; i < BOX_STORAGE_SIZE && i < contents.length; i++) {
                 if (contents[i] != null && !contents[i].getType().isAir()) {
@@ -159,6 +161,32 @@ public class Gui implements Listener {
             }
         }
         player.openInventory(inv);
+    }
+
+    /** 漏斗写入链接仓库后，刷新玩家当前打开的仓库界面，避免关闭 GUI 时用旧快照覆盖新入库。 */
+    public void refreshOpenBoxStorage(UUID ownerId, String boxName) {
+        if (ownerId == null || boxName == null || boxName.isEmpty()) {
+            return;
+        }
+        ItemStack[] live = boxManager.getBoxContents(ownerId, boxName);
+        if (live == null) {
+            return;
+        }
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (!player.getUniqueId().equals(ownerId)) {
+                continue;
+            }
+            InventoryView view = player.getOpenInventory();
+            XlrGuiHolder holder = XlrGuiHolder.from(view.getTopInventory());
+            if (holder == null || holder.getType() != GuiType.BOX_STORAGE || !boxName.equals(holder.getTemplateName())) {
+                continue;
+            }
+            Inventory top = view.getTopInventory();
+            for (int i = 0; i < BOX_STORAGE_SIZE && i < live.length; i++) {
+                ItemStack stack = live[i];
+                top.setItem(i, stack == null || stack.getType().isAir() ? null : stack.clone());
+            }
+        }
     }
 
     public void openHopperSettings(Player player, Block hopperBlock) {
@@ -307,6 +335,7 @@ public class Gui implements Listener {
             String boxName = holder.getTemplateName();
             if (boxName != null) {
                 saveBoxStorage(player, event.getInventory(), boxName);
+                sessions.clearOpenBoxSnapshot(player.getUniqueId());
                 saveData();
             }
         }
@@ -510,17 +539,39 @@ public class Gui implements Listener {
     }
 
     private void saveBoxStorage(Player player, Inventory inventory, String boxName) {
-        if (!boxManager.hasBox(player.getUniqueId(), boxName)) {
+        UUID playerId = player.getUniqueId();
+        if (!boxManager.hasBox(playerId, boxName)) {
             return;
         }
+        ItemStack[] live = boxManager.getBoxContents(playerId, boxName);
+        PlayerGuiSession.BoxOpenState openState = sessions.getOpenBoxSnapshot(playerId);
+        ItemStack[] snapshot = openState != null && boxName.equals(openState.boxName())
+                ? openState.snapshot() : null;
+
         ItemStack[] contents = new ItemStack[PlayerBoxManager.BOX_CAPACITY];
         for (int i = 0; i < BOX_STORAGE_SIZE && i < contents.length; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (stack != null && !stack.getType().isAir()) {
-                contents[i] = stack.clone();
+            ItemStack guiStack = inventory.getItem(i);
+            ItemStack snapStack = snapshot != null && i < snapshot.length ? snapshot[i] : null;
+            if (snapshot != null && !slotStacksEqual(guiStack, snapStack)) {
+                contents[i] = guiStack == null || guiStack.getType().isAir() ? null : guiStack.clone();
+            } else if (live != null && i < live.length) {
+                ItemStack backend = live[i];
+                contents[i] = backend == null || backend.getType().isAir() ? null : backend.clone();
+            } else if (guiStack != null && !guiStack.getType().isAir()) {
+                contents[i] = guiStack.clone();
             }
         }
-        boxManager.setBoxContents(player.getUniqueId(), boxName, contents);
+        boxManager.setBoxContents(playerId, boxName, contents);
+    }
+
+    private static boolean slotStacksEqual(ItemStack a, ItemStack b) {
+        if (a == null || a.getType().isAir()) {
+            return b == null || b.getType().isAir();
+        }
+        if (b == null || b.getType().isAir()) {
+            return false;
+        }
+        return a.isSimilar(b) && a.getAmount() == b.getAmount();
     }
 
     private void handleHopperSettingsClick(Player player, int slot, ClickType click, XlrGuiHolder holder) {

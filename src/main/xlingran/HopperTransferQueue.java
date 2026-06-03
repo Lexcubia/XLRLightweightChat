@@ -4,8 +4,11 @@ import org.bukkit.Location;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,15 +23,18 @@ public final class HopperTransferQueue {
     private final HopperKeys keys;
     private final PlayerBoxManager boxManager;
     private final Runnable persistBoxes;
+    private final BiConsumer<UUID, String> onBoxViewRefresh;
     private final Map<String, HopperLane> lanes = new ConcurrentHashMap<>();
 
     public HopperTransferQueue(JavaPlugin plugin, HopperTemplateManager templateManager, HopperKeys keys,
-                               PlayerBoxManager boxManager, Runnable persistBoxes) {
+                               PlayerBoxManager boxManager, Runnable persistBoxes,
+                               BiConsumer<UUID, String> onBoxViewRefresh) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.keys = keys;
         this.boxManager = boxManager;
         this.persistBoxes = persistBoxes;
+        this.onBoxViewRefresh = onBoxViewRefresh;
     }
 
     public void enqueue(Location hopperLoc, Location belowLoc, UUID owner, String boxName,
@@ -56,6 +62,7 @@ public final class HopperTransferQueue {
             return;
         }
         boolean boxDirty = false;
+        Set<String> refreshedBoxes = new HashSet<>();
         try {
             TransferRequest req;
             int processed = 0;
@@ -69,6 +76,7 @@ public final class HopperTransferQueue {
                         templateManager, keys, boxManager);
                 if (result == HopperDualPathTransfer.TransferResult.BOX_CHANGED) {
                     boxDirty = true;
+                    refreshedBoxes.add(req.owner + "\0" + req.boxName);
                 }
             }
         } finally {
@@ -81,6 +89,20 @@ public final class HopperTransferQueue {
         }
         if (boxDirty && persistBoxes != null) {
             persistBoxes.run();
+        }
+        if (onBoxViewRefresh != null) {
+            for (String entry : refreshedBoxes) {
+                int sep = entry.indexOf('\0');
+                if (sep <= 0) {
+                    continue;
+                }
+                try {
+                    UUID owner = UUID.fromString(entry.substring(0, sep));
+                    String boxName = entry.substring(sep + 1);
+                    onBoxViewRefresh.accept(owner, boxName);
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
         }
     }
 

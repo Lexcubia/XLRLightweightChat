@@ -66,7 +66,7 @@ public class Shan extends JavaPlugin {
                     if (dataStore != null && templateManager != null && boxManager != null) {
                         dataStore.save(templateManager, boxManager);
                     }
-                }), this);
+                }, gui::refreshOpenBoxStorage), this);
         getServer().getPluginManager().registerEvents(new BatchModeListener(hopperKeys, playerGuiSession), this);
         getServer().getPluginManager().registerEvents(new HopperSettingsListener(gui, templateManager, hopperKeys), this);
 

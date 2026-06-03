@@ -10,10 +10,14 @@ public final class InventoryCapacity {
     }
 
     public static int maxFit(Inventory inventory, ItemStack stack) {
-        if (inventory == null || stack == null || stack.getType().isAir()) {
+        return maxFit(inventory, stack, stack == null ? 0 : stack.getAmount());
+    }
+
+    public static int maxFit(Inventory inventory, ItemStack stack, int maxCount) {
+        if (inventory == null || stack == null || stack.getType().isAir() || maxCount <= 0) {
             return 0;
         }
-        int need = stack.getAmount();
+        int need = maxCount;
         int fit = 0;
         int maxStack = stack.getMaxStackSize();
         for (int i = 0; i < inventory.getSize(); i++) {
@@ -26,10 +30,14 @@ public final class InventoryCapacity {
     }
 
     public static int maxFit(ItemStack[] slots, ItemStack stack) {
-        if (slots == null || stack == null || stack.getType().isAir()) {
+        return maxFit(slots, stack, stack == null ? 0 : stack.getAmount());
+    }
+
+    public static int maxFit(ItemStack[] slots, ItemStack stack, int maxCount) {
+        if (slots == null || stack == null || stack.getType().isAir() || maxCount <= 0) {
             return 0;
         }
-        int need = stack.getAmount();
+        int need = maxCount;
         int fit = 0;
         int maxStack = stack.getMaxStackSize();
         for (ItemStack slot : slots) {

@@ -65,11 +65,15 @@ public final class PlayerBoxManager {
     }
 
     public int maxFit(UUID playerId, String boxName, ItemStack stack) {
+        return maxFit(playerId, boxName, stack, stack == null ? 0 : stack.getAmount());
+    }
+
+    public int maxFit(UUID playerId, String boxName, ItemStack stack, int maxCount) {
         ItemStack[] slots = getBoxContents(playerId, boxName);
         if (slots == null) {
             return 0;
         }
-        return InventoryCapacity.maxFit(slots, stack);
+        return InventoryCapacity.maxFit(slots, stack, maxCount);
     }
 
     public HashMap<Integer, ItemStack> addItem(UUID playerId, String boxName, ItemStack stack) {
@@ -87,7 +91,7 @@ public final class PlayerBoxManager {
         for (int i = 0; i < BOX_CAPACITY && remaining.getAmount() > 0; i++) {
             ItemStack inSlot = slots[i];
             if (inSlot == null || inSlot.getType().isAir()) {
-                slots[i] = remaining;
+                slots[i] = remaining.clone();
                 return leftover;
             }
             if (inSlot.isSimilar(remaining)) {

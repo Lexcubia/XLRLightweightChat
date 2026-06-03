@@ -1,6 +1,7 @@
 package xlingran;
 
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -21,6 +22,10 @@ public final class PlayerGuiSession {
     private final Map<UUID, Long> lastClickMillis = new java.util.HashMap<>();
     private final Map<UUID, Enchantment> pendingEnchant = new HashMap<>();
     private final Map<UUID, String> linkingBoxTemplate = new HashMap<>();
+    private final Map<UUID, BoxOpenState> openBoxSnapshot = new HashMap<>();
+
+    public record BoxOpenState(String boxName, ItemStack[] snapshot) {
+    }
 
     public String getEditingTemplate(UUID playerId) {
         return editingTemplate.get(playerId);
@@ -95,6 +100,30 @@ public final class PlayerGuiSession {
         clearInput(playerId);
         editingTemplate.remove(playerId);
         linkingBoxTemplate.remove(playerId);
+        openBoxSnapshot.remove(playerId);
+    }
+
+    public void setOpenBoxSnapshot(UUID playerId, String boxName, ItemStack[] snapshot) {
+        if (boxName == null || boxName.isBlank()) {
+            openBoxSnapshot.remove(playerId);
+            return;
+        }
+        ItemStack[] copy = new ItemStack[PlayerBoxManager.BOX_CAPACITY];
+        if (snapshot != null) {
+            for (int i = 0; i < copy.length && i < snapshot.length; i++) {
+                ItemStack stack = snapshot[i];
+                copy[i] = stack == null ? null : stack.clone();
+            }
+        }
+        openBoxSnapshot.put(playerId, new BoxOpenState(boxName, copy));
+    }
+
+    public BoxOpenState getOpenBoxSnapshot(UUID playerId) {
+        return openBoxSnapshot.get(playerId);
+    }
+
+    public void clearOpenBoxSnapshot(UUID playerId) {
+        openBoxSnapshot.remove(playerId);
     }
 
     public void setLinkingBoxTemplate(UUID playerId, String templateName) {

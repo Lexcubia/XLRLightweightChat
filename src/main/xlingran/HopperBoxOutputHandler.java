@@ -14,6 +14,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 /**
  * 拦截漏斗向下原版传输，交由 {@link HopperTransferQueue} 串行队列处理双路拆分。
@@ -26,11 +27,13 @@ public class HopperBoxOutputHandler implements Listener {
     private final HopperTransferQueue transferQueue;
 
     public HopperBoxOutputHandler(JavaPlugin plugin, HopperTemplateManager templateManager, HopperKeys keys,
-                                  PlayerBoxManager boxManager, Runnable persistBoxes) {
+                                  PlayerBoxManager boxManager, Runnable persistBoxes,
+                                  BiConsumer<UUID, String> onBoxViewRefresh) {
         this.templateManager = templateManager;
         this.keys = keys;
         this.boxManager = boxManager;
-        this.transferQueue = new HopperTransferQueue(plugin, templateManager, keys, boxManager, persistBoxes);
+        this.transferQueue = new HopperTransferQueue(plugin, templateManager, keys, boxManager, persistBoxes,
+                onBoxViewRefresh);
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
