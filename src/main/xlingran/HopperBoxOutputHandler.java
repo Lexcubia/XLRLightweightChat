@@ -15,7 +15,7 @@ import java.util.HashMap;
 import java.util.UUID;
 
 /**
- * 链接仓库输出：漏斗向下输出时优先填满下方容器，仅溢出部分写入链接仓库（不复制物品）。
+ * 双路同时传输：漏斗向正下方容器每成功转出一份，同时向链接仓库存入一份相同物品（总量为下方的 2 倍，受仓库容量限制）。
  */
 public class HopperBoxOutputHandler implements Listener {
 
@@ -29,7 +29,7 @@ public class HopperBoxOutputHandler implements Listener {
         this.boxManager = boxManager;
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onInventoryMove(InventoryMoveItemEvent event) {
         if (event.getSource().getType() != InventoryType.HOPPER) {
             return;
@@ -53,105 +53,26 @@ public class HopperBoxOutputHandler implements Listener {
         if (owner == null || !boxManager.hasBox(owner, boxName)) {
             return;
         }
-        ItemStack moving = event.getItem();
-        if (moving == null || moving.getType().isAir()) {
+        ItemStack moved = event.getItem();
+        if (moved == null || moved.getType().isAir()) {
             return;
         }
-        if (!template.allows(moving, hopperBlock, keys)) {
-            return;
-        }
-
-        Inventory dest = event.getDestination();
-        int total = moving.getAmount();
-        int fitBelow = maxFit(dest, moving);
-        if (fitBelow >= total) {
+        if (!template.allows(moved, hopperBlock, keys)) {
             return;
         }
 
-        event.setCancelled(true);
-        Inventory hopperInv = event.getSource();
-
-        int toBelow = fitBelow;
-        int toBox = total - fitBelow;
-
-        if (toBelow > 0) {
-            ItemStack forBelow = moving.clone();
-            forBelow.setAmount(toBelow);
-            HashMap<Integer, ItemStack> belowLeft = dest.addItem(forBelow);
-            for (ItemStack left : belowLeft.values()) {
-                toBox += left.getAmount();
-            }
-        }
-
-        if (toBox > 0) {
-            ItemStack forBox = moving.clone();
-            forBox.setAmount(toBox);
-            if (!template.allows(forBox, hopperBlock, keys)) {
-                returnItemsToHopper(hopperInv, forBox);
-                removeFromHopper(hopperInv, moving, total);
-                return;
-            }
-            HashMap<Integer, ItemStack> boxLeft = boxManager.addItem(owner, boxName, forBox);
-            for (ItemStack left : boxLeft.values()) {
-                returnItemsToHopper(hopperInv, left);
-            }
-        }
-
-        removeFromHopper(hopperInv, moving, total);
-    }
-
-    /** 下方容器最多能接纳的数量（不修改库存）。 */
-    static int maxFit(Inventory inventory, ItemStack stack) {
-        if (inventory == null || stack == null || stack.getType().isAir()) {
-            return 0;
-        }
-        int need = stack.getAmount();
-        int fit = 0;
-        int maxStack = stack.getMaxStackSize();
-        for (int i = 0; i < inventory.getSize(); i++) {
-            ItemStack slot = inventory.getItem(i);
-            if (slot == null || slot.getType().isAir()) {
-                int add = Math.min(need - fit, maxStack);
-                fit += add;
-            } else if (slot.isSimilar(stack)) {
-                int space = maxStack - slot.getAmount();
-                if (space > 0) {
-                    fit += Math.min(need - fit, space);
-                }
-            }
-            if (fit >= need) {
-                return need;
-            }
-        }
-        return fit;
-    }
-
-    private static void removeFromHopper(Inventory hopperInv, ItemStack prototype, int amount) {
-        int left = amount;
-        for (int i = 0; i < hopperInv.getSize() && left > 0; i++) {
-            ItemStack slot = hopperInv.getItem(i);
-            if (slot == null || slot.getType().isAir() || !slot.isSimilar(prototype)) {
-                continue;
-            }
-            int take = Math.min(left, slot.getAmount());
-            slot.setAmount(slot.getAmount() - take);
-            if (slot.getAmount() <= 0) {
-                hopperInv.setItem(i, null);
-            }
-            left -= take;
+        ItemStack copy = moved.clone();
+        HashMap<Integer, ItemStack> leftover = boxManager.addItem(owner, boxName, copy);
+        for (ItemStack left : leftover.values()) {
+            dropNearHopper(hopperBlock, left);
         }
     }
 
-    private static void returnItemsToHopper(Inventory hopperInv, ItemStack stack) {
-        if (stack == null || stack.getType().isAir()) {
+    private static void dropNearHopper(Block hopperBlock, ItemStack stack) {
+        if (hopperBlock == null || stack == null || stack.getType().isAir()) {
             return;
         }
-        HashMap<Integer, ItemStack> left = hopperInv.addItem(stack);
-        for (ItemStack drop : left.values()) {
-            if (hopperInv.getHolder() instanceof BlockState blockState) {
-                blockState.getWorld().dropItemNaturally(blockState.getLocation().add(0.5, 0.5, 0.5), drop);
-            }
-        }
+        hopperBlock.getWorld().dropItemNaturally(hopperBlock.getLocation().add(0.5, 0.5, 0.5), stack);
     }
 
     private UUID resolveOwner(Block block) {
