@@ -232,7 +232,12 @@ players:
 
 - 模板 `linked-box` 已设置时，漏斗向 **正下方** 转出 N 个物品：按 **下方容器剩余空间** 与 **链接仓库剩余空间** 的比例拆成两份，**总量仍为 N**（不复制）
 - 例：N=64，下方能收 50、仓库能收 53 → 约 `64×50/(50+53)` 进下方，其余进仓库
-- 仅统计向下 `InventoryMoveItemEvent`；仓库变更后写入 `data.yml`（关服、关仓库 GUI、漏斗写入后均保存）
+- **传输管线**（`HopperBoxOutputHandler` → `HopperTransferQueue` → `HopperDualPathTransfer`）：
+  - `InventoryMoveItemEvent` **LOWEST** 取消原版向下传输，仅 **入队**（不直接改事件内库存）
+  - 按漏斗方块 `world:x:y:z` **单 lane 串行**；同一漏斗同时只跑一个 worker，TPS 低时请求排队而非叠多个 `runTask` 重复扣写
+  - 单 tick 单 lane 最多处理 256 条，超出打 warning 并延后
+  - 执行时从 **方块实体** `Container` 扣减；扣减前后 `countMatching` 校验实际减少量，再写入下方与仓库；写入失败 **退回漏斗**（满则掉落）
+- 仓库变更后写入 `data.yml`（关服、关仓库 GUI、漏斗写入后均保存）
 
 ### 6.3.2 自动销毁（auto-destroy）
 
