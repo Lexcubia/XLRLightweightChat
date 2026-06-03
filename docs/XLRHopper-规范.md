@@ -22,7 +22,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 | 指令 | 权限节点 | 说明 |
 |------|----------|------|
-| `/xlrhopper create mode <名称>` | `xlrhopper.create.mode` | 创建名为 `<名称>` 的模板（默认未启用、白名单），并打开「模板设置」 |
+| `/xlrhopper create mode <名称>` | `xlrhopper.create.mode` | 创建名为 `<名称>` 的模板（默认未启用、黑名单），并打开「模板设置」 |
 | `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode` | 编辑已有模板，打开「模板设置」 |
 | `/xlrhopper mode` | `xlrhopper.mode` | 打开「漏斗模板」列表 GUI |
 | `/xlrhopper box` | `xlrhopper.box` | 打开「漏斗仓库」列表 GUI |
@@ -48,7 +48,7 @@ players:
     enabled-template: "模板名"   # 当前唯一启用的模板；省略或空表示全部关闭
     templates:
       <模板名>:
-        whitelist: true          # true=白名单 false=黑名单（仅影响材质过滤）
+        whitelist: false         # true=白名单 false=黑名单（新建模板默认黑名单）
         materials:
           - DIAMOND
         filter-items: []             # ItemStack 序列化列表（样板匹配）

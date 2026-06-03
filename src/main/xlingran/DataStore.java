@@ -56,7 +56,7 @@ final class DataStore {
                             continue;
                         }
                         HopperTemplate template = new HopperTemplate();
-                        template.setWhitelist(tSec.getBoolean("whitelist", true));
+                        template.setWhitelist(tSec.getBoolean("whitelist", false));
                         template.setAutoDestroy(tSec.getBoolean("auto-destroy", false));
                         String linkedBox = tSec.getString("linked-box");
                         if (linkedBox != null && !linkedBox.isEmpty()) {

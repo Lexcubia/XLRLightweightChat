@@ -11,7 +11,7 @@ import java.util.Map;
 
 public class HopperTemplate {
 
-    private boolean whitelist = true;
+    private boolean whitelist = false;
     private boolean autoDestroy;
     private String linkedBoxName;
     private final List<ItemStack> filterPrototypes = new ArrayList<>();
