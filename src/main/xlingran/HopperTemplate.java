@@ -136,6 +136,12 @@ public class HopperTemplate {
         enchantMinLevels.put(enchant, minLevel);
     }
 
+    public void removeEnchantMinLevel(Enchantment enchant) {
+        if (enchant != null) {
+            enchantMinLevels.remove(enchant);
+        }
+    }
+
     public boolean allows(ItemStack stack, Block hopperBlock, HopperKeys keys) {
         if (stack == null || stack.getType().isAir()) {
             return false;

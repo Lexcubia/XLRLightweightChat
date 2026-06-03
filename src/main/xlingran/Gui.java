@@ -209,7 +209,7 @@ public class Gui implements Listener {
         switch (holder.getType()) {
             case TEMPLATE_LIST -> handleTemplateListClick(player, slot, event.getClick());
             case TEMPLATE_SETTINGS -> handleSettingsClick(player, slot, event.getClick(), holder);
-            case FILTER_ENCHANTS -> handleFilterEnchantsClick(player, slot, holder);
+            case FILTER_ENCHANTS -> handleFilterEnchantsClick(player, slot, event.getClick(), holder);
             case HOPPER_SETTINGS -> handleHopperSettingsClick(player, slot, event.getClick(), holder);
             default -> {
             }
@@ -492,7 +492,7 @@ public class Gui implements Listener {
         }
     }
 
-    private void handleFilterEnchantsClick(Player player, int slot, XlrGuiHolder holder) {
+    private void handleFilterEnchantsClick(Player player, int slot, ClickType click, XlrGuiHolder holder) {
         if (slot < 0 || slot >= 54) {
             return;
         }
@@ -509,6 +509,18 @@ public class Gui implements Listener {
             return;
         }
         Enchantment selected = enchants.get(slot);
+        if (click == ClickType.RIGHT || click == ClickType.SHIFT_RIGHT) {
+            if (template.getEnchantMinLevels().containsKey(selected)) {
+                template.removeEnchantMinLevel(selected);
+                saveData();
+                player.sendMessage(color("&a已清除附魔过滤: &e" + formatEnchantName(selected)));
+                openFilterEnchants(player, templateName);
+            }
+            return;
+        }
+        if (click != ClickType.LEFT && click != ClickType.SHIFT_LEFT) {
+            return;
+        }
         player.closeInventory();
         sessions.setPendingEnchant(player.getUniqueId(), selected);
         sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.ENCHANT_LEVEL, templateName);
@@ -728,8 +740,11 @@ public class Gui implements Listener {
                 meta = storageMeta;
             }
             lore.add(color("&a当前过滤: &e" + displayName + " " + minLevel));
+            lore.add(color("&7左键 修改等级"));
+            lore.add(color("&7右键 清除过滤"));
+        } else {
+            lore.add(color("&7左键 设置最低等级"));
         }
-        lore.add(color("&7点击设置最低等级"));
         meta.setLore(lore);
         book.setItemMeta(meta);
         return book;
