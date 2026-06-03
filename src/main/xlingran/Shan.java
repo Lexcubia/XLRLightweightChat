@@ -12,6 +12,7 @@ public class Shan extends JavaPlugin {
     private HopperTemplateManager templateManager;
     private PlayerGuiSession playerGuiSession;
     private DataStore dataStore;
+    private PlayerBoxManager boxManager;
     private Gui gui;
     private HopperKeys hopperKeys;
 
@@ -27,6 +28,14 @@ public class Shan extends JavaPlugin {
         return gui;
     }
 
+    public PlayerBoxManager getBoxManager() {
+        return boxManager;
+    }
+
+    public HopperKeys getHopperKeys() {
+        return hopperKeys;
+    }
+
     @Override
     public void onEnable() {
         instance = this;
@@ -36,10 +45,11 @@ public class Shan extends JavaPlugin {
         templateManager = new HopperTemplateManager();
         playerGuiSession = new PlayerGuiSession();
         dataStore = new DataStore(getDataFolder(), getLogger());
-        dataStore.load(templateManager);
+        boxManager = new PlayerBoxManager();
+        dataStore.load(templateManager, boxManager);
 
         hopperKeys = new HopperKeys(this);
-        gui = new Gui(this, templateManager, playerGuiSession, dataStore);
+        gui = new Gui(this, templateManager, playerGuiSession, dataStore, boxManager, hopperKeys);
 
         PluginCommand cmd = getCommand("xlrhopper");
         if (cmd != null) {
@@ -51,7 +61,10 @@ public class Shan extends JavaPlugin {
         getServer().getPluginManager().registerEvents(gui, this);
         getServer().getPluginManager().registerEvents(new HopperListener(this, templateManager, hopperKeys), this);
         getServer().getPluginManager().registerEvents(new HopperReverseHandler(this, templateManager, hopperKeys), this);
+        getServer().getPluginManager().registerEvents(
+                new HopperBoxOutputHandler(templateManager, hopperKeys, boxManager), this);
         getServer().getPluginManager().registerEvents(new BatchModeListener(hopperKeys, playerGuiSession), this);
+        getServer().getPluginManager().registerEvents(new HopperSettingsListener(gui, templateManager, hopperKeys), this);
 
         Bukkit.getConsoleSender().sendMessage(
                 ChatColor.GREEN + "欢迎使用寄寄の家 "
@@ -61,8 +74,8 @@ public class Shan extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        if (dataStore != null && templateManager != null) {
-            dataStore.save(templateManager);
+        if (dataStore != null && templateManager != null && boxManager != null) {
+            dataStore.save(templateManager, boxManager);
         }
         Bukkit.getConsoleSender().sendMessage(
                 ChatColor.RED + "插件 "

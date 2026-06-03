@@ -25,6 +25,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `/xlrhopper create mode <名称>` | `xlrhopper.create.mode` | 创建名为 `<名称>` 的模板（默认未启用、白名单），并打开「模板设置」 |
 | `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode` | 编辑已有模板，打开「模板设置」 |
 | `/xlrhopper mode` | `xlrhopper.mode` | 打开「漏斗模板」列表 GUI |
+| `/xlrhopper box` | `xlrhopper.box` | 打开「漏斗仓库」列表 GUI |
+| `/xlrhopper create box <名称>` | `xlrhopper.create.box` | 创建名为 `<名称>` 的漏斗仓库（64 格有效） |
 
 - 根命令不在 `plugin.yml` 绑定单一 permission；各子命令在代码内分别校验。
 - 无权限时发送对应拒绝提示（硬编码）。
@@ -50,9 +52,12 @@ players:
         materials:
           - DIAMOND
         filter-items: []             # ItemStack 序列化列表（样板匹配）
-        reverse-suction: false
-        redstone-list-toggle: false
+        auto-destroy: false          # 模板级：不符合过滤的吸入物体会被销毁
+        linked-box: "仓库名"         # 可选，链接玩家漏斗仓库
         durability-threshold: 100    # 可选
+    boxes:
+      <仓库名>:
+        0: {ItemStack 序列化}        # 槽位索引 0–63
         enchant-filters:             # 可选，key 为附魔 registry 名
           sharpness: 5
 ```
@@ -124,10 +129,10 @@ players:
 
 | Slot | 材质 | 名称 | 行为 |
 |------|------|------|------|
-| 10（第2行第2列） | 金胡萝卜 | `&e反向吸取` | 左/右键切换；Lore `&a当前状态: 开/关` |
-| 12（第2行第4列） | 红石粉 | `&e允许红石开关名单模式` | 左/右键切换；开启后充能=白名单、无充能=黑名单 |
-| 14（第2行第6列） | 箱子 | `&e过滤物品` | 打开「过滤的物品」（样板 ItemStack） |
-| 16（第2行第8列） | 红石块 | `&e过滤模式` | 左/右键切换默认白/黑名单（红石模式关闭时生效） |
+| 10 | 末影箱 | `&e链接漏斗仓库` | 左/右键打开仓库列表并选择链接；Lore `&e当前链接仓库: 无` 或 `&e当前链接仓库: <名称>` |
+| 12 | 草方块 | `&e自动销毁` | 左/右键切换模板级自动销毁 |
+| 14 | 箱子 | `&e过滤物品` | 打开「过滤的物品」（样板 ItemStack） |
+| 16 | 红石块 | `&e过滤模式` | 左/右键切换模板白/黑名单（单漏斗红石名单关闭时生效） |
 | 28（第4行第2列） | 附魔书 | `&e附魔过滤` | 打开「过滤附魔属性」 |
 | 30（第4行第4列） | 绿宝石 | `&e耐久过滤` | 关 GUI + 聊天输入剩余耐久阈值；已设置 Lore：`&a过滤耐久度: &b<数字>` |
 | 32（第4行第6列） | 线 | `&e远程传输` | 占位（暂未开放） |
@@ -158,6 +163,19 @@ players:
 - 点击某附魔书 → 关 GUI → 聊天输入最低等级（纯数字）→ 返回本 GUI
 - 附魔超过 54 个时仅显示前 54 个
 
+### 4.5 漏斗设置（3 行 × 9 列 = 27 格）
+
+- **标题**：`&e漏斗设置`
+- **打开**：对已套用模板（PDC 含 `template` + `owner`）的漏斗 **Shift + 右键**；无模板时提示 `玩家当前漏斗没有模板`，不打开 GUI
+- **Slot 10**：红石 `&e红石开关名单` → 方块 PDC `redstone-list-toggle`（充能=白名单，未充能=黑名单）
+- **Slot 12**：金锭 `&e反向吸取` → 方块 PDC `reverse-suction`
+- 其余为黑色玻璃，不可取出
+
+### 4.6 漏斗仓库
+
+- **列表**：`&e漏斗仓库`（54 格），`/xlrhopper box`；左键打开对应仓库
+- **单仓**：`&e仓库: <名称>`，72 格界面，**slot 0–63 可用**，64–71 为玻璃挡板；关闭时保存
+
 ---
 
 ## 5. 聊天输入
@@ -181,8 +199,8 @@ players:
 
 **有效白/黑名单**（仅影响 passItem）：
 
-- `redstone-list-toggle` 关闭 → 使用模板 `whitelist`（红石块切换）
-- `redstone-list-toggle` 开启 → 漏斗方块 **有充能** = 白名单，**无充能** = 黑名单
+- 方块 PDC `redstone-list-toggle` 关闭 → 使用模板 `whitelist`（模板设置红石块切换）
+- 方块 PDC `redstone-list-toggle` 开启 → 漏斗方块 **有充能** = 白名单，**无充能** = 黑名单
 
 任一维度不通过 → 取消对应进入路径的事件。
 
@@ -195,7 +213,7 @@ players:
 | 玩家丢弃（Q / 背包丢出 / 死亡掉落等） | 不取消丢弃；物品正常落地后由 `InventoryPickupItemEvent` 决定是否吸入 |
 | 打开漏斗 GUI 放入 | `InventoryClickEvent` / `InventoryDragEvent` |
 
-- 漏斗 PDC 仅存模板名与所有者 UUID；过滤规则**不写入方块**，修改模板后所有绑定该模板名的漏斗立即按新规则过滤。
+- 漏斗 PDC：`template`、`owner`、`redstone-list-toggle`、`reverse-suction`；过滤样板/附魔/耐久仍来自模板，修改模板后绑定漏斗立即生效。
 
 ### 6.2 样板物品（FilterItemMatcher）— 受有效白/黑名单影响
 
@@ -206,8 +224,15 @@ players:
 
 ### 6.3 反向吸取（reverse-suction）
 
-- 模板开启后，带该模板的漏斗：**取消**从上吸入与向下输出；尝试从下方向上搬运（见 `HopperReverseHandler`）
-- 多个漏斗方向相反时，仍受原版 tick 节奏影响
+- 单漏斗 PDC `reverse-suction` 为 true 时：**取消**从上吸入与向下输出；尝试从下方向上搬运（见 `HopperReverseHandler`）
+
+### 6.3.1 漏斗仓库双路输出
+
+- 模板 `linked-box` 指向玩家仓库名时，漏斗向下输出成功后，向该仓库 **再存入一份相同物品**（`HopperBoxOutputHandler`）
+
+### 6.3.2 自动销毁（auto-destroy）
+
+- 模板开启后，不符合过滤规则的 **地上吸入** 会被取消并移除物品实体
 
 ### 6.4 耐久（FilterDurability）
 

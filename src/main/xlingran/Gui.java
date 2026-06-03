@@ -2,7 +2,10 @@ package xlingran;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.Registry;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
@@ -34,10 +37,16 @@ public class Gui implements Listener {
 
     private static final int TEMPLATE_LIST_SIZE = 27;
     private static final int TEMPLATE_SETTINGS_SIZE = 45;
-    private static final int SETTINGS_SLOT_REVERSE = 10;
-    private static final int SETTINGS_SLOT_REDSTONE_LIST = 12;
+    private static final int HOPPER_SETTINGS_SIZE = 27;
+    private static final int HOPPER_SLOT_REDSTONE_LIST = 10;
+    private static final int HOPPER_SLOT_REVERSE = 12;
+    private static final int SETTINGS_SLOT_LINK_BOX = 10;
+    private static final int SETTINGS_SLOT_AUTO_DESTROY = 12;
     private static final int SETTINGS_SLOT_ITEMS = 14;
     private static final int SETTINGS_SLOT_MODE = 16;
+    private static final int BOX_LIST_SIZE = 54;
+    private static final int BOX_STORAGE_SIZE = 72;
+    private static final int BOX_STORAGE_USABLE = 64;
     private static final int SETTINGS_SLOT_ENCHANT = 28;
     private static final int SETTINGS_SLOT_DURABILITY = 30;
     private static final int SETTINGS_SLOT_REMOTE = 32;
@@ -47,16 +56,21 @@ public class Gui implements Listener {
     private final HopperTemplateManager templateManager;
     private final PlayerGuiSession sessions;
     private final DataStore dataStore;
+    private final PlayerBoxManager boxManager;
+    private final HopperKeys hopperKeys;
 
-    public Gui(Shan plugin, HopperTemplateManager templateManager, PlayerGuiSession sessions, DataStore dataStore) {
+    public Gui(Shan plugin, HopperTemplateManager templateManager, PlayerGuiSession sessions, DataStore dataStore,
+               PlayerBoxManager boxManager, HopperKeys hopperKeys) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.sessions = sessions;
         this.dataStore = dataStore;
+        this.boxManager = boxManager;
+        this.hopperKeys = hopperKeys;
     }
 
     public void saveData() {
-        dataStore.save(templateManager);
+        dataStore.save(templateManager, boxManager);
     }
 
     public void openTemplateList(Player player) {
@@ -88,10 +102,9 @@ public class Gui implements Listener {
             return;
         }
 
-        inv.setItem(SETTINGS_SLOT_REVERSE, toggleStateButton(Material.GOLDEN_CARROT, "&e反向吸取",
-                template.isReverseSuction()));
-        inv.setItem(SETTINGS_SLOT_REDSTONE_LIST, toggleStateButton(Material.REDSTONE, "&e允许红石开关名单模式",
-                template.isRedstoneListToggle()));
+        inv.setItem(SETTINGS_SLOT_LINK_BOX, linkedBoxButton(template));
+        inv.setItem(SETTINGS_SLOT_AUTO_DESTROY, toggleStateButton(Material.GRASS_BLOCK, "&e自动销毁",
+                template.isAutoDestroy()));
         inv.setItem(SETTINGS_SLOT_ITEMS, button(Material.CHEST, "&e过滤物品",
                 List.of("&a将过滤你添加的物品")));
         inv.setItem(SETTINGS_SLOT_MODE, modeButton(template));
@@ -102,6 +115,78 @@ public class Gui implements Listener {
                 List.of("&7暂未开放")));
         inv.setItem(SETTINGS_SLOT_BATCH, button(Material.ENDER_EYE, "&e批量设置",
                 List.of("&7点击后为漏斗批量套用本模板")));
+
+        player.openInventory(inv);
+    }
+
+    public void openBoxList(Player player) {
+        sessions.clearLinkingBoxTemplate(player.getUniqueId());
+        openBoxListInternal(player);
+    }
+
+    public void openBoxListForLink(Player player, String templateName) {
+        sessions.setLinkingBoxTemplate(player.getUniqueId(), templateName);
+        openBoxListInternal(player);
+    }
+
+    private void openBoxListInternal(Player player) {
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.BOX_LIST), BOX_LIST_SIZE,
+                color("&e漏斗仓库"));
+        bindHolder(inv, GuiType.BOX_LIST);
+
+        List<String> names = boxManager.getBoxNames(player.getUniqueId());
+        for (int i = 0; i < names.size() && i < BOX_LIST_SIZE; i++) {
+            inv.setItem(i, boxListItem(names.get(i)));
+        }
+        player.openInventory(inv);
+    }
+
+    public void openBoxStorage(Player player, String boxName) {
+        if (!boxManager.hasBox(player.getUniqueId(), boxName)) {
+            player.sendMessage(color("&c仓库不存在: &b" + boxName));
+            return;
+        }
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.BOX_STORAGE, boxName),
+                BOX_STORAGE_SIZE, color("&e仓库: &b" + boxName));
+        bindHolder(inv, GuiType.BOX_STORAGE);
+
+        ItemStack[] contents = boxManager.getBoxContents(player.getUniqueId(), boxName);
+        for (int i = 0; i < BOX_STORAGE_USABLE; i++) {
+            if (contents != null && i < contents.length && contents[i] != null) {
+                inv.setItem(i, contents[i].clone());
+            }
+        }
+        ItemStack glass = blackGlass();
+        for (int i = BOX_STORAGE_USABLE; i < BOX_STORAGE_SIZE; i++) {
+            inv.setItem(i, glass);
+        }
+        player.openInventory(inv);
+    }
+
+    public void openHopperSettings(Player player, Block hopperBlock) {
+        if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER) {
+            return;
+        }
+        Location loc = hopperBlock.getLocation();
+        World world = loc.getWorld();
+        if (world == null) {
+            return;
+        }
+        XlrGuiHolder holder = new XlrGuiHolder(GuiType.HOPPER_SETTINGS, world, loc.getBlockX(), loc.getBlockY(),
+                loc.getBlockZ());
+        Inventory inv = Bukkit.createInventory(holder, HOPPER_SETTINGS_SIZE, color("&e漏斗设置"));
+        holder.bind(inv);
+
+        ItemStack glass = blackGlass();
+        for (int i = 0; i < HOPPER_SETTINGS_SIZE; i++) {
+            inv.setItem(i, glass);
+        }
+
+        HopperBlockConfig config = HopperBlockConfig.read(hopperBlock, hopperKeys);
+        inv.setItem(HOPPER_SLOT_REDSTONE_LIST, toggleStateButton(Material.REDSTONE, "&e红石开关名单",
+                config.isRedstoneListToggle(), List.of("&7充能=白名单 未充能=黑名单")));
+        inv.setItem(HOPPER_SLOT_REVERSE, toggleStateButton(Material.GOLD_INGOT, "&e反向吸取",
+                config.isReverseSuction()));
 
         player.openInventory(inv);
     }
@@ -159,6 +244,10 @@ public class Gui implements Listener {
             handleFilterItemsClick(event);
             return;
         }
+        if (holder.getType() == GuiType.BOX_STORAGE) {
+            handleBoxStorageClick(event);
+            return;
+        }
 
         event.setCancelled(true);
         if (GuiClickGuard.shouldIgnoreClick(sessions, player)) {
@@ -176,6 +265,8 @@ public class Gui implements Listener {
             case TEMPLATE_LIST -> handleTemplateListClick(player, slot, event.getClick());
             case TEMPLATE_SETTINGS -> handleSettingsClick(player, slot, event.getClick(), holder);
             case FILTER_ENCHANTS -> handleFilterEnchantsClick(player, slot, holder);
+            case HOPPER_SETTINGS -> handleHopperSettingsClick(player, slot, event.getClick(), holder);
+            case BOX_LIST -> handleBoxListClick(player, slot, holder);
             default -> {
             }
         }
@@ -190,7 +281,7 @@ public class Gui implements Listener {
         if (holder == null) {
             return;
         }
-        if (holder.getType() != GuiType.FILTER_ITEMS) {
+        if (holder.getType() != GuiType.FILTER_ITEMS && holder.getType() != GuiType.BOX_STORAGE) {
             GuiClickGuard.cancelDrag(event);
         }
     }
@@ -214,6 +305,13 @@ public class Gui implements Listener {
         }
         if (holder.getType() == GuiType.TEMPLATE_SETTINGS) {
             saveData();
+        }
+        if (holder.getType() == GuiType.BOX_STORAGE) {
+            String boxName = holder.getTemplateName();
+            if (boxName != null) {
+                saveBoxStorage(player, event.getInventory(), boxName);
+                saveData();
+            }
         }
     }
 
@@ -339,16 +437,14 @@ public class Gui implements Listener {
             return;
         }
         switch (slot) {
-            case SETTINGS_SLOT_REVERSE -> {
+            case SETTINGS_SLOT_LINK_BOX -> {
                 if (click == ClickType.LEFT || click == ClickType.RIGHT) {
-                    template.toggleReverseSuction();
-                    saveData();
-                    openTemplateSettings(player, templateName);
+                    openBoxListForLink(player, templateName);
                 }
             }
-            case SETTINGS_SLOT_REDSTONE_LIST -> {
+            case SETTINGS_SLOT_AUTO_DESTROY -> {
                 if (click == ClickType.LEFT || click == ClickType.RIGHT) {
-                    template.toggleRedstoneListToggle();
+                    template.toggleAutoDestroy();
                     saveData();
                     openTemplateSettings(player, templateName);
                 }
@@ -378,6 +474,90 @@ public class Gui implements Listener {
             }
             default -> {
             }
+        }
+    }
+
+    private void handleBoxListClick(Player player, int slot, XlrGuiHolder holder) {
+        if (slot < 0 || slot >= BOX_LIST_SIZE) {
+            return;
+        }
+        List<String> names = boxManager.getBoxNames(player.getUniqueId());
+        if (slot >= names.size()) {
+            return;
+        }
+        String boxName = names.get(slot);
+        String linkingTemplate = sessions.getLinkingBoxTemplate(player.getUniqueId());
+        if (linkingTemplate != null) {
+            HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), linkingTemplate);
+            if (template != null) {
+                template.setLinkedBoxName(boxName);
+                saveData();
+                player.sendMessage(color("&a已链接漏斗仓库: &b" + boxName));
+            }
+            sessions.clearLinkingBoxTemplate(player.getUniqueId());
+            openTemplateSettings(player, linkingTemplate);
+            return;
+        }
+        openBoxStorage(player, boxName);
+    }
+
+    private void handleBoxStorageClick(InventoryClickEvent event) {
+        int topSize = event.getView().getTopInventory().getSize();
+        int rawSlot = event.getRawSlot();
+        if (rawSlot >= BOX_STORAGE_USABLE && rawSlot < topSize) {
+            event.setCancelled(true);
+        }
+    }
+
+    private void saveBoxStorage(Player player, Inventory inventory, String boxName) {
+        ItemStack[] contents = new ItemStack[PlayerBoxManager.BOX_CAPACITY];
+        for (int i = 0; i < BOX_STORAGE_USABLE; i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (stack != null && !stack.getType().isAir()) {
+                contents[i] = stack.clone();
+            }
+        }
+        boxManager.setBoxContents(player.getUniqueId(), boxName, contents);
+    }
+
+    private void handleHopperSettingsClick(Player player, int slot, ClickType click, XlrGuiHolder holder) {
+        if (click != ClickType.LEFT && click != ClickType.RIGHT) {
+            return;
+        }
+        if (!holder.hasHopperLocation()) {
+            return;
+        }
+        World world = Bukkit.getWorld(holder.getHopperWorld());
+        if (world == null) {
+            return;
+        }
+        Block block = world.getBlockAt(holder.getHopperX(), holder.getHopperY(), holder.getHopperZ());
+        if (block.getType() != Material.HOPPER) {
+            player.closeInventory();
+            return;
+        }
+        if (!HopperTemplateResolver.hasValidTemplate(block, hopperKeys, templateManager)) {
+            player.closeInventory();
+            player.sendMessage(color("&c玩家当前漏斗没有模板"));
+            return;
+        }
+        HopperBlockConfig config = HopperBlockConfig.read(block, hopperKeys);
+        boolean changed = false;
+        switch (slot) {
+            case HOPPER_SLOT_REDSTONE_LIST -> {
+                config = config.withRedstoneListToggle(!config.isRedstoneListToggle());
+                changed = true;
+            }
+            case HOPPER_SLOT_REVERSE -> {
+                config = config.withReverseSuction(!config.isReverseSuction());
+                changed = true;
+            }
+            default -> {
+            }
+        }
+        if (changed) {
+            HopperBlockConfig.write(block, hopperKeys, config);
+            openHopperSettings(player, block);
         }
     }
 
@@ -549,6 +729,18 @@ public class Gui implements Listener {
         }
     }
 
+    private ItemStack linkedBoxButton(HopperTemplate template) {
+        String linked = template.getLinkedBoxName();
+        String line = linked == null || linked.isEmpty()
+                ? "&e当前链接仓库: 无"
+                : "&e当前链接仓库: " + linked;
+        return button(Material.ENDER_CHEST, "&e链接漏斗仓库", List.of(line, "&7点击选择要链接的仓库"));
+    }
+
+    private ItemStack boxListItem(String boxName) {
+        return button(Material.ENDER_CHEST, "&b" + boxName, List.of("&7左键打开仓库", "&7链接模式下左键选择"));
+    }
+
     private ItemStack modeButton(HopperTemplate template) {
         String modeLine = template.isWhitelist()
                 ? "&a白名单模式"
@@ -559,8 +751,18 @@ public class Gui implements Listener {
     }
 
     private ItemStack toggleStateButton(Material material, String name, boolean enabled) {
+        return toggleStateButton(material, name, enabled, List.of("&7左键或右键点击切换"));
+    }
+
+    private ItemStack toggleStateButton(Material material, String name, boolean enabled, List<String> extraLore) {
         String stateLine = enabled ? "&a当前状态: &a开" : "&a当前状态: &c关";
-        return button(material, name, List.of(stateLine, "&7左键或右键点击切换"));
+        List<String> lore = new ArrayList<>();
+        lore.add(stateLine);
+        if (extraLore != null) {
+            lore.addAll(extraLore);
+        }
+        lore.add("&7左键或右键点击切换");
+        return button(material, name, lore);
     }
 
     private ItemStack button(Material material, String name, List<String> loreLines) {

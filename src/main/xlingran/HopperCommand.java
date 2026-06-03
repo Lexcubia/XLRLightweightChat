@@ -27,6 +27,35 @@ public class HopperCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        if (args.length >= 2 && args[0].equalsIgnoreCase("create") && args[1].equalsIgnoreCase("box")) {
+            if (!player.hasPermission("xlrhopper.create.box")) {
+                player.sendMessage(ChatColor.RED + "你没有权限创建漏斗仓库");
+                return true;
+            }
+            if (args.length < 3) {
+                player.sendMessage(ChatColor.RED + "用法: /xlrhopper create box <名称>");
+                return true;
+            }
+            String name = joinArgs(args, 2);
+            PlayerBoxManager boxManager = Shan.getInstance().getBoxManager();
+            if (!boxManager.createBox(player.getUniqueId(), name)) {
+                player.sendMessage(ChatColor.RED + "仓库已存在或名称无效");
+                return true;
+            }
+            gui.saveData();
+            player.sendMessage(ChatColor.GREEN + "已创建漏斗仓库: " + ChatColor.AQUA + name);
+            return true;
+        }
+
+        if (args.length >= 1 && args[0].equalsIgnoreCase("box")) {
+            if (!player.hasPermission("xlrhopper.box")) {
+                player.sendMessage(ChatColor.RED + "你没有权限打开漏斗仓库");
+                return true;
+            }
+            gui.openBoxList(player);
+            return true;
+        }
+
         if (args.length >= 2 && args[0].equalsIgnoreCase("create") && args[1].equalsIgnoreCase("mode")) {
             if (!player.hasPermission("xlrhopper.create.mode")) {
                 player.sendMessage(ChatColor.RED + "你没有权限创建模板");
@@ -71,7 +100,7 @@ public class HopperCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        player.sendMessage(ChatColor.RED + "用法: /xlrhopper <mode|create mode <名称>|edit mode <名称>>");
+        player.sendMessage(ChatColor.RED + "用法: /xlrhopper <mode|box|create mode <名称>|create box <名称>|edit mode <名称>>");
         return true;
     }
 
@@ -85,6 +114,9 @@ public class HopperCommand implements CommandExecutor, TabCompleter {
             if (player.hasPermission("xlrhopper.mode")) {
                 options.add("mode");
             }
+            if (player.hasPermission("xlrhopper.box")) {
+                options.add("box");
+            }
             if (player.hasPermission("xlrhopper.create.mode")) {
                 options.add("create");
             }
@@ -94,8 +126,15 @@ public class HopperCommand implements CommandExecutor, TabCompleter {
             return filterPrefix(options, args[0]);
         }
         if (args.length == 2) {
-            if (args[0].equalsIgnoreCase("create") && player.hasPermission("xlrhopper.create.mode")) {
-                return filterPrefix(List.of("mode"), args[1]);
+            if (args[0].equalsIgnoreCase("create")) {
+                List<String> options = new ArrayList<>();
+                if (player.hasPermission("xlrhopper.create.mode")) {
+                    options.add("mode");
+                }
+                if (player.hasPermission("xlrhopper.create.box")) {
+                    options.add("box");
+                }
+                return filterPrefix(options, args[1]);
             }
             if (args[0].equalsIgnoreCase("edit") && player.hasPermission("xlrhopper.edit.mode")) {
                 return filterPrefix(List.of("mode"), args[1]);

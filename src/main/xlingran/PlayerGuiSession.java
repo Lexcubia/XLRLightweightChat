@@ -20,6 +20,7 @@ public final class PlayerGuiSession {
     private final Map<UUID, InputMode> inputMode = new HashMap<>();
     private final Map<UUID, Long> lastClickMillis = new java.util.HashMap<>();
     private final Map<UUID, Enchantment> pendingEnchant = new HashMap<>();
+    private final Map<UUID, String> linkingBoxTemplate = new HashMap<>();
 
     public String getEditingTemplate(UUID playerId) {
         return editingTemplate.get(playerId);
@@ -93,5 +94,22 @@ public final class PlayerGuiSession {
     public void clearAll(UUID playerId) {
         clearInput(playerId);
         editingTemplate.remove(playerId);
+        linkingBoxTemplate.remove(playerId);
+    }
+
+    public void setLinkingBoxTemplate(UUID playerId, String templateName) {
+        if (templateName == null || templateName.isEmpty()) {
+            linkingBoxTemplate.remove(playerId);
+        } else {
+            linkingBoxTemplate.put(playerId, templateName);
+        }
+    }
+
+    public String getLinkingBoxTemplate(UUID playerId) {
+        return linkingBoxTemplate.get(playerId);
+    }
+
+    public void clearLinkingBoxTemplate(UUID playerId) {
+        linkingBoxTemplate.remove(playerId);
     }
 }

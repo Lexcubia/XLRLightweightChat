@@ -25,6 +25,8 @@ public final class HopperPdc {
         PersistentDataContainer pdc = tileState.getPersistentDataContainer();
         pdc.set(keys.template, PersistentDataType.STRING, templateName);
         pdc.set(keys.owner, PersistentDataType.STRING, ownerId.toString());
+        pdc.set(keys.redstoneListToggle, PersistentDataType.BOOLEAN, false);
+        pdc.set(keys.reverseSuction, PersistentDataType.BOOLEAN, false);
         tileState.update(true);
         return true;
     }

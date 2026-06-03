@@ -12,8 +12,8 @@ import java.util.Map;
 public class HopperTemplate {
 
     private boolean whitelist = true;
-    private boolean reverseSuction;
-    private boolean redstoneListToggle;
+    private boolean autoDestroy;
+    private String linkedBoxName;
     private final List<ItemStack> filterPrototypes = new ArrayList<>();
     private Integer durabilityThreshold;
     private final Map<Enchantment, Integer> enchantMinLevels = new LinkedHashMap<>();
@@ -30,28 +30,28 @@ public class HopperTemplate {
         this.whitelist = !this.whitelist;
     }
 
-    public boolean isReverseSuction() {
-        return reverseSuction;
+    public boolean isAutoDestroy() {
+        return autoDestroy;
     }
 
-    public void setReverseSuction(boolean reverseSuction) {
-        this.reverseSuction = reverseSuction;
+    public void setAutoDestroy(boolean autoDestroy) {
+        this.autoDestroy = autoDestroy;
     }
 
-    public void toggleReverseSuction() {
-        this.reverseSuction = !this.reverseSuction;
+    public void toggleAutoDestroy() {
+        this.autoDestroy = !this.autoDestroy;
     }
 
-    public boolean isRedstoneListToggle() {
-        return redstoneListToggle;
+    public String getLinkedBoxName() {
+        return linkedBoxName;
     }
 
-    public void setRedstoneListToggle(boolean redstoneListToggle) {
-        this.redstoneListToggle = redstoneListToggle;
-    }
-
-    public void toggleRedstoneListToggle() {
-        this.redstoneListToggle = !this.redstoneListToggle;
+    public void setLinkedBoxName(String linkedBoxName) {
+        if (linkedBoxName == null || linkedBoxName.isBlank()) {
+            this.linkedBoxName = null;
+        } else {
+            this.linkedBoxName = linkedBoxName.trim();
+        }
     }
 
     public List<ItemStack> getFilterPrototypes() {
@@ -89,18 +89,11 @@ public class HopperTemplate {
         enchantMinLevels.put(enchant, minLevel);
     }
 
-    public boolean getEffectiveWhitelist(Block hopperBlock) {
-        if (redstoneListToggle && hopperBlock != null) {
-            return hopperBlock.isBlockPowered();
-        }
-        return whitelist;
-    }
-
-    public boolean allows(ItemStack stack, Block hopperBlock) {
+    public boolean allows(ItemStack stack, Block hopperBlock, HopperKeys keys) {
         if (stack == null || stack.getType().isAir()) {
             return false;
         }
-        boolean effectiveWhitelist = getEffectiveWhitelist(hopperBlock);
+        boolean effectiveWhitelist = HopperBlockConfig.getEffectiveWhitelist(hopperBlock, keys, this);
         boolean passItem = FilterItem.allows(stack, effectiveWhitelist, filterPrototypes);
         boolean passDurability = FilterDurability.allows(stack, durabilityThreshold);
         boolean passEnchant = FilterEnchant.allows(stack, enchantMinLevels);

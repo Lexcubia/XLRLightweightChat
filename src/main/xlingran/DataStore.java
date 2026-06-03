@@ -27,7 +27,7 @@ final class DataStore {
         this.logger = logger;
     }
 
-    void load(HopperTemplateManager manager) {
+    void load(HopperTemplateManager manager, PlayerBoxManager boxManager) {
         if (!file.exists()) {
             return;
         }
@@ -43,6 +43,7 @@ final class DataStore {
                 if (playerSec == null) {
                     continue;
                 }
+                loadBoxes(playerSec, uuid, boxManager);
                 ConfigurationSection templates = playerSec.getConfigurationSection("templates");
                 if (templates != null) {
                     for (String templateName : templates.getKeys(false)) {
@@ -52,8 +53,11 @@ final class DataStore {
                         }
                         HopperTemplate template = new HopperTemplate();
                         template.setWhitelist(tSec.getBoolean("whitelist", true));
-                        template.setReverseSuction(tSec.getBoolean("reverse-suction", false));
-                        template.setRedstoneListToggle(tSec.getBoolean("redstone-list-toggle", false));
+                        template.setAutoDestroy(tSec.getBoolean("auto-destroy", false));
+                        String linkedBox = tSec.getString("linked-box");
+                        if (linkedBox != null && !linkedBox.isEmpty()) {
+                            template.setLinkedBoxName(linkedBox);
+                        }
                         loadFilterItems(tSec, template);
                         if (tSec.contains("durability-threshold")) {
                             template.setDurabilityThreshold(tSec.getInt("durability-threshold"));
@@ -70,6 +74,31 @@ final class DataStore {
                 logger.warning("[XLRHopper] 无效 UUID: " + uuidStr);
             }
         }
+    }
+
+    private void loadBoxes(ConfigurationSection playerSec, UUID uuid, PlayerBoxManager boxManager) {
+        ConfigurationSection boxes = playerSec.getConfigurationSection("boxes");
+        if (boxes == null) {
+            return;
+        }
+        Map<String, ItemStack[]> loaded = new HashMap<>();
+        for (String boxName : boxes.getKeys(false)) {
+            ConfigurationSection slotSec = boxes.getConfigurationSection(boxName);
+            ItemStack[] arr = new ItemStack[PlayerBoxManager.BOX_CAPACITY];
+            if (slotSec != null) {
+                for (String key : slotSec.getKeys(false)) {
+                    try {
+                        int index = Integer.parseInt(key);
+                        if (index >= 0 && index < PlayerBoxManager.BOX_CAPACITY) {
+                            arr[index] = slotSec.getItemStack(key);
+                        }
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+            loaded.put(boxName, arr);
+        }
+        boxManager.putPlayerBoxes(uuid, loaded);
     }
 
     private void loadFilterItems(ConfigurationSection tSec, HopperTemplate template) {
@@ -118,22 +147,28 @@ final class DataStore {
         return Registry.ENCHANTMENT.get(namespacedKey);
     }
 
-    void save(HopperTemplateManager manager) {
+    void save(HopperTemplateManager manager, PlayerBoxManager boxManager) {
         FileConfiguration config = new YamlConfiguration();
-        for (Map.Entry<UUID, Map<String, HopperTemplate>> entry : manager.getAllPlayerTemplates().entrySet()) {
-            UUID uuid = entry.getKey();
+        java.util.Set<UUID> playerIds = new java.util.HashSet<>();
+        playerIds.addAll(manager.getAllPlayerTemplates().keySet());
+        playerIds.addAll(boxManager.getAllPlayerBoxes().keySet());
+        for (UUID uuid : playerIds) {
             String path = "players." + uuid;
             String enabled = manager.getEnabledTemplateName(uuid);
             if (enabled != null && !enabled.isEmpty()) {
                 config.set(path + ".enabled-template", enabled);
             }
-            for (Map.Entry<String, HopperTemplate> templateEntry : entry.getValue().entrySet()) {
+            savePlayerBoxes(config, path, uuid, boxManager);
+            Map<String, HopperTemplate> templates = manager.getTemplates(uuid);
+            for (Map.Entry<String, HopperTemplate> templateEntry : templates.entrySet()) {
                 String name = templateEntry.getKey();
                 HopperTemplate t = templateEntry.getValue();
                 String base = path + ".templates." + name;
                 config.set(base + ".whitelist", t.isWhitelist());
-                config.set(base + ".reverse-suction", t.isReverseSuction());
-                config.set(base + ".redstone-list-toggle", t.isRedstoneListToggle());
+                config.set(base + ".auto-destroy", t.isAutoDestroy());
+                if (t.getLinkedBoxName() != null) {
+                    config.set(base + ".linked-box", t.getLinkedBoxName());
+                }
                 config.set(base + ".filter-items", ItemStackUtil.serializeList(t.getFilterPrototypes()));
                 if (t.getDurabilityThreshold() != null) {
                     config.set(base + ".durability-threshold", t.getDurabilityThreshold());
@@ -151,6 +186,26 @@ final class DataStore {
             config.save(file);
         } catch (IOException e) {
             logger.severe("[XLRHopper] 无法保存 data.yml: " + e.getMessage());
+        }
+    }
+
+    private void savePlayerBoxes(FileConfiguration config, String path, UUID uuid, PlayerBoxManager boxManager) {
+        Map<String, ItemStack[]> boxes = boxManager.getAllPlayerBoxes().get(uuid);
+        if (boxes == null || boxes.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, ItemStack[]> boxEntry : boxes.entrySet()) {
+            String boxPath = path + ".boxes." + boxEntry.getKey();
+            ItemStack[] contents = boxEntry.getValue();
+            if (contents == null) {
+                continue;
+            }
+            for (int i = 0; i < PlayerBoxManager.BOX_CAPACITY; i++) {
+                ItemStack stack = contents[i];
+                if (stack != null && !stack.getType().isAir()) {
+                    config.set(boxPath + "." + i, stack);
+                }
+            }
         }
     }
 }

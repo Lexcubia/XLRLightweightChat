@@ -6,7 +6,6 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Container;
-import org.bukkit.block.TileState;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -14,13 +13,9 @@ import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.persistence.PersistentDataContainer;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 /**
  * 反向吸取：从下方向上传输；取消原版从上吸入与向下输出，并尝试定向搬运。
@@ -43,21 +38,21 @@ public class HopperReverseHandler implements Listener {
         Block srcHopper = getHopperBlock(event.getSource());
         boolean cancelled = false;
 
-        if (destHopper != null && isReverse(destHopper)) {
+        if (destHopper != null && HopperBlockConfig.isReverse(destHopper, keys)) {
             if (isInventoryAboveHopper(destHopper, event.getSource())) {
                 event.setCancelled(true);
                 cancelled = true;
             }
         }
-        if (srcHopper != null && isReverse(srcHopper)) {
+        if (srcHopper != null && HopperBlockConfig.isReverse(srcHopper, keys)) {
             if (isInventoryBelowHopper(srcHopper, event.getDestination())) {
                 event.setCancelled(true);
                 cancelled = true;
             }
         }
 
-        Block reverseBlock = destHopper != null && isReverse(destHopper) ? destHopper
-                : (srcHopper != null && isReverse(srcHopper) ? srcHopper : null);
+        Block reverseBlock = destHopper != null && HopperBlockConfig.isReverse(destHopper, keys) ? destHopper
+                : (srcHopper != null && HopperBlockConfig.isReverse(srcHopper, keys) ? srcHopper : null);
         if (cancelled && reverseBlock != null) {
             Bukkit.getScheduler().runTask(plugin, () -> attemptReverseTransfer(reverseBlock));
         }
@@ -67,8 +62,11 @@ public class HopperReverseHandler implements Listener {
         if (hopperBlock.getType() != Material.HOPPER) {
             return;
         }
-        HopperTemplate template = resolveTemplate(hopperBlock);
-        if (template == null || !template.isReverseSuction()) {
+        if (!HopperBlockConfig.isReverse(hopperBlock, keys)) {
+            return;
+        }
+        HopperTemplate template = HopperTemplateResolver.resolve(hopperBlock, keys, templateManager);
+        if (template == null) {
             return;
         }
         BlockState state = hopperBlock.getState();
@@ -94,7 +92,7 @@ public class HopperReverseHandler implements Listener {
             if (stack == null || stack.getType().isAir()) {
                 continue;
             }
-            if (!template.allows(stack, hopperBlock)) {
+            if (!template.allows(stack, hopperBlock, keys)) {
                 continue;
             }
             ItemStack one = stack.clone();
@@ -116,7 +114,7 @@ public class HopperReverseHandler implements Listener {
             if (stack == null || stack.getType().isAir()) {
                 continue;
             }
-            if (!template.allows(stack, hopperBlock)) {
+            if (!template.allows(stack, hopperBlock, keys)) {
                 continue;
             }
             ItemStack one = stack.clone();
@@ -129,33 +127,6 @@ public class HopperReverseHandler implements Listener {
                 }
                 return;
             }
-        }
-    }
-
-    private boolean isReverse(Block hopperBlock) {
-        HopperTemplate template = resolveTemplate(hopperBlock);
-        return template != null && template.isReverseSuction();
-    }
-
-    private HopperTemplate resolveTemplate(Block block) {
-        if (block == null || block.getType() != Material.HOPPER) {
-            return null;
-        }
-        BlockState state = block.getState();
-        if (!(state instanceof TileState tileState)) {
-            return null;
-        }
-        PersistentDataContainer pdc = tileState.getPersistentDataContainer();
-        String templateName = pdc.get(keys.template, PersistentDataType.STRING);
-        String ownerStr = pdc.get(keys.owner, PersistentDataType.STRING);
-        if (templateName == null || ownerStr == null) {
-            return null;
-        }
-        try {
-            UUID owner = UUID.fromString(ownerStr);
-            return templateManager.getTemplate(owner, templateName);
-        } catch (IllegalArgumentException ignored) {
-            return null;
         }
     }
 

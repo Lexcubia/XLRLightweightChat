@@ -7,9 +7,13 @@ public final class HopperKeys {
 
     public final NamespacedKey template;
     public final NamespacedKey owner;
+    public final NamespacedKey redstoneListToggle;
+    public final NamespacedKey reverseSuction;
 
     public HopperKeys(JavaPlugin plugin) {
         this.template = new NamespacedKey(plugin, "template");
         this.owner = new NamespacedKey(plugin, "owner");
+        this.redstoneListToggle = new NamespacedKey(plugin, "redstone-list-toggle");
+        this.reverseSuction = new NamespacedKey(plugin, "reverse-suction");
     }
 }

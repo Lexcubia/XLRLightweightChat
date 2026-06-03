@@ -6,7 +6,6 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
-import org.bukkit.block.TileState;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -16,17 +15,14 @@ import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
+import org.bukkit.entity.Item;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.persistence.PersistentDataContainer;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
-
-import java.util.UUID;
 
 public class HopperListener implements Listener {
 
@@ -76,15 +72,16 @@ public class HopperListener implements Listener {
     public void onInventoryMove(InventoryMoveItemEvent event) {
         Inventory dest = event.getDestination();
         Inventory src = event.getSource();
+        ItemStack moving = event.getItem();
         if (dest.getType() == InventoryType.HOPPER) {
             Block hopperBlock = getHopperBlock(dest);
-            if (!shouldAllowTransfer(hopperBlock, event.getItem())) {
+            if (!shouldAllowTransfer(hopperBlock, moving)) {
                 event.setCancelled(true);
             }
         }
         if (src.getType() == InventoryType.HOPPER) {
             Block hopperBlock = getHopperBlock(src);
-            if (!shouldAllowTransfer(hopperBlock, event.getItem())) {
+            if (!shouldAllowTransfer(hopperBlock, moving)) {
                 event.setCancelled(true);
             }
         }
@@ -100,6 +97,7 @@ public class HopperListener implements Listener {
         ItemStack stack = event.getItem().getItemStack();
         if (!shouldAllowTransfer(hopperBlock, stack)) {
             event.setCancelled(true);
+            destroyIfAuto(hopperBlock, stack, event.getItem());
         }
     }
 
@@ -158,7 +156,7 @@ public class HopperListener implements Listener {
         if (template == null) {
             return false;
         }
-        if (!template.allows(stack.clone(), hopperBlock)) {
+        if (!template.allows(stack.clone(), hopperBlock, keys)) {
             player.sendMessage(DENY_MESSAGE);
             return true;
         }
@@ -173,29 +171,27 @@ public class HopperListener implements Listener {
         if (stack == null || stack.getType().isAir()) {
             return false;
         }
-        return template.allows(stack.clone(), hopperBlock);
+        return template.allows(stack.clone(), hopperBlock, keys);
+    }
+
+    private void destroyIfAuto(Block hopperBlock, ItemStack stack, Item entity) {
+        HopperTemplate template = resolveTemplate(hopperBlock);
+        if (template == null || !template.isAutoDestroy()) {
+            return;
+        }
+        if (stack == null || stack.getType().isAir()) {
+            return;
+        }
+        if (template.allows(stack.clone(), hopperBlock, keys)) {
+            return;
+        }
+        if (entity != null && !entity.isDead()) {
+            entity.remove();
+        }
     }
 
     private HopperTemplate resolveTemplate(Block block) {
-        if (block == null || block.getType() != Material.HOPPER) {
-            return null;
-        }
-        BlockState state = block.getState();
-        if (!(state instanceof TileState tileState)) {
-            return null;
-        }
-        PersistentDataContainer pdc = tileState.getPersistentDataContainer();
-        String templateName = pdc.get(keys.template, PersistentDataType.STRING);
-        String ownerStr = pdc.get(keys.owner, PersistentDataType.STRING);
-        if (templateName == null || ownerStr == null) {
-            return null;
-        }
-        try {
-            UUID owner = UUID.fromString(ownerStr);
-            return templateManager.getTemplate(owner, templateName);
-        } catch (IllegalArgumentException ignored) {
-            return null;
-        }
+        return HopperTemplateResolver.resolve(block, keys, templateManager);
     }
 
     private Block getHopperBlock(Inventory inventory) {
