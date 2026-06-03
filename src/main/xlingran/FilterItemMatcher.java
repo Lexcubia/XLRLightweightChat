@@ -3,6 +3,10 @@ package xlingran;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import org.bukkit.potion.PotionType;
 
 import java.util.List;
 import java.util.Map;
@@ -43,9 +47,12 @@ public final class FilterItemMatcher {
         if (protoMeta == null) {
             return true;
         }
+        if (!matchesPotionMeta(stackMeta, protoMeta)) {
+            return false;
+        }
         if (stackMeta == null) {
             return !protoMeta.hasDisplayName() && !protoMeta.hasLore() && !protoMeta.hasEnchants()
-                    && !protoMeta.hasCustomModelData();
+                    && !protoMeta.hasCustomModelData() && !(protoMeta instanceof PotionMeta);
         }
         if (protoMeta.hasDisplayName()) {
             String stackName = stackMeta.hasDisplayName() ? stackMeta.getDisplayName() : "";
@@ -81,6 +88,58 @@ public final class FilterItemMatcher {
         if (protoMeta.hasCustomModelData()) {
             if (!stackMeta.hasCustomModelData()
                     || stackMeta.getCustomModelData() != protoMeta.getCustomModelData()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 样板为药水时比较基础类型与自定义效果，避免仅按 {@link org.bukkit.Material#POTION} 误伤全部药水。
+     */
+    private static boolean matchesPotionMeta(ItemMeta stackMeta, ItemMeta protoMeta) {
+        if (!(protoMeta instanceof PotionMeta protoPotion)) {
+            return true;
+        }
+        if (!(stackMeta instanceof PotionMeta stackPotion)) {
+            return false;
+        }
+        PotionType protoBase = protoPotion.getBasePotionType();
+        if (protoBase != null) {
+            if (stackPotion.getBasePotionType() != protoBase) {
+                return false;
+            }
+        }
+        if (protoPotion.hasCustomEffects()) {
+            return customEffectsMatch(stackPotion, protoPotion);
+        }
+        return true;
+    }
+
+    private static boolean customEffectsMatch(PotionMeta stackPotion, PotionMeta protoPotion) {
+        List<PotionEffect> protoEffects = protoPotion.getCustomEffects();
+        if (protoEffects == null || protoEffects.isEmpty()) {
+            return true;
+        }
+        List<PotionEffect> stackEffects = stackPotion.getCustomEffects();
+        if (stackEffects == null || stackEffects.isEmpty()) {
+            return false;
+        }
+        for (PotionEffect required : protoEffects) {
+            PotionEffectType type = required.getType();
+            if (type == null) {
+                continue;
+            }
+            boolean found = false;
+            for (PotionEffect onStack : stackEffects) {
+                if (onStack.getType() == type
+                        && onStack.getAmplifier() == required.getAmplifier()
+                        && onStack.getDuration() == required.getDuration()) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
                 return false;
             }
         }
