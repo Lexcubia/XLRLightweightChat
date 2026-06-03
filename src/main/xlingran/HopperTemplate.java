@@ -13,6 +13,10 @@ public class HopperTemplate {
 
     private boolean whitelist = false;
     private boolean autoDestroy;
+    private boolean autoCraftEnabled;
+    private boolean autoSmeltEnabled;
+    private final List<ItemStack> autoCraftTargets = new ArrayList<>();
+    private final List<ItemStack> autoSmeltOutputs = new ArrayList<>();
     private final List<ItemStack> filterPrototypes = new ArrayList<>();
     private Integer durabilityThreshold;
     private final Map<Enchantment, Integer> enchantMinLevels = new LinkedHashMap<>();
@@ -39,6 +43,62 @@ public class HopperTemplate {
 
     public void toggleAutoDestroy() {
         this.autoDestroy = !this.autoDestroy;
+    }
+
+    public boolean isAutoCraftEnabled() {
+        return autoCraftEnabled;
+    }
+
+    public void setAutoCraftEnabled(boolean autoCraftEnabled) {
+        this.autoCraftEnabled = autoCraftEnabled;
+    }
+
+    public void toggleAutoCraftEnabled() {
+        this.autoCraftEnabled = !this.autoCraftEnabled;
+    }
+
+    public List<ItemStack> getAutoCraftTargets() {
+        return autoCraftTargets;
+    }
+
+    public void setAutoCraftTargets(List<ItemStack> targets) {
+        autoCraftTargets.clear();
+        if (targets != null) {
+            for (ItemStack stack : targets) {
+                ItemStack proto = ItemStackUtil.clonePrototype(stack);
+                if (proto != null) {
+                    autoCraftTargets.add(proto);
+                }
+            }
+        }
+    }
+
+    public boolean isAutoSmeltEnabled() {
+        return autoSmeltEnabled;
+    }
+
+    public void setAutoSmeltEnabled(boolean autoSmeltEnabled) {
+        this.autoSmeltEnabled = autoSmeltEnabled;
+    }
+
+    public void toggleAutoSmeltEnabled() {
+        this.autoSmeltEnabled = !this.autoSmeltEnabled;
+    }
+
+    public List<ItemStack> getAutoSmeltOutputs() {
+        return autoSmeltOutputs;
+    }
+
+    public void setAutoSmeltOutputs(List<ItemStack> outputs) {
+        autoSmeltOutputs.clear();
+        if (outputs != null) {
+            for (ItemStack stack : outputs) {
+                ItemStack proto = ItemStackUtil.clonePrototype(stack);
+                if (proto != null) {
+                    autoSmeltOutputs.add(proto);
+                }
+            }
+        }
     }
 
     public List<ItemStack> getFilterPrototypes() {

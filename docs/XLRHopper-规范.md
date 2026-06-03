@@ -3,7 +3,7 @@
 | 项目 | 说明 |
 |------|------|
 | 插件名称 | XLRHopper |
-| 版本 | 1.1.0 |
+| 版本 | 1.2.0 |
 | 作者 | Shan |
 | API | Spigot/Paper 1.21.1 |
 | 主类 | `xlingran.Shan` |
@@ -52,6 +52,10 @@ players:
           - DIAMOND
         filter-items: []             # ItemStack 序列化列表（样板匹配）
         auto-destroy: false          # 模板级：不符合过滤的吸入物体会被销毁
+        auto-craft-enabled: false    # 漏斗内自动合成
+        auto-craft-targets: []       # 合成结果样板 ItemStack 列表
+        auto-smelt-enabled: false    # 漏斗内自动熔炼
+        auto-smelt-outputs: []       # 熔炼产出样板（如烤马铃薯），反查输入
         durability-threshold: 100    # 可选
         enchant-filters:           # 可选，key 为附魔 registry 名
           sharpness: 5
@@ -72,7 +76,7 @@ players:
 
 ### 4.0 GUI 安全（全局）
 
-除 **「过滤的物品」** 外，所有 GUI 必须实现：
+除 **「过滤的物品」「自动合成」「自动熔炼」** 外，所有 GUI 必须实现：
 
 1. **物品点击限制**：禁止从界面取出物品（含 Shift、数字键、双击等）；仅执行插件定义的左/右键逻辑；`InventoryClickEvent` / `InventoryDragEvent` 默认取消。
 2. **鼠标点击速度限制**：每玩家点击冷却（建议硬编码 **200ms**），过快连点忽略，防止刷物品或重复触发。
@@ -125,12 +129,13 @@ players:
 
 | Slot | 材质 | 名称 | 行为 |
 |------|------|------|------|
+| 10 | 工作台 | `&e自动合成` | **左键** 开/关；**右键** 打开「自动合成」54 格（放入**结果**样板，如工作台） |
 | 12 | 草方块 | `&e自动销毁` | 左/右键切换模板级自动销毁 |
 | 14 | 箱子 | `&e过滤物品` | 打开「过滤的物品」（样板 ItemStack） |
 | 16 | 红石块 | `&e过滤模式` | 左/右键切换模板白/黑名单（单漏斗红石名单关闭时生效） |
 | 28（第4行第2列） | 附魔书 | `&e附魔过滤` | 打开「过滤附魔属性」 |
 | 30（第4行第4列） | 绿宝石 | `&e耐久过滤` | 关 GUI + 聊天输入剩余耐久阈值；已设置 Lore：`&a过滤耐久度: &b<数字>` |
-| 32（第4行第6列） | 线 | `&e远程传输` | 占位（暂未开放） |
+| 32（第4行第6列） | 熔炉 | `&e自动熔炼` | **左键** 开/关；**右键** 打开「自动熔炼」54 格（放入**产出**样板，如烤马铃薯） |
 | 34（第4行第8列） | 末影之眼 | `&e批量设置` | 关 GUI + 批量模式：左/右键漏斗写入 PDC；`xlrquit` 退出 |
 | 其余 | 黑色染色玻璃板 | `&0` | 不可取出 |
 
@@ -149,6 +154,20 @@ players:
 - **关闭时**：按样板规则去重，每种逻辑规则仅保留 1 个；多余物品退回背包；**清空 GUI 格子**（防止关闭界面时复制物品）
 - 旧版 `materials` 列表在加载时自动迁移为仅材质的样板
 - 无分页
+
+### 4.7 自动合成（6 行 × 9 列 = 54 格）
+
+- **标题**：`&6自动合成`
+- 规则同「过滤的物品」：可自由存取；关闭时按 `FilterItemMatcher.sameRule` 去重并退回重复项
+- 样板为**合成结果**（如工作台）；插件在漏斗 5 格内匹配 `CraftingRecipe` 后扣除原料并产出 1 个结果
+- 未凑齐配方的原料槽位由 `HopperReservation` 预留，不参与反向 push/pull
+
+### 4.8 自动熔炼（6 行 × 9 列 = 54 格）
+
+- **标题**：`&6自动熔炼`
+- 规则同「过滤的物品」
+- 样板为**熔炼产出**（如烤马铃薯）；由 `FurnaceRecipe` / `CookingRecipe` 反查输入
+- 每漏斗同时仅 1 个熔炼 job；**100 tick（5 秒）** 后产出 1 个放回漏斗；熔炼中输入预留
 
 ### 4.4 过滤附魔属性（6 行 × 9 列）
 
@@ -214,11 +233,22 @@ players:
 
 ### 6.3 反向吸取（reverse-suction）
 
-- 单漏斗 PDC `reverse-suction` 为 true 时：**取消**从上吸入与向下输出
-- `HopperReverseHandler` 每 **8 tick** 对登记漏斗尝试：先从**下方容器**吸 1 个（须过模板过滤），再向**上方容器**推 1 个；修改后 `Container#update` 写回方块实体
-- 不依赖 `InventoryMoveItemEvent` 触发（空漏斗仅下方有货时原版不会发事件，故需定时任务）
+- 单漏斗 PDC `reverse-suction` 为 true 时，`HopperReverseHandler` **取消原版四向冲突移动**：上→漏斗、漏斗→下、下→漏斗、漏斗→上；实际搬运仅由 `HopperTickService` 调度
+- 每 **8 game tick**、每个反向漏斗 **最多 1 步**：漏斗内有可输出且非预留物品 → **仅 push 上方**；否则且下方有货 → **仅 pull 下方**（禁止同 tick 先 pull 再 push）
+- `HopperTransferReverse` 直接读写方块 `Container` 库存，扣减前后校验；写失败退回目标容器（满则 `dropItemNaturally`）
+- 登记在 `HopperAutomationRegistry`；单 tick 处理上限 256 条，积压时打 warning
 
-### 6.3.1 自动销毁（auto-destroy）
+### 6.3.1 统一 8 tick 管线（HopperTickService）
+
+对每个登记漏斗（反向 / 自动合成 / 自动熔炼任一开启）每 8 tick 顺序执行：
+
+1. `HopperAutoSmeltService.tick`（推进 job，满 100 tick 结算产出）
+2. `HopperAutoCraftService.tryCraft`（匹配配方并合成）
+3. `HopperTransferReverse.transferStep`（仅当 `reverse-suction` 开启）
+
+合成在传输前执行；熔炼/合成预留槽位不参与反向搬运。
+
+### 6.3.2 自动销毁（auto-destroy）
 
 - 模板开启后，不符合过滤规则的 **地上吸入** 会被取消并移除物品实体
 
@@ -258,7 +288,12 @@ players:
 | `DataStore` | `data.yml` 读写（可合并入 Manager） |
 | `FilterItem` / `FilterItemMatcher` | 样板物品过滤 |
 | `FilterDurability` | 剩余耐久阈值 |
-| `HopperReverseHandler` | 反向吸取搬运 |
+| `HopperTickService` | 统一 8 tick：熔炼 → 合成 → 反向 |
+| `HopperReverseHandler` | 反向四向 `InventoryMoveItemEvent` 取消 |
+| `HopperTransferReverse` | 反向单步 push/pull 与守恒校验 |
+| `HopperAutomationRegistry` | 需自动化处理的漏斗登记 |
+| `HopperAutoCraftService` / `HopperAutoSmeltService` | 漏斗内合成与熔炼 |
+| `HopperReservation` | 合成/熔炼材料预留 |
 | `FilterEnchant` | 附魔最低等级 |
 | `HopperPdc` | 漏斗方块 PDC 写入 |
 | `BatchModeListener` | 批量套用模板 |
@@ -291,4 +326,4 @@ players:
 
 ---
 
-*文档版本：与实现同步，适用于 XLRHopper 1.1.0（已移除漏斗仓库）。*
+*文档版本：与实现同步，适用于 XLRHopper 1.2.0（反向防 Bug、自动合成/熔炼、统一 HopperTickService）。*

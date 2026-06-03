@@ -14,7 +14,7 @@ public class Shan extends JavaPlugin {
     private DataStore dataStore;
     private Gui gui;
     private HopperKeys hopperKeys;
-    private HopperReverseHandler hopperReverseHandler;
+    private HopperTickService hopperTickService;
 
     public static Shan getInstance() {
         return instance;
@@ -32,8 +32,8 @@ public class Shan extends JavaPlugin {
         return hopperKeys;
     }
 
-    public HopperReverseHandler getHopperReverseHandler() {
-        return hopperReverseHandler;
+    public HopperTickService getHopperTickService() {
+        return hopperTickService;
     }
 
     @Override
@@ -59,8 +59,11 @@ public class Shan extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(gui, this);
         getServer().getPluginManager().registerEvents(new HopperListener(this, templateManager, hopperKeys), this);
-        hopperReverseHandler = new HopperReverseHandler(this, templateManager, hopperKeys);
-        getServer().getPluginManager().registerEvents(hopperReverseHandler, this);
+        HopperAutomationRegistry automationRegistry = new HopperAutomationRegistry();
+        hopperTickService = new HopperTickService(this, templateManager, hopperKeys, automationRegistry);
+        getServer().getPluginManager().registerEvents(hopperTickService, this);
+        getServer().getPluginManager().registerEvents(
+                new HopperReverseHandler(hopperKeys, templateManager, automationRegistry), this);
         getServer().getPluginManager().registerEvents(new BatchModeListener(hopperKeys, playerGuiSession), this);
         getServer().getPluginManager().registerEvents(new HopperSettingsListener(gui, templateManager, hopperKeys), this);
 

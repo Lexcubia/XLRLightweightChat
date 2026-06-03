@@ -53,6 +53,10 @@ final class DataStore {
                         HopperTemplate template = new HopperTemplate();
                         template.setWhitelist(tSec.getBoolean("whitelist", false));
                         template.setAutoDestroy(tSec.getBoolean("auto-destroy", false));
+                        template.setAutoCraftEnabled(tSec.getBoolean("auto-craft-enabled", false));
+                        template.setAutoSmeltEnabled(tSec.getBoolean("auto-smelt-enabled", false));
+                        loadAutoCraftTargets(tSec, template);
+                        loadAutoSmeltOutputs(tSec, template);
                         loadFilterItems(tSec, template);
                         if (tSec.contains("durability-threshold")) {
                             template.setDurabilityThreshold(tSec.getInt("durability-threshold"));
@@ -68,6 +72,20 @@ final class DataStore {
             } catch (IllegalArgumentException ex) {
                 logger.warning("[XLRHopper] 无效 UUID: " + uuidStr);
             }
+        }
+    }
+
+    private void loadAutoCraftTargets(ConfigurationSection tSec, HopperTemplate template) {
+        List<?> serialized = tSec.getList("auto-craft-targets");
+        if (serialized != null && !serialized.isEmpty()) {
+            template.setAutoCraftTargets(ItemStackUtil.deserializeList(serialized));
+        }
+    }
+
+    private void loadAutoSmeltOutputs(ConfigurationSection tSec, HopperTemplate template) {
+        List<?> serialized = tSec.getList("auto-smelt-outputs");
+        if (serialized != null && !serialized.isEmpty()) {
+            template.setAutoSmeltOutputs(ItemStackUtil.deserializeList(serialized));
         }
     }
 
@@ -138,6 +156,10 @@ final class DataStore {
                 String base = path + ".templates." + name;
                 config.set(base + ".whitelist", t.isWhitelist());
                 config.set(base + ".auto-destroy", t.isAutoDestroy());
+                config.set(base + ".auto-craft-enabled", t.isAutoCraftEnabled());
+                config.set(base + ".auto-smelt-enabled", t.isAutoSmeltEnabled());
+                config.set(base + ".auto-craft-targets", ItemStackUtil.serializeList(t.getAutoCraftTargets()));
+                config.set(base + ".auto-smelt-outputs", ItemStackUtil.serializeList(t.getAutoSmeltOutputs()));
                 config.set(base + ".linked-box", null);
                 config.set(base + ".filter-items", ItemStackUtil.serializeList(t.getFilterPrototypes()));
                 if (t.getDurabilityThreshold() != null) {
