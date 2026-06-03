@@ -12,7 +12,7 @@ import java.util.UUID;
 
 public final class PlayerBoxManager {
 
-    public static final int BOX_CAPACITY = 64;
+    public static final int BOX_CAPACITY = 27;
 
     private final Map<UUID, Map<String, ItemStack[]>> playerBoxes = new HashMap<>();
 
