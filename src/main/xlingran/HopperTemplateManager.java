@@ -34,6 +34,7 @@ public class HopperTemplateManager {
             return false;
         }
         map.put(name, new HopperTemplate());
+        setEnabledTemplate(player.getUniqueId(), name);
         return true;
     }
 
