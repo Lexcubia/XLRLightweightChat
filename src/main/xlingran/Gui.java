@@ -443,6 +443,10 @@ public class Gui implements Listener {
         }
         if (changed) {
             HopperBlockConfig.write(block, hopperKeys, config);
+            HopperReverseHandler reverseHandler = Shan.getInstance().getHopperReverseHandler();
+            if (reverseHandler != null) {
+                reverseHandler.getRegistry().syncFromBlock(block, hopperKeys);
+            }
             openHopperSettings(player, block);
         }
     }

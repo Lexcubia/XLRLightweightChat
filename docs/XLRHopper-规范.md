@@ -214,7 +214,9 @@ players:
 
 ### 6.3 反向吸取（reverse-suction）
 
-- 单漏斗 PDC `reverse-suction` 为 true 时：**取消**从上吸入与向下输出；尝试从下方向上搬运（见 `HopperReverseHandler`）
+- 单漏斗 PDC `reverse-suction` 为 true 时：**取消**从上吸入与向下输出
+- `HopperReverseHandler` 每 **8 tick** 对登记漏斗尝试：先从**下方容器**吸 1 个（须过模板过滤），再向**上方容器**推 1 个；修改后 `Container#update` 写回方块实体
+- 不依赖 `InventoryMoveItemEvent` 触发（空漏斗仅下方有货时原版不会发事件，故需定时任务）
 
 ### 6.3.1 自动销毁（auto-destroy）
 
