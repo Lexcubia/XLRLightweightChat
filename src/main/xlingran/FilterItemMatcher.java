@@ -17,8 +17,9 @@ public final class FilterItemMatcher {
         if (stack == null || stack.getType().isAir()) {
             return false;
         }
+        // 未配置过滤物品时不做样板限制（与耐久/附魔未设置时一致）
         if (prototypes == null || prototypes.isEmpty()) {
-            return !whitelist;
+            return true;
         }
         boolean anyMatch = false;
         for (ItemStack prototype : prototypes) {
