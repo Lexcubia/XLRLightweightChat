@@ -9,15 +9,18 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+import xlingran.core.HopperLaneListener;
 
 public class BatchModeListener implements Listener {
 
     private final HopperKeys keys;
     private final PlayerGuiSession sessions;
+    private final HopperLaneListener laneListener;
 
-    public BatchModeListener(HopperKeys keys, PlayerGuiSession sessions) {
+    public BatchModeListener(HopperKeys keys, PlayerGuiSession sessions, HopperLaneListener laneListener) {
         this.keys = keys;
         this.sessions = sessions;
+        this.laneListener = laneListener;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -48,6 +51,7 @@ public class BatchModeListener implements Listener {
 
         if (HopperPdc.applyTemplate(block, keys, player.getUniqueId(), templateName)) {
             player.sendMessage(ChatColor.GREEN + "成功设置模板: " + ChatColor.AQUA + templateName);
+            laneListener.scheduleEvaluate(block);
         }
     }
 }

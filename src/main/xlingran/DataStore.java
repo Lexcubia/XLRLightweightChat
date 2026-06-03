@@ -17,17 +17,17 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Logger;
 
-final class DataStore {
+public final class DataStore {
 
     private final File file;
     private final Logger logger;
 
-    DataStore(File dataFolder, Logger logger) {
+    public DataStore(File dataFolder, Logger logger) {
         this.file = new File(dataFolder, "data.yml");
         this.logger = logger;
     }
 
-    void load(HopperTemplateManager manager) {
+    public void load(HopperTemplateManager manager) {
         if (!file.exists()) {
             return;
         }

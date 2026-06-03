@@ -81,4 +81,9 @@ public class HopperTemplateManager {
     public Map<UUID, Map<String, HopperTemplate>> getAllPlayerTemplates() {
         return Collections.unmodifiableMap(playerTemplates);
     }
+
+    public void clearAll() {
+        playerTemplates.clear();
+        enabledTemplate.clear();
+    }
 }

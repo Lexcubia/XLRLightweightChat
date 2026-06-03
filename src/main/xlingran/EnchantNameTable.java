@@ -71,6 +71,10 @@ public final class EnchantNameTable {
         if (enchant == null) {
             return "";
         }
+        Shan plugin = Shan.getInstance();
+        if (plugin != null && plugin.getGuiConfig() != null) {
+            return plugin.getGuiConfig().getEnchantDisplayName(enchant);
+        }
         String key = enchant.getKey().getKey();
         return EN_TO_ZH.getOrDefault(key, fallbackChinese(key));
     }

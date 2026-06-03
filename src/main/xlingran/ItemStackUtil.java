@@ -6,12 +6,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-final class ItemStackUtil {
+public final class ItemStackUtil {
 
     private ItemStackUtil() {
     }
 
-    static ItemStack clonePrototype(ItemStack stack) {
+    public static ItemStack clonePrototype(ItemStack stack) {
         if (stack == null || stack.getType().isAir()) {
             return null;
         }
@@ -20,7 +20,7 @@ final class ItemStackUtil {
         return copy;
     }
 
-    static List<Map<String, Object>> serializeList(List<ItemStack> stacks) {
+    public static List<Map<String, Object>> serializeList(List<ItemStack> stacks) {
         List<Map<String, Object>> out = new ArrayList<>();
         if (stacks == null) {
             return out;
@@ -34,7 +34,7 @@ final class ItemStackUtil {
         return out;
     }
 
-    static List<ItemStack> deserializeList(List<?> raw) {
+    public static List<ItemStack> deserializeList(List<?> raw) {
         List<ItemStack> out = new ArrayList<>();
         if (raw == null) {
             return out;

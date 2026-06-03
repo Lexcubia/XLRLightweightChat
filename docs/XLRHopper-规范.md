@@ -3,12 +3,13 @@
 | 项目 | 说明 |
 |------|------|
 | 插件名称 | XLRHopper |
-| 版本 | 1.2.0 |
+| 版本 | 1.3.0 |
 | 作者 | Shan |
 | API | Spigot/Paper 1.21.1 |
 | 主类 | `xlingran.Shan` |
 | 开发分支 | `XLRHopper` |
-| 文案与 GUI 布局 | **硬编码**（不读 `config.yml`） |
+| 文案与 GUI 布局 | **`Gui.yml`**（JAR 预置 + `saveResource`；槽位/标题/附魔表可配） |
+| 模板业务数据 | **`shan.db`（SQLite）**；旧 `data.yml` 首次启动迁移 |
 
 ---
 
@@ -25,6 +26,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `/xlrhopper create mode <名称>` | `xlrhopper.create.mode` | 创建名为 `<名称>` 的模板（默认启用该模板、黑名单），并打开「模板设置」 |
 | `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode` | 编辑已有模板，打开「模板设置」 |
 | `/xlrhopper mode` | `xlrhopper.mode` | 打开「漏斗模板」列表 GUI |
+| `/xlrhopper reload` | `xlrhopper.admin` | 重载 `Gui.yml`、从 `shan.db` 重读模板、异步重登记已加载区块漏斗（玩家与控制台均可） |
 
 - 根命令 `xlrhopper` 在 `plugin.yml` 注册；子命令在代码内解析。已移除的 `box` / `create box` 子命令会提示新用法。
 - 各子命令在代码内分别校验权限。
@@ -37,42 +39,36 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | 文件 | 路径 | 用途 |
 |------|------|------|
 | `config.yml` | `plugins/XLRHopper/config.yml` | 插件配置占位（可为空） |
-| `data.yml` | `plugins/XLRHopper/data.yml` | **仅储存业务数据**，不写说明、不承担配置职责 |
+| `Gui.yml` | `plugins/XLRHopper/Gui.yml` | GUI 标题、按钮材质/槽位/Lore、附魔中文表、`Messages` 等 |
+| `shan.db` | `plugins/XLRHopper/shan.db` | **模板业务数据**（SQLite） |
+| `data.yml` | （已废弃） | 若存在则**一次性迁移**至 `shan.db` 后改名为 `data.yml.bak` |
 
-### 3.1 data.yml 结构
+### 3.1 Gui.yml 要点
 
-```yaml
-players:
-  <玩家UUID>:
-    enabled-template: "模板名"   # 当前唯一启用的模板；省略或空表示全部关闭
-    templates:
-      <模板名>:
-        whitelist: false         # true=白名单 false=黑名单（新建模板默认黑名单）
-        materials:
-          - DIAMOND
-        filter-items: []             # ItemStack 序列化列表（样板匹配）
-        auto-destroy: false          # 模板级：不符合过滤的吸入物体会被销毁
-        auto-craft-enabled: false    # 漏斗内自动合成
-        auto-craft-targets: []       # 合成结果样板 ItemStack 列表
-        auto-smelt-enabled: false    # 漏斗内自动熔炼
-        auto-smelt-outputs: []       # 熔炼产出样板（如烤马铃薯），反查输入
-        durability-threshold: 100    # 可选
-        enchant-filters:           # 可选，key 为附魔 registry 名
-          sharpness: 5
-```
+- 由 JAR 内预置文件 **`saveResource("Gui.yml", false)`** 释放；**不**用代码生成 YAML；已存在文件不会被覆盖。
+- 占位符：`%Template%`、`%modename%`、`%toggle%`、`%filtermode%`、`%Durability%`、`%Enchant%` 等；`toggle` / `filtermode` 在 YAML 根节点定义。
+- **仅** `Auto-Crafting`、`Filter-Item`、`Auto-Furnace` 可配置 **`rows`（≥1，建议 ≤6）**；其余界面行数在 `GuiConfig` 中硬编码（3/5/6 行等）。
+- 附魔显示名：key 为 **registry 小写**（如 `fire_protection`）；`EnchantNameTable` 委托 `GuiConfig` 查询。
+- 修改后执行 `/xlrhopper reload` 生效。
 
-### 3.2 读写时机
+### 3.2 shan.db 与迁移
 
-- 启动：从 `data.yml` 加载模板
-- 关闭插件：全量保存（合并已有 `data.yml`，不抹掉其他玩家数据）
-- 增量保存：模板/过滤 GUI 变更时
-- 保存时会清除历史字段 `boxes`、`linked-box`（1.1.0 起已移除漏斗仓库功能）
+- 表结构由 `ShanDatabase` 初始化；读写经 `TemplateRepository`（异步加载、防抖保存、关服 `flushSync`）。
+- 逻辑字段与旧 `data.yml` 的 `players.<UUID>.templates` 一致（白名单、filter-items、自动合成/熔炼、附魔过滤等）。
+- `/xlrhopper reload` 会 **重读数据库**（不先 save），便于外部工具改库后热重载。
+
+### 3.3 主线程 / 异步边界
+
+| 主线程 | 异步 |
+|--------|------|
+| 库存读写、物品转移、8 tick 单步自动化 | SQLite 读写、`Gui.yml` 解析、区块漏斗坐标收集 |
+| PDC / GUI / `workQueue` 入队出队 | `reload` 中 DB + Gui 重载；`reindexLoadedChunks` 扫坐标后主线程登记 |
 
 ---
 
 ## 4. GUI 规范
 
-所有界面通过 `InventoryHolder` 识别类型，**不依赖**窗口标题字符串匹配。
+所有界面通过 `InventoryHolder` 识别类型，**不依赖**窗口标题字符串匹配。标题、按钮材质/槽位/Lore 默认来自 **`Gui.yml`**（`GuiConfig` 加载）；行为逻辑仍在 `Gui.java`。
 
 ### 4.0 GUI 安全（全局）
 
@@ -93,7 +89,7 @@ players:
 
 ### 4.1 漏斗模板（3 行 × 9 列）
 
-- **标题**：`&6漏斗模板`
+- **标题**：`Gui.yml` → `HopperTemplateList.name`（默认 `&6漏斗模板`）
 - **打开**：`/xlrhopper mode`
 
 | 条件 | 显示 |
@@ -107,11 +103,10 @@ players:
 - **启用**：附魔光效（`UNBREAKING` + `HIDE_ENCHANTS`）
 - **未启用**：无附魔
 
-**Lore（硬编码）**
+**Lore（`Gui.yml`）**
 
-- 启用：`&a当前模式: &a开`
-- 关闭：`&a当前模式: &c关`
-- 建议附加：`&7左键 开/关` · `&7右键 编辑`
+- 启用/未启用：`SetTemplate` / `Template` 节点 + `%toggle%` 占位符
+- 建议附加：`&7左键 开/关` · `&7右键 编辑`（可在 YAML 中改）
 
 **交互**
 
@@ -124,47 +119,52 @@ players:
 
 ### 4.2 模板设置（5 行 × 9 列 = 45 格）
 
-- **标题**：`&e模板设置: &b<模板名称>`
+- **标题**：`TemplateSet.name` + `%modename%`（默认 `&e模板设置: &b<模板名称>`）
 - **打开**：创建模板后 / 列表右键 / 编辑流程
 
-| Slot | 材质 | 名称 | 行为 |
-|------|------|------|------|
-| 10 | 工作台 | `&e自动合成` | **左键** 开/关；**右键** 打开「自动合成」54 格（放入**结果**样板，如工作台） |
-| 12 | 草方块 | `&e自动销毁` | 左/右键切换模板级自动销毁 |
-| 14 | 箱子 | `&e过滤物品` | 打开「过滤的物品」（样板 ItemStack） |
-| 16 | 红石块 | `&e过滤模式` | 左/右键切换模板白/黑名单（单漏斗红石名单关闭时生效） |
-| 28（第4行第2列） | 附魔书 | `&e附魔过滤` | 打开「过滤附魔属性」 |
-| 30（第4行第4列） | 绿宝石 | `&e耐久过滤` | 关 GUI + 聊天输入剩余耐久阈值；已设置 Lore：`&a过滤耐久度: &b<数字>` |
-| 32（第4行第6列） | 熔炉 | `&e自动熔炼` | **左键** 开/关；**右键** 打开「自动熔炼」54 格（放入**产出**样板，如烤马铃薯） |
-| 34（第4行第8列） | 末影之眼 | `&e批量设置` | 关 GUI + 批量模式：左/右键漏斗写入 PDC；`xlrquit` 退出 |
-| 其余 | 黑色染色玻璃板 | `&0` | 不可取出 |
+| 配置键 | 默认 slot | 行为 |
+|--------|-----------|------|
+| `TemplateSet.AutoCrafting` | 10 | **左键** 开/关；**右键** 打开「自动合成」（`Auto-Crafting.rows` 决定格数） |
+| `TemplateSet.AutoDestroy` | 12 | 左/右键切换模板级自动销毁 |
+| `TemplateSet.FilterItem` | 14 | 打开「过滤的物品」 |
+| `TemplateSet.FilterMode` | 16 | 左/右键切换模板白/黑名单 |
+| `TemplateSet.FilterEnchant` | 28 | 打开「过滤附魔属性」 |
+| `TemplateSet.Durability` | 30 | 关 GUI + 聊天输入耐久阈值 |
+| `TemplateSet.AutoFurnace` | 32 | **左键** 开/关；**右键** 打开「自动熔炼」 |
+| `TemplateSet.Batch` | 34 | 批量模式；`xlrquit` 退出 |
+| `TemplateSet.Filler` | 其余 | 占位玻璃，不可取出 |
+
+非法 `slot` 会打 warning 并回退默认 slot。
 
 **红石块 Lore 示例**
 
 - `&7仅作用于过滤物品`
 - `当前模式: &a白名单模式` 或 `&c黑名单模式`
 
-- 关闭 GUI：保存规则到 `data.yml`；**不改变**列表中的启用开关。
+- 关闭 GUI：防抖保存至 `shan.db`；**不改变**列表中的启用开关。
 
-### 4.3 过滤的物品（6 行 × 9 列 = 54 格）
+### 4.3 过滤的物品（默认可配 6 行 × 9 列）
 
-- **标题**：`&6过滤的物品`
+- **标题**：`Filter-Item.name`（默认 `&6过滤的物品`）
+- **行数**：`Filter-Item.rows`（≥1）
 - **不适用** §4.0（可正常放入、拿出、堆叠）
 - 每条规则为 **样板 ItemStack**（数量 1）：样板上**已设置的**显示名、Lore、附魔、CustomModelData、**药水基础类型（PotionType）/自定义药水效果** 等才参与匹配；未设置药水类型时不会把所有药水视为同一种
 - **关闭时**：按样板规则去重，每种逻辑规则仅保留 1 个；多余物品退回背包；**清空 GUI 格子**（防止关闭界面时复制物品）
 - 旧版 `materials` 列表在加载时自动迁移为仅材质的样板
 - 无分页
 
-### 4.7 自动合成（6 行 × 9 列 = 54 格）
+### 4.7 自动合成（行数可配）
 
-- **标题**：`&6自动合成`
+- **标题**：`Auto-Crafting.name`
+- **行数**：`Auto-Crafting.rows`
 - 规则同「过滤的物品」：可自由存取；关闭时按 `FilterItemMatcher.sameRule` 去重并退回重复项
 - 样板为**合成结果**（如工作台）；插件在漏斗 5 格内匹配 `CraftingRecipe` 后扣除原料并产出 1 个结果
 - 未凑齐配方的原料槽位由 `HopperReservation` 预留，不参与反向 push/pull
 
-### 4.8 自动熔炼（6 行 × 9 列 = 54 格）
+### 4.8 自动熔炼（行数可配）
 
-- **标题**：`&6自动熔炼`
+- **标题**：`Auto-Furnace.name`
+- **行数**：`Auto-Furnace.rows`
 - 规则同「过滤的物品」
 - 样板为**熔炼产出**（如烤马铃薯）；由 `FurnaceRecipe` / `CookingRecipe` 反查输入
 - 每漏斗同时仅 1 个熔炼 job；**100 tick（5 秒）** 后产出 1 个放回漏斗；熔炼中输入预留
@@ -172,19 +172,19 @@ players:
 ### 4.4 过滤附魔属性（6 行 × 9 列）
 
 - **标题**：`&6过滤附魔属性`
-- 未配置：普通 **书**（`BOOK`），显示名使用硬编码中英映射表的中文名（[`EnchantNameTable`](src/main/xlingran/EnchantNameTable.java)）
+- 未配置：普通 **书**（`BOOK`），显示名来自 `Gui.yml` 附魔表（[`EnchantNameTable`](src/main/xlingran/EnchantNameTable.java) 委托 `GuiConfig`）
 - 已配置：**附魔书**（`ENCHANTED_BOOK`，隐藏等级）+ Lore：`&a当前过滤: &e<附魔名> <等级>`
 - **左键** 某附魔书 → 关 GUI → 聊天输入最低等级（纯数字）→ 返回本 GUI
-- 已配置附魔：**右键** 清除该条过滤并刷新 GUI（保存 `data.yml`）
+- 已配置附魔：**右键** 清除该条过滤并刷新 GUI（保存 `shan.db`）
 - 附魔超过 54 个时仅显示前 54 个
 
-### 4.5 漏斗设置（3 行 × 9 列 = 27 格）
+### 4.5 漏斗设置（3 行硬编码）
 
-- **标题**：`&e漏斗设置`
-- **打开**：对已套用模板（PDC 含 `template` + `owner`）的漏斗 **Shift + 右键**（**主手与副手均须为空**）；无模板时提示 `玩家当前漏斗没有模板`，不打开 GUI
-- **Slot 10**：红石 `&e红石开关名单` → 方块 PDC `redstone-list-toggle`（充能=白名单，未充能=黑名单）
-- **Slot 12**：金锭 `&e反向吸取` → 方块 PDC `reverse-suction`
-- 其余为黑色玻璃，不可取出
+- **标题**：`HopperSetting.name`（默认 `&e漏斗设置`）
+- **打开**：对已套用模板（PDC 含 `template` + `owner`）的漏斗 **Shift + 右键**（**主手与副手均须为空**）；无模板时提示（`Messages` 可配），不打开 GUI
+- **`HopperSetting.Redstone`**（默认 slot 10）→ PDC `redstone-list-toggle`
+- **`HopperSetting.Reverse`**（默认 slot 12）→ PDC `reverse-suction`
+- **`HopperSetting.Filler`**：占位玻璃
 
 ---
 
@@ -234,18 +234,24 @@ players:
 
 ### 6.3 反向吸取（reverse-suction）
 
-- 单漏斗 PDC `reverse-suction` 为 true 时，`HopperReverseHandler` **取消原版四向冲突移动**：上→漏斗、漏斗→下、下→漏斗、漏斗→上；实际搬运仅由 `HopperTickService` 调度
-- 每 **8 game tick**、每个反向漏斗 **最多 1 步**：漏斗内有可输出且非预留物品 → **仅 push 上方**；否则且下方有货 → **仅 pull 下方**（禁止同 tick 先 pull 再 push）
+- 单漏斗 PDC `reverse-suction` 为 true 时，`HopperReverseHandler` **取消原版四向冲突移动**；并 **`scheduleEvaluate`** 由事件侧决定是否入队，**不在** handler 内 `syncHopper` 或全量登记
+- 每 **8 game tick**、每个**已在 workQueue 中**的 lane **最多 1 步**反向搬运（同上 push/pull 规则）
 - `HopperTransferReverse` 直接读写方块 `Container` 库存，扣减前后校验；写失败退回目标容器（满则 `dropItemNaturally`）
-- 登记在 `HopperAutomationRegistry`；单 tick 处理上限 256 条，积压时打 warning
 
-### 6.3.1 统一 8 tick 管线（HopperTickService）
+### 6.3.1 事件驱动 + 8 tick 管线（1.3.0）
 
-对每个登记漏斗（反向 / 自动合成 / 自动熔炼任一开启）每 8 tick 顺序执行：
+**阶段 A（事件，`HopperLaneListener` / `HopperWorkEvaluator`）**
 
-1. `HopperAutoSmeltService.tick`（推进 job，满 100 tick 结算产出）
-2. `HopperAutoCraftService.tryCraft`（匹配配方并合成）
-3. `HopperTransferReverse.transferStep`（仅当 `reverse-suction` 开启）
+- `ChunkLoad`、`BlockPlace`、批量套模板、库存移动、邻居变化等：登记 `HopperLane`、构建 **`FilterSnapshot`**（一次 resolve）、更新自动化标志、`workQueue.offer/remove`
+- **禁止**在 8 tick 内做登记、resolve、全服盲扫、`syncHopper`
+
+**阶段 B（每 8 tick，`HopperTickService.tickAll`）**
+
+- 仅对 `HopperLaneRegistry.workQueueSnapshot(256)` 中的 lane 执行：
+  1. `HopperAutoSmeltService.tick`
+  2. `HopperAutoCraftService.tryCraft`
+  3. `HopperTransferReverse.transferStep`（仅 `reverse-suction`）
+- 无剩余工作或目标满缓存则 **出队**；否则保留待下周期
 
 合成在传输前执行；熔炼/合成预留槽位不参与反向搬运。
 
@@ -280,34 +286,30 @@ players:
 
 ## 8. 类职责
 
-| 类 | 职责 |
-|----|------|
-| `Shan` | 插件入口；注册命令、监听、加载/保存 data |
-| `Gui` | 全部 GUI 构建与事件 |
-| `HopperTemplate` | 单模板数据模型 |
-| `HopperTemplateManager` | 玩家模板集合、启用模板、当前编辑上下文 |
-| `DataStore` | `data.yml` 读写（可合并入 Manager） |
-| `FilterItem` / `FilterItemMatcher` | 样板物品过滤 |
-| `FilterDurability` | 剩余耐久阈值 |
-| `HopperTickService` | 统一 8 tick：熔炼 → 合成 → 反向 |
-| `HopperReverseHandler` | 反向四向 `InventoryMoveItemEvent` 取消 |
-| `HopperTransferReverse` | 反向单步 push/pull 与守恒校验 |
-| `HopperAutomationRegistry` | 需自动化处理的漏斗登记 |
+| 类 / 包 | 职责 |
+|---------|------|
+| `Shan` | 插件入口；`saveResource(Gui.yml)`；异步 DB；`reload()` |
+| `gui.GuiConfig` | 解析 `Gui.yml`、占位符、slot 校验、附魔显示名 |
+| `Gui` | GUI 构建与事件（读 `GuiConfig`） |
+| `storage.ShanDatabase` / `TemplateRepository` | SQLite 与迁移、异步加载/防抖保存 |
+| `core.HopperLane` / `FilterSnapshot` | 单漏斗运行态与模板快照缓存 |
+| `core.HopperLaneRegistry` | `active` 登记 + **`workQueue`** |
+| `core.HopperWorkEvaluator` | 三条件入队/出队 |
+| `core.HopperLaneListener` | 区块/放置/库存事件 → 登记与 evaluate |
+| `HopperTickService` | **仅** workQueue 排水：熔炼 → 合成 → 反向 |
+| `HopperReverseHandler` | 反向四向取消 + `scheduleEvaluate` |
+| `feature.HopperFeature` | 自动化扩展接口（预留） |
+| `HopperTemplate` / `HopperTemplateManager` | 模板模型与内存集合 |
+| `DataStore` | 旧 `data.yml` 迁移读取 |
+| `FilterItem` / `FilterItemMatcher` 等 | 过滤维度 |
 | `HopperAutoCraftService` / `HopperAutoSmeltService` | 漏斗内合成与熔炼 |
-| `HopperReservation` | 合成/熔炼材料预留 |
-| `FilterEnchant` | 附魔最低等级 |
-| `HopperPdc` | 漏斗方块 PDC 写入 |
-| `BatchModeListener` | 批量套用模板 |
-| `HopperListener` | 放置 PDC、`InventoryMoveItemEvent` |
-| `HopperCommand` | 指令分发与权限 |
-| `PlayerGuiSession` | 聊天输入态、当前编辑模板名 |
-| `*GuiHolder` | 界面类型标识 |
+| `HopperCommand` | 指令（含 `reload`） |
 
 ---
 
 ## 9. 首版不包含
 
-- `config.yml` 配置 GUI 文案
+- `config.yml` 配置 GUI（使用 **`Gui.yml`**）
 - 模板列表 / 规则列表分页
 - 修改已放置漏斗的绑定模板
 - 漏斗破坏转移 PDC、跨世界
@@ -321,10 +323,13 @@ players:
 2. 左键开关：附魔 + `&a开` / 无附魔 + `&c关`；同时仅一个开。
 3. 全部关闭时放置漏斗无过滤；启用后放置有 PDC 且过滤生效。
 4. 白/黑名单**仅影响材质**；名称/Lore **固定黑名单**（命中规则即拒绝，不可切换）。
-5. 重启后 `data.yml` 与 GUI 数据一致。
-6. 模板设置等 GUI：无法取出玻璃/命名牌；连点被冷却限制。
-7. 过滤物品 GUI：可拿可取；关闭时重复材质退回（堆叠×2 或多格各 1 均退回 1 个）。
+5. 重启后 `shan.db` 与 GUI 数据一致；旧 `data.yml` 仅首次迁移。
+6. `/xlrhopper reload`：无 `xlrhopper.admin` 拒绝；改 `Gui.yml` 后重载标题/Lore 变化。
+7. `Filter-Item.rows: 2` 重载后为 18 格且可存取。
+8. 模板设置等 GUI：无法取出玻璃/命名牌；连点被冷却限制。
+9. 过滤物品 GUI：可拿可取；关闭时重复材质退回（堆叠×2 或多格各 1 均退回 1 个）。
+10. 空漏斗 / 无 pending：不在 8 tick 盲扫；有货或邻居变化事件入队后才处理。
 
 ---
 
-*文档版本：与实现同步，适用于 XLRHopper 1.2.0（反向防 Bug、自动合成/熔炼、统一 HopperTickService）。*
+*文档版本：与实现同步，适用于 XLRHopper 1.3.0（Gui.yml、shan.db、事件驱动 workQueue、reload）。*

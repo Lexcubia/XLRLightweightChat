@@ -24,8 +24,11 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import xlingran.core.HopperLaneListener;
+import xlingran.gui.GuiConfig;
 import xlingran.gui.GuiType;
 import xlingran.gui.XlrGuiHolder;
+import xlingran.storage.TemplateRepository;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -34,47 +37,61 @@ import java.util.Map;
 
 public class Gui implements Listener {
 
-    private static final int TEMPLATE_LIST_SIZE = 27;
-    private static final int TEMPLATE_SETTINGS_SIZE = 45;
-    private static final int HOPPER_SETTINGS_SIZE = 27;
-    private static final int HOPPER_SLOT_REDSTONE_LIST = 10;
-    private static final int HOPPER_SLOT_REVERSE = 12;
-    private static final int SETTINGS_SLOT_AUTO_CRAFT = 10;
-    private static final int SETTINGS_SLOT_AUTO_DESTROY = 12;
-    private static final int SETTINGS_SLOT_ITEMS = 14;
-    private static final int SETTINGS_SLOT_MODE = 16;
-    private static final int SETTINGS_SLOT_ENCHANT = 28;
-    private static final int SETTINGS_SLOT_DURABILITY = 30;
-    private static final int SETTINGS_SLOT_AUTO_SMELT = 32;
-    private static final int SETTINGS_SLOT_BATCH = 34;
-    private static final int STORAGE_GUI_SIZE = 54;
-
     private final Shan plugin;
     private final HopperTemplateManager templateManager;
     private final PlayerGuiSession sessions;
-    private final DataStore dataStore;
+    private final TemplateRepository templateRepository;
     private final HopperKeys hopperKeys;
+    private final GuiConfig guiConfig;
+    private final HopperTickService tickService;
+    private final HopperLaneListener laneListener;
 
-    public Gui(Shan plugin, HopperTemplateManager templateManager, PlayerGuiSession sessions, DataStore dataStore,
-               HopperKeys hopperKeys) {
+    private final int slotAutoCraft;
+    private final int slotAutoDestroy;
+    private final int slotFilterItems;
+    private final int slotFilterMode;
+    private final int slotFilterEnchant;
+    private final int slotFilterDurability;
+    private final int slotAutoSmelt;
+    private final int slotBatch;
+    private final int slotHopperRedstone;
+    private final int slotHopperReverse;
+
+    public Gui(Shan plugin, HopperTemplateManager templateManager, PlayerGuiSession sessions,
+               TemplateRepository templateRepository, HopperKeys hopperKeys, GuiConfig guiConfig,
+               HopperTickService tickService, HopperLaneListener laneListener) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.sessions = sessions;
-        this.dataStore = dataStore;
+        this.templateRepository = templateRepository;
         this.hopperKeys = hopperKeys;
+        this.guiConfig = guiConfig;
+        this.tickService = tickService;
+        this.laneListener = laneListener;
+        slotAutoCraft = guiConfig.templateButtonSlot("AutoCrafting", 10);
+        slotAutoDestroy = guiConfig.templateButtonSlot("Break", 12);
+        slotFilterItems = guiConfig.templateButtonSlot("FilterItem", 14);
+        slotFilterMode = guiConfig.templateButtonSlot("FilterMode", 16);
+        slotFilterEnchant = guiConfig.templateButtonSlot("FilterEnchant", 28);
+        slotFilterDurability = guiConfig.templateButtonSlot("FilterDurability", 30);
+        slotAutoSmelt = guiConfig.templateButtonSlot("AutoSmelt", 32);
+        slotBatch = guiConfig.templateButtonSlot("Batch", 34);
+        slotHopperRedstone = guiConfig.hopperSettingSlot("Redstone", 10);
+        slotHopperReverse = guiConfig.hopperSettingSlot("Reverse", 12);
     }
 
     public void saveData() {
-        dataStore.save(templateManager);
+        templateRepository.markDirty();
     }
 
     public void openTemplateList(Player player) {
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.TEMPLATE_LIST), 27,
-                color("&6漏斗模板"));
+        int size = guiConfig.templateListSize();
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.TEMPLATE_LIST), size,
+                guiConfig.templateListTitle());
         bindHolder(inv, GuiType.TEMPLATE_LIST);
 
         List<String> names = new ArrayList<>(templateManager.getTemplates(player.getUniqueId()).keySet());
-        for (int i = 0; i < names.size() && i < TEMPLATE_LIST_SIZE; i++) {
+        for (int i = 0; i < names.size() && i < size; i++) {
             inv.setItem(i, createTemplateListItem(player, names.get(i)));
         }
         player.openInventory(inv);
@@ -82,12 +99,13 @@ public class Gui implements Listener {
 
     public void openTemplateSettings(Player player, String templateName) {
         sessions.setEditingTemplate(player.getUniqueId(), templateName);
+        int size = guiConfig.templateSettingsSize();
         Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.TEMPLATE_SETTINGS, templateName),
-                TEMPLATE_SETTINGS_SIZE, color("&e模板设置: &b" + templateName));
+                size, guiConfig.templateSettingsTitle(templateName));
         bindHolder(inv, GuiType.TEMPLATE_SETTINGS);
 
-        ItemStack glass = blackGlass();
-        for (int i = 0; i < TEMPLATE_SETTINGS_SIZE; i++) {
+        ItemStack glass = fillerGlass();
+        for (int i = 0; i < size; i++) {
             inv.setItem(i, glass);
         }
 
@@ -97,18 +115,14 @@ public class Gui implements Listener {
             return;
         }
 
-        inv.setItem(SETTINGS_SLOT_AUTO_CRAFT, autoCraftButton(template));
-        inv.setItem(SETTINGS_SLOT_AUTO_DESTROY, toggleStateButton(Material.GRASS_BLOCK, "&e自动销毁",
-                template.isAutoDestroy()));
-        inv.setItem(SETTINGS_SLOT_ITEMS, button(Material.CHEST, "&e过滤物品",
-                List.of("&a将过滤你添加的物品")));
-        inv.setItem(SETTINGS_SLOT_MODE, modeButton(template));
-        inv.setItem(SETTINGS_SLOT_ENCHANT, button(Material.ENCHANTED_BOOK, "&e附魔过滤",
-                List.of("&7点击进入附魔属性过滤")));
-        inv.setItem(SETTINGS_SLOT_DURABILITY, durabilityButton(template));
-        inv.setItem(SETTINGS_SLOT_AUTO_SMELT, autoSmeltButton(template));
-        inv.setItem(SETTINGS_SLOT_BATCH, button(Material.ENDER_EYE, "&e批量设置",
-                List.of("&7点击后为漏斗批量套用本模板")));
+        inv.setItem(slotAutoCraft, autoCraftButton(template));
+        inv.setItem(slotAutoDestroy, toggleButton("Break", template.isAutoDestroy(), null));
+        inv.setItem(slotFilterItems, configButton("FilterItem"));
+        inv.setItem(slotFilterMode, modeButton(template));
+        inv.setItem(slotFilterEnchant, configButton("FilterEnchant"));
+        inv.setItem(slotFilterDurability, durabilityButton(template));
+        inv.setItem(slotAutoSmelt, autoSmeltButton(template));
+        inv.setItem(slotBatch, configButton("Batch"));
 
         player.openInventory(inv);
     }
@@ -124,32 +138,32 @@ public class Gui implements Listener {
         }
         XlrGuiHolder holder = new XlrGuiHolder(GuiType.HOPPER_SETTINGS, world, loc.getBlockX(), loc.getBlockY(),
                 loc.getBlockZ());
-        Inventory inv = Bukkit.createInventory(holder, HOPPER_SETTINGS_SIZE, color("&e漏斗设置"));
+        int size = guiConfig.hopperSettingSize();
+        Inventory inv = Bukkit.createInventory(holder, size, guiConfig.hopperSettingTitle());
         holder.bind(inv);
 
-        ItemStack glass = blackGlass();
-        for (int i = 0; i < HOPPER_SETTINGS_SIZE; i++) {
+        ItemStack glass = hopperSettingFiller();
+        for (int i = 0; i < size; i++) {
             inv.setItem(i, glass);
         }
 
         HopperBlockConfig config = HopperBlockConfig.read(hopperBlock, hopperKeys);
-        inv.setItem(HOPPER_SLOT_REDSTONE_LIST, toggleStateButton(Material.REDSTONE, "&e红石开关名单",
-                config.isRedstoneListToggle(), List.of("&7充能=白名单 未充能=黑名单")));
-        inv.setItem(HOPPER_SLOT_REVERSE, toggleStateButton(Material.GOLD_INGOT, "&e反向吸取",
-                config.isReverseSuction()));
+        inv.setItem(slotHopperRedstone, hopperSettingToggle("Redstone", config.isRedstoneListToggle()));
+        inv.setItem(slotHopperReverse, hopperSettingToggle("Reverse", config.isReverseSuction()));
 
         player.openInventory(inv);
     }
 
     public void openFilterEnchants(Player player, String templateName) {
         sessions.setEditingTemplate(player.getUniqueId(), templateName);
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.FILTER_ENCHANTS, templateName), 54,
-                color("&6过滤附魔属性"));
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.FILTER_ENCHANTS, templateName),
+                guiConfig.filterEnchantsSize(), guiConfig.filterEnchantsTitle());
         bindHolder(inv, GuiType.FILTER_ENCHANTS);
 
         HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
         List<Enchantment> enchants = listRegistryEnchantments();
-        for (int i = 0; i < enchants.size() && i < 54; i++) {
+        int maxSlots = guiConfig.filterEnchantsSize();
+        for (int i = 0; i < enchants.size() && i < maxSlots; i++) {
             Enchantment enchant = enchants.get(i);
             Integer minLevel = template != null ? template.getEnchantMinLevels().get(enchant) : null;
             inv.setItem(i, createEnchantFilterBook(enchant, minLevel));
@@ -159,15 +173,15 @@ public class Gui implements Listener {
 
     public void openFilterItems(Player player, String templateName) {
         sessions.setEditingTemplate(player.getUniqueId(), templateName);
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.FILTER_ITEMS, templateName), 54,
-                color("&6过滤的物品"));
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.FILTER_ITEMS, templateName),
+                guiConfig.storageSize("Filter-Item"), guiConfig.storageTitle("Filter-Item"));
         bindHolder(inv, GuiType.FILTER_ITEMS);
 
         HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
         if (template != null) {
             int slot = 0;
             for (ItemStack proto : template.getFilterPrototypes()) {
-                if (slot >= 54) {
+                if (slot >= guiConfig.storageSize("Filter-Item")) {
                     break;
                 }
                 ItemStack display = ItemStackUtil.clonePrototype(proto);
@@ -351,7 +365,7 @@ public class Gui implements Listener {
     }
 
     private void handleTemplateListClick(Player player, int slot, ClickType click) {
-        if (slot < 0 || slot >= TEMPLATE_LIST_SIZE) {
+        if (slot < 0 || slot >= guiConfig.templateListSize()) {
             return;
         }
         List<String> names = new ArrayList<>(templateManager.getTemplates(player.getUniqueId()).keySet());
@@ -390,60 +404,53 @@ public class Gui implements Listener {
         if (template == null) {
             return;
         }
-        switch (slot) {
-            case SETTINGS_SLOT_AUTO_DESTROY -> {
-                if (click == ClickType.LEFT || click == ClickType.RIGHT) {
-                    template.toggleAutoDestroy();
+        if (slot == slotAutoDestroy) {
+            if (click == ClickType.LEFT || click == ClickType.RIGHT) {
+                template.toggleAutoDestroy();
+                saveData();
+                openTemplateSettings(player, templateName);
+            }
+        } else if (slot == slotFilterItems) {
+            openFilterItems(player, templateName);
+        } else if (slot == slotFilterMode) {
+            if (click == ClickType.LEFT || click == ClickType.RIGHT) {
+                template.toggleWhitelist();
+                saveData();
+                openTemplateSettings(player, templateName);
+            }
+        } else if (slot == slotFilterEnchant) {
+            openFilterEnchants(player, templateName);
+        } else if (slot == slotFilterDurability) {
+            player.closeInventory();
+            sessions.clearInput(player.getUniqueId());
+            sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.DURABILITY, templateName);
+            player.sendMessage(guiConfig.message("durability-prompt"));
+        } else if (slot == slotAutoCraft) {
+            if (click == ClickType.LEFT || click == ClickType.RIGHT) {
+                if (click == ClickType.LEFT) {
+                    template.toggleAutoCraftEnabled();
                     saveData();
                     openTemplateSettings(player, templateName);
+                } else {
+                    openAutoCraft(player, templateName);
                 }
             }
-            case SETTINGS_SLOT_ITEMS -> openFilterItems(player, templateName);
-            case SETTINGS_SLOT_MODE -> {
-                if (click == ClickType.LEFT || click == ClickType.RIGHT) {
-                    template.toggleWhitelist();
+        } else if (slot == slotAutoSmelt) {
+            if (click == ClickType.LEFT || click == ClickType.RIGHT) {
+                if (click == ClickType.LEFT) {
+                    template.toggleAutoSmeltEnabled();
                     saveData();
                     openTemplateSettings(player, templateName);
+                } else {
+                    openAutoSmelt(player, templateName);
                 }
             }
-            case SETTINGS_SLOT_ENCHANT -> openFilterEnchants(player, templateName);
-            case SETTINGS_SLOT_DURABILITY -> {
-                player.closeInventory();
-                sessions.clearInput(player.getUniqueId());
-                sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.DURABILITY, templateName);
-                player.sendMessage(color("&a请在聊天栏输入数字耐久度 &7(低于该剩余耐久的物品将被过滤，输入 xlrquit 退出设置)"));
-            }
-            case SETTINGS_SLOT_AUTO_CRAFT -> {
-                if (click == ClickType.LEFT || click == ClickType.RIGHT) {
-                    if (click == ClickType.LEFT) {
-                        template.toggleAutoCraftEnabled();
-                        saveData();
-                        openTemplateSettings(player, templateName);
-                    } else {
-                        openAutoCraft(player, templateName);
-                    }
-                }
-            }
-            case SETTINGS_SLOT_AUTO_SMELT -> {
-                if (click == ClickType.LEFT || click == ClickType.RIGHT) {
-                    if (click == ClickType.LEFT) {
-                        template.toggleAutoSmeltEnabled();
-                        saveData();
-                        openTemplateSettings(player, templateName);
-                    } else {
-                        openAutoSmelt(player, templateName);
-                    }
-                }
-            }
-            case SETTINGS_SLOT_BATCH -> {
-                player.closeInventory();
-                sessions.clearInput(player.getUniqueId());
-                sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.BATCH_APPLY, templateName);
-                player.sendMessage(color("&a已进入批量设置模式，左键或右键点击漏斗套用模板"));
-                player.sendMessage(color("&7输入 xlrquit 退出批量设置模式"));
-            }
-            default -> {
-            }
+        } else if (slot == slotBatch) {
+            player.closeInventory();
+            sessions.clearInput(player.getUniqueId());
+            sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.BATCH_APPLY, templateName);
+            player.sendMessage(guiConfig.message("batch-enter"));
+            player.sendMessage(guiConfig.message("batch-quit-hint"));
         }
     }
 
@@ -465,35 +472,28 @@ public class Gui implements Listener {
         }
         if (!HopperTemplateResolver.hasValidTemplate(block, hopperKeys, templateManager)) {
             player.closeInventory();
-            player.sendMessage(color("&c玩家当前漏斗没有模板"));
+            player.sendMessage(guiConfig.message("no-template"));
             return;
         }
         HopperBlockConfig config = HopperBlockConfig.read(block, hopperKeys);
         boolean changed = false;
-        switch (slot) {
-            case HOPPER_SLOT_REDSTONE_LIST -> {
-                config = config.withRedstoneListToggle(!config.isRedstoneListToggle());
-                changed = true;
-            }
-            case HOPPER_SLOT_REVERSE -> {
-                config = config.withReverseSuction(!config.isReverseSuction());
-                changed = true;
-            }
-            default -> {
-            }
+        if (slot == slotHopperRedstone) {
+            config = config.withRedstoneListToggle(!config.isRedstoneListToggle());
+            changed = true;
+        } else if (slot == slotHopperReverse) {
+            config = config.withReverseSuction(!config.isReverseSuction());
+            changed = true;
         }
         if (changed) {
             HopperBlockConfig.write(block, hopperKeys, config);
-            HopperTickService tickService = Shan.getInstance().getHopperTickService();
-            if (tickService != null) {
-                tickService.getRegistry().syncHopper(block, hopperKeys, templateManager);
-            }
+            tickService.getLaneRegistry().registerLane(block, hopperKeys, templateManager);
+            laneListener.scheduleEvaluate(block);
             openHopperSettings(player, block);
         }
     }
 
     private void handleFilterEnchantsClick(Player player, int slot, ClickType click, XlrGuiHolder holder) {
-        if (slot < 0 || slot >= 54) {
+        if (slot < 0 || slot >= guiConfig.filterEnchantsSize()) {
             return;
         }
         String templateName = resolveTemplateName(holder, player);
@@ -513,7 +513,8 @@ public class Gui implements Listener {
             if (template.getEnchantMinLevels().containsKey(selected)) {
                 template.removeEnchantMinLevel(selected);
                 saveData();
-                player.sendMessage(color("&a已清除附魔过滤: &e" + formatEnchantName(selected)));
+                player.sendMessage(guiConfig.message("enchant-cleared",
+                        Map.of("Enchant", formatEnchantName(selected))));
                 openFilterEnchants(player, templateName);
             }
             return;
@@ -528,19 +529,20 @@ public class Gui implements Listener {
     }
 
     public void openAutoCraft(Player player, String templateName) {
-        openStorageGui(player, templateName, GuiType.AUTO_CRAFT, "&6自动合成",
+        openStorageGui(player, templateName, GuiType.AUTO_CRAFT, "Auto-Crafting",
                 (inv, template) -> fillPrototypeSlots(inv, template.getAutoCraftTargets()));
     }
 
     public void openAutoSmelt(Player player, String templateName) {
-        openStorageGui(player, templateName, GuiType.AUTO_SMELT, "&6自动熔炼",
+        openStorageGui(player, templateName, GuiType.AUTO_SMELT, "Auto-Furnace",
                 (inv, template) -> fillPrototypeSlots(inv, template.getAutoSmeltOutputs()));
     }
 
-    private static void fillPrototypeSlots(Inventory inv, List<ItemStack> prototypes) {
+    private void fillPrototypeSlots(Inventory inv, List<ItemStack> prototypes) {
         int slot = 0;
+        int max = inv.getSize();
         for (ItemStack proto : prototypes) {
-            if (slot >= STORAGE_GUI_SIZE) {
+            if (slot >= max) {
                 break;
             }
             ItemStack display = ItemStackUtil.clonePrototype(proto);
@@ -550,10 +552,11 @@ public class Gui implements Listener {
         }
     }
 
-    private void openStorageGui(Player player, String templateName, GuiType type, String title,
+    private void openStorageGui(Player player, String templateName, GuiType type, String configKey,
                                 StorageGuiFiller filler) {
         sessions.setEditingTemplate(player.getUniqueId(), templateName);
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(type, templateName), STORAGE_GUI_SIZE, color(title));
+        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(type, templateName),
+                guiConfig.storageSize(configKey), guiConfig.storageTitle(configKey));
         bindHolder(inv, type);
         HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
         if (template != null) {
@@ -690,21 +693,19 @@ public class Gui implements Listener {
     }
 
     private ItemStack createTemplateListItem(Player player, String templateName) {
-        ItemStack item = new ItemStack(Material.NAME_TAG);
+        boolean enabled = templateManager.isTemplateEnabled(player.getUniqueId(), templateName);
+        GuiConfig.GuiButtonDef def = guiConfig.templateListItem(enabled);
+        ItemStack item = new ItemStack(def.material());
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
             return item;
         }
-        meta.setDisplayName(color("&a" + templateName));
-        List<String> lore = new ArrayList<>();
-        lore.add(color("&7左键 开/关"));
-        lore.add(color("&7右键 编辑"));
-        if (templateManager.isTemplateEnabled(player.getUniqueId(), templateName)) {
+        Map<String, String> vars = Map.of("Template", templateName, "toggle", guiConfig.toggle(enabled));
+        meta.setDisplayName(guiConfig.apply(def.name(), vars));
+        List<String> lore = guiConfig.resolveLore(def.lore(), vars);
+        if (def.showEnchant()) {
             meta.addEnchant(Enchantment.UNBREAKING, 1, true);
             meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-            lore.add(color("&a当前模式: &a开"));
-        } else {
-            lore.add(color("&a当前模式: &c关"));
         }
         meta.setLore(lore);
         item.setItemMeta(meta);
@@ -712,40 +713,33 @@ public class Gui implements Listener {
     }
 
     private ItemStack durabilityButton(HopperTemplate template) {
-        List<String> lore = new ArrayList<>();
-        lore.add("&7点击设置最低剩余耐久");
-        if (template.getDurabilityThreshold() != null) {
-            lore.add("&a过滤耐久度: &b" + template.getDurabilityThreshold());
-        }
-        return button(Material.EMERALD, "&e耐久过滤", lore);
+        GuiConfig.GuiButtonDef def = guiConfig.templateButton("FilterDurability");
+        List<String> lore = guiConfig.durabilityLore(template.getDurabilityThreshold() != null,
+                template.getDurabilityThreshold());
+        return button(def.material(), def.name(), lore);
     }
 
     private ItemStack createEnchantFilterBook(Enchantment enchant, Integer minLevel) {
         String displayName = EnchantNameTable.getChineseName(enchant);
         boolean configured = minLevel != null;
-
-        Material material = configured ? Material.ENCHANTED_BOOK : Material.BOOK;
-        ItemStack book = new ItemStack(material);
+        GuiConfig.GuiButtonDef def = guiConfig.filterEnchantBook(configured);
+        ItemStack book = new ItemStack(def.material());
         ItemMeta meta = book.getItemMeta();
         if (meta == null) {
             return book;
         }
-
-        meta.setDisplayName(color("&e" + displayName));
-        List<String> lore = new ArrayList<>();
-        if (configured) {
-            if (meta instanceof EnchantmentStorageMeta storageMeta) {
-                storageMeta.addStoredEnchant(enchant, 1, true);
-                storageMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-                meta = storageMeta;
-            }
-            lore.add(color("&a当前过滤: &e" + displayName + " " + minLevel));
-            lore.add(color("&7左键 修改等级"));
-            lore.add(color("&7右键 清除过滤"));
-        } else {
-            lore.add(color("&7左键 设置最低等级"));
+        Map<String, String> vars = new HashMap<>();
+        vars.put("Enchant", displayName);
+        if (minLevel != null) {
+            vars.put("EnchantLevel", String.valueOf(minLevel));
         }
-        meta.setLore(lore);
+        meta.setDisplayName(guiConfig.apply(def.name(), vars));
+        if (configured && meta instanceof EnchantmentStorageMeta storageMeta) {
+            storageMeta.addStoredEnchant(enchant, 1, true);
+            storageMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+            meta = storageMeta;
+        }
+        meta.setLore(guiConfig.resolveLore(def.lore(), vars));
         book.setItemMeta(meta);
         return book;
     }
@@ -758,8 +752,8 @@ public class Gui implements Listener {
         List<Enchantment> enchants = new ArrayList<>();
         for (Enchantment enchant : Registry.ENCHANTMENT) {
             enchants.add(enchant);
-            if (enchants.size() >= 54) {
-                plugin.getLogger().warning("[XLRHopper] 附魔数量超过 54，部分附魔未显示");
+            if (enchants.size() >= guiConfig.filterEnchantsSize()) {
+                plugin.getLogger().warning("[XLRHopper] 附魔数量超过 GUI 容量，部分附魔未显示");
                 break;
             }
         }
@@ -778,63 +772,66 @@ public class Gui implements Listener {
     }
 
     private ItemStack autoCraftButton(HopperTemplate template) {
-        List<String> lore = new ArrayList<>();
-        lore.add("&7左键 开/关");
-        lore.add("&7右键 打开配置界面");
-        return toggleStateButton(Material.CRAFTING_TABLE, "&e自动合成", template.isAutoCraftEnabled(), lore);
+        return toggleButton("AutoCrafting", template.isAutoCraftEnabled(), null);
     }
 
     private ItemStack autoSmeltButton(HopperTemplate template) {
-        List<String> lore = new ArrayList<>();
-        lore.add("&7左键 开/关");
-        lore.add("&7右键 打开配置界面");
-        return toggleStateButton(Material.FURNACE, "&e自动熔炼", template.isAutoSmeltEnabled(), lore);
+        return toggleButton("AutoSmelt", template.isAutoSmeltEnabled(), null);
     }
 
     private ItemStack modeButton(HopperTemplate template) {
-        String modeLine = template.isWhitelist()
-                ? "&a白名单模式"
-                : "&c黑名单模式";
-        return button(Material.REDSTONE_BLOCK, "&e过滤模式", List.of(
-                "&7仅作用于过滤物品",
-                "当前模式: " + modeLine));
+        GuiConfig.GuiButtonDef def = guiConfig.templateButton("FilterMode");
+        Map<String, String> vars = Map.of("filtermode", guiConfig.filterMode(template.isWhitelist()));
+        return button(def.material(), def.name(), guiConfig.resolveLore(def.lore(), vars));
     }
 
-    private ItemStack toggleStateButton(Material material, String name, boolean enabled) {
-        return toggleStateButton(material, name, enabled, List.of("&7左键或右键点击切换"));
+    private ItemStack configButton(String key) {
+        GuiConfig.GuiButtonDef def = guiConfig.templateButton(key);
+        return button(def.material(), def.name(), guiConfig.resolveLore(def.lore(), Map.of()));
     }
 
-    private ItemStack toggleStateButton(Material material, String name, boolean enabled, List<String> extraLore) {
-        String stateLine = enabled ? "&a当前状态: &a开" : "&a当前状态: &c关";
-        List<String> lore = new ArrayList<>();
-        lore.add(stateLine);
-        if (extraLore != null) {
-            lore.addAll(extraLore);
+    private ItemStack toggleButton(String key, boolean enabled, Map<String, String> extraVars) {
+        GuiConfig.GuiButtonDef def = guiConfig.templateButton(key);
+        Map<String, String> vars = new HashMap<>();
+        vars.put("toggle", guiConfig.toggle(enabled));
+        if (extraVars != null) {
+            vars.putAll(extraVars);
         }
-        lore.add("&7左键或右键点击切换");
-        return button(material, name, lore);
+        return button(def.material(), def.name(), guiConfig.resolveLore(def.lore(), vars));
+    }
+
+    private ItemStack hopperSettingToggle(String key, boolean enabled) {
+        GuiConfig.GuiButtonDef def = guiConfig.hopperSettingButton(key);
+        Map<String, String> vars = Map.of("toggle", guiConfig.toggle(enabled));
+        return button(def.material(), def.name(), guiConfig.resolveLore(def.lore(), vars));
+    }
+
+    private ItemStack fillerGlass() {
+        ItemStack item = new ItemStack(guiConfig.fillerMaterial());
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(" ");
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack hopperSettingFiller() {
+        ItemStack item = new ItemStack(guiConfig.hopperSettingFiller());
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(" ");
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
     private ItemStack button(Material material, String name, List<String> loreLines) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(color(name));
-            List<String> lore = new ArrayList<>();
-            for (String line : loreLines) {
-                lore.add(color(line));
-            }
-            meta.setLore(lore);
-            item.setItemMeta(meta);
-        }
-        return item;
-    }
-
-    private ItemStack blackGlass() {
-        ItemStack item = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName(" ");
+            meta.setDisplayName(guiConfig.color(name));
+            meta.setLore(loreLines);
             item.setItemMeta(meta);
         }
         return item;
@@ -846,7 +843,7 @@ public class Gui implements Listener {
         }
     }
 
-    private static String color(String text) {
-        return ChatColor.translateAlternateColorCodes('&', text);
+    private String color(String text) {
+        return guiConfig.color(text);
     }
 }

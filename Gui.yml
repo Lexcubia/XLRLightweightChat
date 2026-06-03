@@ -1,0 +1,194 @@
+# XLRHopper GUI 配置（预置，勿用代码生成）
+# 存储类 GUI 可配置 rows（最少 1）；其余界面行数由插件硬编码
+
+toggle:
+  on: "&a开"
+  off: "&c关"
+
+filtermode:
+  on: "&a白名单模式"
+  off: "&c黑名单模式"
+
+# 附魔 registry key（小写）→ 中文名
+enchant-names:
+  aqua_affinity: "水下速掘"
+  bane_of_arthropods: "节肢杀手"
+  binding_curse: "绑定诅咒"
+  blast_protection: "爆炸保护"
+  breach: "破甲"
+  channeling: "引雷"
+  density: "致密"
+  depth_strider: "深海探索者"
+  efficiency: "效率"
+  feather_falling: "摔落缓冲"
+  fire_aspect: "火焰附加"
+  fire_protection: "火焰保护"
+  flame: "火矢"
+  fortune: "时运"
+  frost_walker: "冰霜行者"
+  impaling: "穿刺"
+  infinity: "无限"
+  knockback: "击退"
+  looting: "抢夺"
+  loyalty: "忠诚"
+  luck_of_the_sea: "海之眷顾"
+  lure: "饵钓"
+  mending: "经验修补"
+  multishot: "多重射击"
+  piercing: "穿透"
+  power: "力量"
+  projectile_protection: "弹射物保护"
+  protection: "保护"
+  punch: "冲击"
+  quick_charge: "快速装填"
+  respiration: "水下呼吸"
+  riptide: "激流"
+  sharpness: "锋利"
+  silk_touch: "精准采集"
+  smite: "亡灵杀手"
+  soul_speed: "灵魂疾行"
+  sweeping_edge: "横扫之刃"
+  swift_sneak: "迅捷潜行"
+  thorns: "荆棘"
+  unbreaking: "耐久"
+  vanishing_curse: "消失诅咒"
+  wind_burst: "风爆"
+
+HopperTemplateList:
+  name: "&6漏斗模板"
+  Template:
+    material: NAME_TAG
+    name: "&a%Template%"
+    Lore:
+      - "&7左键 开/关"
+      - "&7右键 编辑"
+      - "&a当前模式: %toggle%"
+  SetTemplate:
+    material: NAME_TAG
+    enchant: true
+    name: "&a%Template%"
+    Lore:
+      - "&7左键 开/关"
+      - "&7右键 编辑"
+      - "&a当前模式: %toggle%"
+
+TemplateSet:
+  name: "&e模板设置: &b%modename%"
+  Filler:
+    material: BLACK_STAINED_GLASS_PANE
+  AutoCrafting:
+    slot: 10
+    material: CRAFTING_TABLE
+    name: "&e自动合成"
+    Lore:
+      - "&a当前状态: %toggle%"
+      - "&7左键 开/关"
+      - "&7右键 打开配置界面"
+  Break:
+    slot: 12
+    material: GRASS_BLOCK
+    name: "&e自动销毁"
+    Lore:
+      - "&a当前状态: %toggle%"
+      - "&7左键或右键点击切换"
+  FilterItem:
+    slot: 14
+    material: CHEST
+    name: "&e过滤物品"
+    Lore:
+      - "&a将过滤你添加的物品"
+  FilterMode:
+    slot: 16
+    material: REDSTONE_BLOCK
+    name: "&e过滤模式"
+    Lore:
+      - "&7仅作用于过滤物品"
+      - "&8当前模式: %filtermode%"
+  FilterEnchant:
+    slot: 28
+    material: ENCHANTED_BOOK
+    name: "&e附魔过滤"
+    Lore:
+      - "&7点击进入附魔属性过滤"
+  FilterDurability:
+    slot: 30
+    material: EMERALD
+    name: "&e耐久过滤"
+    Lore:
+      - "&7点击设置最低剩余耐久"
+    SetLore:
+      - "&7点击设置最低剩余耐久"
+      - "&a过滤耐久度: &b%Durability%"
+  AutoSmelt:
+    slot: 32
+    material: FURNACE
+    name: "&e自动熔炼"
+    Lore:
+      - "&a当前状态: %toggle%"
+      - "&7左键 开/关"
+      - "&7右键 打开配置界面"
+  Batch:
+    slot: 34
+    material: ENDER_EYE
+    name: "&e批量设置"
+    Lore:
+      - "&7点击后为漏斗批量套用本模板"
+
+FilterEnchantGui:
+  name: "&6过滤附魔属性"
+  Enchant:
+    material: BOOK
+    name: "&e%Enchant%"
+    Lore:
+      - "&7左键 设置最低等级"
+  SetEnchant:
+    material: ENCHANTED_BOOK
+    name: "&e%Enchant%"
+    Lore:
+      - "&a当前过滤: &e%Enchant% %EnchantLevel%"
+      - "&7左键 修改等级"
+      - "&7右键 清除过滤"
+
+HopperSetting:
+  name: "&e漏斗设置"
+  Filler:
+    material: BLACK_STAINED_GLASS_PANE
+  Redstone:
+    slot: 10
+    material: REDSTONE
+    name: "&e红石开关名单"
+    Lore:
+      - "&a当前状态: %toggle%"
+      - "&7充能=白名单 未充能=黑名单"
+      - "&7左键或右键点击切换"
+  Reverse:
+    slot: 12
+    material: GOLD_INGOT
+    name: "&e反向吸取"
+    Lore:
+      - "&a当前状态: %toggle%"
+      - "&7左键或右键点击切换"
+
+Auto-Crafting:
+  rows: 6
+  name: "&6自动合成"
+
+Filter-Item:
+  rows: 6
+  name: "&6过滤的物品"
+
+Auto-Furnace:
+  rows: 6
+  name: "&6自动熔炼"
+
+Messages:
+  reload-success: "&a[XLRHopper] 配置已重载"
+  reload-fail: "&c[XLRHopper] 重载失败"
+  reload-no-permission: "&c你没有权限执行此命令"
+  reload-console-only-fail: "&c重载失败，请查看控制台"
+  durability-prompt: "&a请在聊天栏输入数字耐久度 &7(低于该剩余耐久的物品将被过滤，输入 xlrquit 退出设置)"
+  enchant-prompt: "&a请输入附魔等级 &7(低于该等级的附魔将被过滤，输入 xlrquit 退出设置)"
+  batch-enter: "&a已进入批量设置模式，左键或右键点击漏斗套用模板"
+  batch-quit-hint: "&7输入 xlrquit 退出批量设置模式"
+  no-template: "&c玩家当前漏斗没有模板"
+  enchant-cleared: "&a已清除附魔过滤: &e%Enchant%"

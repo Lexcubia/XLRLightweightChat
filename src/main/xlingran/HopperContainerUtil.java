@@ -8,12 +8,12 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.HashMap;
 
-final class HopperContainerUtil {
+public final class HopperContainerUtil {
 
     private HopperContainerUtil() {
     }
 
-    static Inventory getContainerInventory(Block block) {
+    public static Inventory getContainerInventory(Block block) {
         if (block == null) {
             return null;
         }
@@ -24,7 +24,7 @@ final class HopperContainerUtil {
         return null;
     }
 
-    static void syncContainer(Block block) {
+    public static void syncContainer(Block block) {
         if (block == null) {
             return;
         }
@@ -34,7 +34,7 @@ final class HopperContainerUtil {
         }
     }
 
-    static void refund(Block block, Inventory inventory, ItemStack stack) {
+    public static void refund(Block block, Inventory inventory, ItemStack stack) {
         if (block == null || inventory == null || stack == null || stack.getType().isAir()) {
             return;
         }

@@ -1,22 +1,21 @@
 package xlingran;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
+import xlingran.core.HopperLane;
+import xlingran.core.HopperLaneRegistry;
+import xlingran.core.HopperWorkEvaluator;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 /**
- * 统一 8 tick 漏斗管线：熔炼 → 合成 → 反向传输。
+ * P1：仅 workQueue 排水 + 单步 feature（§0.2）。
  */
 public final class HopperTickService implements Listener {
 
@@ -26,70 +25,98 @@ public final class HopperTickService implements Listener {
     private final JavaPlugin plugin;
     private final HopperTemplateManager templateManager;
     private final HopperKeys keys;
-    private final HopperAutomationRegistry registry;
+    private final HopperLaneRegistry laneRegistry;
     private final HopperReservation reservation;
     private final HopperAutoSmeltService smeltService;
     private final HopperAutoCraftService craftService;
 
     public HopperTickService(JavaPlugin plugin, HopperTemplateManager templateManager, HopperKeys keys,
-                             HopperAutomationRegistry registry) {
+                             HopperLaneRegistry laneRegistry) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.keys = keys;
-        this.registry = registry;
+        this.laneRegistry = laneRegistry;
         this.reservation = new HopperReservation();
         this.smeltService = new HopperAutoSmeltService();
         this.craftService = new HopperAutoCraftService();
         Bukkit.getScheduler().runTaskTimer(plugin, this::tickAll, HOPPER_TICK_PERIOD, HOPPER_TICK_PERIOD);
-        Bukkit.getScheduler().runTask(plugin, () -> registry.indexWorlds(keys, templateManager));
     }
 
-    public HopperAutomationRegistry getRegistry() {
-        return registry;
+    public HopperLaneRegistry getLaneRegistry() {
+        return laneRegistry;
+    }
+
+    public HopperTemplateManager getTemplateManager() {
+        return templateManager;
+    }
+
+    public HopperKeys getKeys() {
+        return keys;
     }
 
     public HopperReservation getReservation() {
         return reservation;
     }
 
-    @EventHandler
-    public void onChunkLoad(ChunkLoadEvent event) {
-        registry.indexChunk(event.getChunk(), keys, templateManager);
+    public HopperAutoSmeltService getSmeltService() {
+        return smeltService;
+    }
+
+    public void onLaneRemoved(Location loc) {
+        laneRegistry.unregisterLane(loc);
+        smeltService.clear(loc);
+        reservation.clear(loc);
+    }
+
+    /**
+     * 异步 reindex 完成后在主线程调用。
+     */
+    public void registerLoadedHopper(Block block) {
+        HopperLane lane = laneRegistry.registerLane(block, keys, templateManager);
+        if (lane != null) {
+            HopperWorkEvaluator.evaluateAndQueue(block, laneRegistry, keys, smeltService);
+        }
     }
 
     private void tickAll() {
-        List<Location> locations = registry.snapshot();
+        List<HopperLane> lanes = laneRegistry.workQueueSnapshot(MAX_PER_TICK);
         int processed = 0;
-        for (Location loc : locations) {
+        for (HopperLane lane : lanes) {
             if (++processed > MAX_PER_TICK) {
-                plugin.getLogger().warning("[XLRHopper] 漏斗自动化队列积压，剩余延后处理");
+                plugin.getLogger().warning("[XLRHopper] 漏斗工作队列积压，剩余延后处理");
                 break;
             }
+            Location loc = lane.location();
             if (loc.getWorld() == null || !loc.getWorld().isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) {
+                laneRegistry.removeFromWorkQueue(HopperLane.laneKey(loc));
                 continue;
             }
             Block block = loc.getBlock();
-            if (block.getType() != Material.HOPPER) {
-                registry.setActive(loc, false);
+            if (block.getType() != Material.HOPPER || !lane.hasSnapshot()) {
+                onLaneRemoved(loc);
                 continue;
             }
-            HopperTemplate template = HopperTemplateResolver.resolve(block, keys, templateManager);
+            HopperTemplate template = lane.template();
             if (template == null) {
-                registry.setActive(loc, false);
-                smeltService.clear(loc);
-                reservation.clear(loc);
+                onLaneRemoved(loc);
                 continue;
             }
-            registry.syncHopper(block, keys, templateManager);
 
             Set<Integer> reserved = new HashSet<>();
-            reserved.addAll(smeltService.tick(block, template, keys));
-            reserved.addAll(craftService.tryCraft(block, template, keys));
+            if (lane.isAutoSmelt()) {
+                reserved.addAll(smeltService.tick(block, template, keys));
+            }
+            if (lane.isAutoCraft()) {
+                reserved.addAll(craftService.tryCraft(block, template, keys));
+            }
             reservation.setReserved(loc, reserved);
 
-            if (HopperBlockConfig.isReverse(block, keys)) {
+            if (lane.isReverse()) {
                 HopperTransferReverse.transferStep(block, template, keys, reservation);
             }
+
+            boolean keep = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService);
+            laneRegistry.removeLaneFromQueueAfterTick(lane, keep);
         }
     }
 }

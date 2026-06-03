@@ -23,6 +23,7 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+import xlingran.core.HopperLaneListener;
 
 public class HopperListener implements Listener {
 
@@ -32,11 +33,14 @@ public class HopperListener implements Listener {
     private final JavaPlugin plugin;
     private final HopperTemplateManager templateManager;
     private final HopperKeys keys;
+    private final HopperLaneListener laneListener;
 
-    public HopperListener(JavaPlugin plugin, HopperTemplateManager templateManager, HopperKeys keys) {
+    public HopperListener(JavaPlugin plugin, HopperTemplateManager templateManager, HopperKeys keys,
+                          HopperLaneListener laneListener) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.keys = keys;
+        this.laneListener = laneListener;
     }
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
@@ -65,6 +69,7 @@ public class HopperListener implements Listener {
             return false;
         }
         player.sendMessage(PLACE_MESSAGE_PREFIX + ChatColor.AQUA + enabledName);
+        laneListener.scheduleEvaluate(block);
         return true;
     }
 

@@ -15,13 +15,24 @@ import java.util.Locale;
 public class HopperCommand implements CommandExecutor, TabCompleter {
 
     private final Gui gui;
+    private final Shan plugin;
 
-    public HopperCommand(Gui gui) {
+    public HopperCommand(Gui gui, Shan plugin) {
         this.gui = gui;
+        this.plugin = plugin;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (args.length >= 1 && args[0].equalsIgnoreCase("reload")) {
+            if (!sender.hasPermission("xlrhopper.admin")) {
+                sender.sendMessage(plugin.getGuiConfig().message("reload-no-permission"));
+                return true;
+            }
+            plugin.reload(sender);
+            return true;
+        }
+
         if (!(sender instanceof Player player)) {
             sender.sendMessage(ChatColor.RED + "此命令只能由玩家执行");
             return true;
@@ -71,17 +82,18 @@ public class HopperCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        player.sendMessage(ChatColor.RED + "用法: /xlrhopper <mode|create mode <名称>|edit mode <名称>>");
+        player.sendMessage(ChatColor.RED + "用法: /xlrhopper <mode|create mode <名称>|edit mode <名称>|reload>");
         return true;
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (!(sender instanceof Player player)) {
-            return Collections.emptyList();
-        }
         if (args.length == 1) {
             List<String> options = new ArrayList<>();
+            if (sender.hasPermission("xlrhopper.admin")) {
+                options.add("reload");
+            }
+            if (sender instanceof Player player) {
             if (player.hasPermission("xlrhopper.mode")) {
                 options.add("mode");
             }
@@ -91,7 +103,11 @@ public class HopperCommand implements CommandExecutor, TabCompleter {
             if (player.hasPermission("xlrhopper.edit.mode")) {
                 options.add("edit");
             }
+            }
             return filterPrefix(options, args[0]);
+        }
+        if (!(sender instanceof Player player)) {
+            return Collections.emptyList();
         }
         if (args.length == 2) {
             if (args[0].equalsIgnoreCase("create")) {

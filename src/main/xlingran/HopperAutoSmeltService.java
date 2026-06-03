@@ -101,6 +101,10 @@ public final class HopperAutoSmeltService {
         jobs.remove(laneKey(loc));
     }
 
+    public boolean hasJob(Location loc) {
+        return loc != null && loc.getWorld() != null && jobs.containsKey(laneKey(loc));
+    }
+
     private static String laneKey(Location loc) {
         return loc.getWorld().getUID() + ":" + loc.getBlockX() + ":" + loc.getBlockY() + ":" + loc.getBlockZ();
     }

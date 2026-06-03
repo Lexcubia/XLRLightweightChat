@@ -1,5 +1,5 @@
 name: XLRHopper
-version: 1.2.0
+version: 1.3.0
 main: xlingran.Shan
 api-version: 1.21.1
 author: Shan
@@ -8,9 +8,12 @@ description: 高级漏斗传输插件
 commands:
   xlrhopper:
     description: XLRHopper 漏斗模板
-    usage: /xlrhopper <mode|create mode <名称>|edit mode <名称>>
+    usage: /xlrhopper <mode|create mode <名称>|edit mode <名称>|reload>
 
 permissions:
+  xlrhopper.admin:
+    description: 重载插件配置（reload）
+    default: op
   xlrhopper.create.mode:
     description: 创建过滤模板 (create mode)
     default: op

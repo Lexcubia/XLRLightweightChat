@@ -9,21 +9,20 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
-
+import xlingran.core.HopperLaneListener;
 /**
- * 反向吸取：仅取消与反向冲突的原版四向传输；搬运由 {@link HopperTickService} 执行。
+ * 反向吸取：仅取消四向冲突移动；搬运由 HopperTickService 执行。
  */
 public class HopperReverseHandler implements Listener {
 
     private final HopperKeys keys;
-    private final HopperTemplateManager templateManager;
-    private final HopperAutomationRegistry registry;
+    private final HopperTickService tickService;
+    private final HopperLaneListener laneListener;
 
-    public HopperReverseHandler(HopperKeys keys, HopperTemplateManager templateManager,
-                                HopperAutomationRegistry registry) {
+    public HopperReverseHandler(HopperKeys keys, HopperTickService tickService, HopperLaneListener laneListener) {
         this.keys = keys;
-        this.templateManager = templateManager;
-        this.registry = registry;
+        this.tickService = tickService;
+        this.laneListener = laneListener;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -32,18 +31,20 @@ public class HopperReverseHandler implements Listener {
         Block srcHopper = getHopperBlock(event.getSource());
 
         if (destHopper != null && HopperBlockConfig.isReverse(destHopper, keys)) {
-            registry.syncHopper(destHopper, keys, templateManager);
             if (isInventoryAboveHopper(destHopper, event.getSource())
                     || isInventoryBelowHopper(destHopper, event.getSource())) {
                 event.setCancelled(true);
             }
+            laneListener.scheduleEvaluate(destHopper);
+            tickService.getLaneRegistry().invalidateTargetSpace(destHopper.getLocation());
         }
         if (srcHopper != null && HopperBlockConfig.isReverse(srcHopper, keys)) {
-            registry.syncHopper(srcHopper, keys, templateManager);
             if (isInventoryBelowHopper(srcHopper, event.getDestination())
                     || isInventoryAboveHopper(srcHopper, event.getDestination())) {
                 event.setCancelled(true);
             }
+            laneListener.scheduleEvaluate(srcHopper);
+            tickService.getLaneRegistry().invalidateTargetSpace(srcHopper.getLocation());
         }
     }
 
