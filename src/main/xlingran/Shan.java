@@ -12,7 +12,6 @@ public class Shan extends JavaPlugin {
     private HopperTemplateManager templateManager;
     private PlayerGuiSession playerGuiSession;
     private DataStore dataStore;
-    private PlayerBoxManager boxManager;
     private Gui gui;
     private HopperKeys hopperKeys;
 
@@ -28,10 +27,6 @@ public class Shan extends JavaPlugin {
         return gui;
     }
 
-    public PlayerBoxManager getBoxManager() {
-        return boxManager;
-    }
-
     public HopperKeys getHopperKeys() {
         return hopperKeys;
     }
@@ -45,11 +40,10 @@ public class Shan extends JavaPlugin {
         templateManager = new HopperTemplateManager();
         playerGuiSession = new PlayerGuiSession();
         dataStore = new DataStore(getDataFolder(), getLogger());
-        boxManager = new PlayerBoxManager();
-        dataStore.load(templateManager, boxManager);
+        dataStore.load(templateManager);
 
         hopperKeys = new HopperKeys(this);
-        gui = new Gui(this, templateManager, playerGuiSession, dataStore, boxManager, hopperKeys);
+        gui = new Gui(this, templateManager, playerGuiSession, dataStore, hopperKeys);
 
         PluginCommand cmd = getCommand("xlrhopper");
         if (cmd != null) {
@@ -61,12 +55,6 @@ public class Shan extends JavaPlugin {
         getServer().getPluginManager().registerEvents(gui, this);
         getServer().getPluginManager().registerEvents(new HopperListener(this, templateManager, hopperKeys), this);
         getServer().getPluginManager().registerEvents(new HopperReverseHandler(this, templateManager, hopperKeys), this);
-        getServer().getPluginManager().registerEvents(
-                new HopperBoxOutputHandler(this, templateManager, hopperKeys, boxManager, () -> {
-                    if (dataStore != null && templateManager != null && boxManager != null) {
-                        dataStore.save(templateManager, boxManager);
-                    }
-                }, gui::refreshOpenBoxStorage), this);
         getServer().getPluginManager().registerEvents(new BatchModeListener(hopperKeys, playerGuiSession), this);
         getServer().getPluginManager().registerEvents(new HopperSettingsListener(gui, templateManager, hopperKeys), this);
 
@@ -78,8 +66,8 @@ public class Shan extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        if (dataStore != null && templateManager != null && boxManager != null) {
-            dataStore.save(templateManager, boxManager);
+        if (dataStore != null && templateManager != null) {
+            dataStore.save(templateManager);
         }
         Bukkit.getConsoleSender().sendMessage(
                 ChatColor.RED + "插件 "

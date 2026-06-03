@@ -31,7 +31,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class Gui implements Listener {
 
@@ -40,12 +39,9 @@ public class Gui implements Listener {
     private static final int HOPPER_SETTINGS_SIZE = 27;
     private static final int HOPPER_SLOT_REDSTONE_LIST = 10;
     private static final int HOPPER_SLOT_REVERSE = 12;
-    private static final int SETTINGS_SLOT_LINK_BOX = 10;
     private static final int SETTINGS_SLOT_AUTO_DESTROY = 12;
     private static final int SETTINGS_SLOT_ITEMS = 14;
     private static final int SETTINGS_SLOT_MODE = 16;
-    private static final int BOX_LIST_SIZE = 27;
-    private static final int BOX_STORAGE_SIZE = 54;
     private static final int SETTINGS_SLOT_ENCHANT = 28;
     private static final int SETTINGS_SLOT_DURABILITY = 30;
     private static final int SETTINGS_SLOT_REMOTE = 32;
@@ -55,21 +51,19 @@ public class Gui implements Listener {
     private final HopperTemplateManager templateManager;
     private final PlayerGuiSession sessions;
     private final DataStore dataStore;
-    private final PlayerBoxManager boxManager;
     private final HopperKeys hopperKeys;
 
     public Gui(Shan plugin, HopperTemplateManager templateManager, PlayerGuiSession sessions, DataStore dataStore,
-               PlayerBoxManager boxManager, HopperKeys hopperKeys) {
+               HopperKeys hopperKeys) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.sessions = sessions;
         this.dataStore = dataStore;
-        this.boxManager = boxManager;
         this.hopperKeys = hopperKeys;
     }
 
     public void saveData() {
-        dataStore.save(templateManager, boxManager);
+        dataStore.save(templateManager);
     }
 
     public void openTemplateList(Player player) {
@@ -101,7 +95,6 @@ public class Gui implements Listener {
             return;
         }
 
-        inv.setItem(SETTINGS_SLOT_LINK_BOX, linkedBoxButton(template));
         inv.setItem(SETTINGS_SLOT_AUTO_DESTROY, toggleStateButton(Material.GRASS_BLOCK, "&e自动销毁",
                 template.isAutoDestroy()));
         inv.setItem(SETTINGS_SLOT_ITEMS, button(Material.CHEST, "&e过滤物品",
@@ -116,77 +109,6 @@ public class Gui implements Listener {
                 List.of("&7点击后为漏斗批量套用本模板")));
 
         player.openInventory(inv);
-    }
-
-    public void openBoxList(Player player) {
-        sessions.clearLinkingBoxTemplate(player.getUniqueId());
-        openBoxListInternal(player);
-    }
-
-    public void openBoxListForLink(Player player, String templateName) {
-        sessions.setLinkingBoxTemplate(player.getUniqueId(), templateName);
-        openBoxListInternal(player);
-    }
-
-    private void openBoxListInternal(Player player) {
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.BOX_LIST), BOX_LIST_SIZE,
-                color("&e漏斗仓库"));
-        bindHolder(inv, GuiType.BOX_LIST);
-
-        List<String> names = boxManager.getBoxNames(player.getUniqueId());
-        for (int i = 0; i < names.size() && i < BOX_LIST_SIZE; i++) {
-            inv.setItem(i, boxListItem(names.get(i)));
-        }
-        player.openInventory(inv);
-    }
-
-    public void openBoxStorage(Player player, String boxName) {
-        UUID playerId = player.getUniqueId();
-        if (!boxManager.hasBox(playerId, boxName)) {
-            player.sendMessage(color("&c仓库不存在: &b" + boxName));
-            return;
-        }
-        ItemStack[] contents = boxManager.getBoxContents(playerId, boxName);
-        sessions.setOpenBoxSnapshot(playerId, boxName, contents);
-
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.BOX_STORAGE, boxName),
-                BOX_STORAGE_SIZE, color("&e仓库: &b" + boxName));
-        bindHolder(inv, GuiType.BOX_STORAGE);
-
-        if (contents != null) {
-            for (int i = 0; i < BOX_STORAGE_SIZE && i < contents.length; i++) {
-                if (contents[i] != null && !contents[i].getType().isAir()) {
-                    inv.setItem(i, contents[i].clone());
-                }
-            }
-        }
-        player.openInventory(inv);
-    }
-
-    /** 漏斗写入链接仓库后，刷新玩家当前打开的仓库界面，避免关闭 GUI 时用旧快照覆盖新入库。 */
-    public void refreshOpenBoxStorage(UUID ownerId, String boxName) {
-        if (ownerId == null || boxName == null || boxName.isEmpty()) {
-            return;
-        }
-        ItemStack[] live = boxManager.getBoxContents(ownerId, boxName);
-        if (live == null) {
-            return;
-        }
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (!player.getUniqueId().equals(ownerId)) {
-                continue;
-            }
-            InventoryView view = player.getOpenInventory();
-            XlrGuiHolder holder = XlrGuiHolder.from(view.getTopInventory());
-            if (holder == null || holder.getType() != GuiType.BOX_STORAGE || !boxName.equals(holder.getTemplateName())) {
-                continue;
-            }
-            Inventory top = view.getTopInventory();
-            for (int i = 0; i < BOX_STORAGE_SIZE && i < live.length; i++) {
-                ItemStack stack = live[i];
-                top.setItem(i, stack == null || stack.getType().isAir() ? null : stack.clone());
-            }
-        }
     }
 
     public void openHopperSettings(Player player, Block hopperBlock) {
@@ -270,10 +192,6 @@ public class Gui implements Listener {
             handleFilterItemsClick(event);
             return;
         }
-        if (holder.getType() == GuiType.BOX_STORAGE) {
-            handleBoxStorageClick(event);
-            return;
-        }
         event.setCancelled(true);
         if (GuiClickGuard.shouldIgnoreClick(sessions, player)) {
             return;
@@ -284,14 +202,12 @@ public class Gui implements Listener {
         }
 
         int slot = event.getSlot();
-        UUID playerId = player.getUniqueId();
 
         switch (holder.getType()) {
             case TEMPLATE_LIST -> handleTemplateListClick(player, slot, event.getClick());
             case TEMPLATE_SETTINGS -> handleSettingsClick(player, slot, event.getClick(), holder);
             case FILTER_ENCHANTS -> handleFilterEnchantsClick(player, slot, holder);
             case HOPPER_SETTINGS -> handleHopperSettingsClick(player, slot, event.getClick(), holder);
-            case BOX_LIST -> handleBoxListClick(player, slot, holder);
             default -> {
             }
         }
@@ -306,7 +222,7 @@ public class Gui implements Listener {
         if (holder == null) {
             return;
         }
-        if (holder.getType() != GuiType.FILTER_ITEMS && holder.getType() != GuiType.BOX_STORAGE) {
+        if (holder.getType() != GuiType.FILTER_ITEMS) {
             GuiClickGuard.cancelDrag(event);
         }
     }
@@ -330,14 +246,6 @@ public class Gui implements Listener {
         }
         if (holder.getType() == GuiType.TEMPLATE_SETTINGS) {
             saveData();
-        }
-        if (holder.getType() == GuiType.BOX_STORAGE) {
-            String boxName = holder.getTemplateName();
-            if (boxName != null) {
-                saveBoxStorage(player, event.getInventory(), boxName);
-                sessions.clearOpenBoxSnapshot(player.getUniqueId());
-                saveData();
-            }
         }
     }
 
@@ -463,11 +371,6 @@ public class Gui implements Listener {
             return;
         }
         switch (slot) {
-            case SETTINGS_SLOT_LINK_BOX -> {
-                if (click == ClickType.LEFT || click == ClickType.RIGHT) {
-                    openBoxListForLink(player, templateName);
-                }
-            }
             case SETTINGS_SLOT_AUTO_DESTROY -> {
                 if (click == ClickType.LEFT || click == ClickType.RIGHT) {
                     template.toggleAutoDestroy();
@@ -501,77 +404,6 @@ public class Gui implements Listener {
             default -> {
             }
         }
-    }
-
-    private void handleBoxListClick(Player player, int slot, XlrGuiHolder holder) {
-        if (slot < 0 || slot >= BOX_LIST_SIZE) {
-            return;
-        }
-        List<String> names = boxManager.getBoxNames(player.getUniqueId());
-        if (slot >= names.size()) {
-            return;
-        }
-        String boxName = names.get(slot);
-        String linkingTemplate = sessions.getLinkingBoxTemplate(player.getUniqueId());
-        if (linkingTemplate != null) {
-            HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), linkingTemplate);
-            if (template != null) {
-                template.setLinkedBoxName(boxName);
-                saveData();
-                player.sendMessage(color("&a已链接漏斗仓库: &b" + boxName));
-            }
-            sessions.clearLinkingBoxTemplate(player.getUniqueId());
-            openTemplateSettings(player, linkingTemplate);
-            return;
-        }
-        openBoxStorage(player, boxName);
-    }
-
-    private void handleBoxStorageClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player)) {
-            return;
-        }
-        InventoryView view = event.getView();
-        int topSize = view.getTopInventory().getSize();
-        if (event.getClick() == ClickType.NUMBER_KEY && event.getRawSlot() < topSize) {
-            event.setCancelled(true);
-        }
-    }
-
-    private void saveBoxStorage(Player player, Inventory inventory, String boxName) {
-        UUID playerId = player.getUniqueId();
-        if (!boxManager.hasBox(playerId, boxName)) {
-            return;
-        }
-        ItemStack[] live = boxManager.getBoxContents(playerId, boxName);
-        PlayerGuiSession.BoxOpenState openState = sessions.getOpenBoxSnapshot(playerId);
-        ItemStack[] snapshot = openState != null && boxName.equals(openState.boxName())
-                ? openState.snapshot() : null;
-
-        ItemStack[] contents = new ItemStack[PlayerBoxManager.BOX_CAPACITY];
-        for (int i = 0; i < BOX_STORAGE_SIZE && i < contents.length; i++) {
-            ItemStack guiStack = inventory.getItem(i);
-            ItemStack snapStack = snapshot != null && i < snapshot.length ? snapshot[i] : null;
-            if (snapshot != null && !slotStacksEqual(guiStack, snapStack)) {
-                contents[i] = guiStack == null || guiStack.getType().isAir() ? null : guiStack.clone();
-            } else if (live != null && i < live.length) {
-                ItemStack backend = live[i];
-                contents[i] = backend == null || backend.getType().isAir() ? null : backend.clone();
-            } else if (guiStack != null && !guiStack.getType().isAir()) {
-                contents[i] = guiStack.clone();
-            }
-        }
-        boxManager.setBoxContents(playerId, boxName, contents);
-    }
-
-    private static boolean slotStacksEqual(ItemStack a, ItemStack b) {
-        if (a == null || a.getType().isAir()) {
-            return b == null || b.getType().isAir();
-        }
-        if (b == null || b.getType().isAir()) {
-            return false;
-        }
-        return a.isSimilar(b) && a.getAmount() == b.getAmount();
     }
 
     private void handleHopperSettingsClick(Player player, int slot, ClickType click, XlrGuiHolder holder) {
@@ -781,20 +613,6 @@ public class Gui implements Listener {
         } catch (NumberFormatException e) {
             return null;
         }
-    }
-
-    private ItemStack linkedBoxButton(HopperTemplate template) {
-        String linked = template.getLinkedBoxName();
-        String line = linked == null || linked.isEmpty()
-                ? "&e当前链接仓库: 无"
-                : "&e当前链接仓库: " + linked;
-        return button(Material.ENDER_CHEST, "&e链接漏斗仓库", List.of(line, "&7点击选择要链接的仓库"));
-    }
-
-    private ItemStack boxListItem(String boxName) {
-        return button(Material.ENDER_CHEST, "&b" + boxName, List.of(
-                "&7左键打开仓库（6行）",
-                "&7模板链接时左键选择"));
     }
 
     private ItemStack modeButton(HopperTemplate template) {

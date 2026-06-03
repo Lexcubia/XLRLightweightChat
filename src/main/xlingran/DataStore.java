@@ -12,16 +12,12 @@ import org.bukkit.inventory.ItemStack;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Logger;
 
 final class DataStore {
-
-    private static final String BOX_EMPTY_MARKER = "__empty__";
 
     private final File file;
     private final Logger logger;
@@ -31,7 +27,7 @@ final class DataStore {
         this.logger = logger;
     }
 
-    void load(HopperTemplateManager manager, PlayerBoxManager boxManager) {
+    void load(HopperTemplateManager manager) {
         if (!file.exists()) {
             return;
         }
@@ -47,7 +43,6 @@ final class DataStore {
                 if (playerSec == null) {
                     continue;
                 }
-                loadBoxes(playerSec, uuid, boxManager);
                 ConfigurationSection templates = playerSec.getConfigurationSection("templates");
                 if (templates != null) {
                     for (String templateName : templates.getKeys(false)) {
@@ -58,10 +53,6 @@ final class DataStore {
                         HopperTemplate template = new HopperTemplate();
                         template.setWhitelist(tSec.getBoolean("whitelist", false));
                         template.setAutoDestroy(tSec.getBoolean("auto-destroy", false));
-                        String linkedBox = tSec.getString("linked-box");
-                        if (linkedBox != null && !linkedBox.isEmpty()) {
-                            template.setLinkedBoxName(linkedBox);
-                        }
                         loadFilterItems(tSec, template);
                         if (tSec.contains("durability-threshold")) {
                             template.setDurabilityThreshold(tSec.getInt("durability-threshold"));
@@ -78,37 +69,6 @@ final class DataStore {
                 logger.warning("[XLRHopper] 无效 UUID: " + uuidStr);
             }
         }
-    }
-
-    private void loadBoxes(ConfigurationSection playerSec, UUID uuid, PlayerBoxManager boxManager) {
-        ConfigurationSection boxes = playerSec.getConfigurationSection("boxes");
-        if (boxes == null) {
-            return;
-        }
-        Map<String, ItemStack[]> loaded = new HashMap<>();
-        for (String boxName : boxes.getKeys(false)) {
-            ConfigurationSection slotSec = boxes.getConfigurationSection(boxName);
-            ItemStack[] arr = new ItemStack[PlayerBoxManager.BOX_CAPACITY];
-            if (slotSec != null) {
-                for (String key : slotSec.getKeys(false)) {
-                    if (BOX_EMPTY_MARKER.equals(key)) {
-                        continue;
-                    }
-                    try {
-                        int index = Integer.parseInt(key);
-                        if (index >= 0 && index < PlayerBoxManager.BOX_CAPACITY) {
-                            ItemStack stack = slotSec.getItemStack(key);
-                            if (stack != null && !stack.getType().isAir()) {
-                                arr[index] = stack;
-                            }
-                        }
-                    } catch (NumberFormatException ignored) {
-                    }
-                }
-            }
-            loaded.put(boxName, arr);
-        }
-        boxManager.putPlayerBoxes(uuid, loaded);
     }
 
     private void loadFilterItems(ConfigurationSection tSec, HopperTemplate template) {
@@ -157,24 +117,20 @@ final class DataStore {
         return Registry.ENCHANTMENT.get(namespacedKey);
     }
 
-    void save(HopperTemplateManager manager, PlayerBoxManager boxManager) {
+    void save(HopperTemplateManager manager) {
         FileConfiguration config = file.exists()
                 ? YamlConfiguration.loadConfiguration(file)
                 : new YamlConfiguration();
 
-        Set<UUID> playerIds = new HashSet<>();
-        playerIds.addAll(manager.getAllPlayerTemplates().keySet());
-        playerIds.addAll(boxManager.getAllPlayerBoxes().keySet());
-
-        for (UUID uuid : playerIds) {
+        for (UUID uuid : manager.getAllPlayerTemplates().keySet()) {
             String path = "players." + uuid;
+            config.set(path + ".boxes", null);
             String enabled = manager.getEnabledTemplateName(uuid);
             if (enabled != null && !enabled.isEmpty()) {
                 config.set(path + ".enabled-template", enabled);
             } else {
                 config.set(path + ".enabled-template", null);
             }
-            savePlayerBoxes(config, path, uuid, boxManager);
             Map<String, HopperTemplate> templates = manager.getTemplates(uuid);
             for (Map.Entry<String, HopperTemplate> templateEntry : templates.entrySet()) {
                 String name = templateEntry.getKey();
@@ -182,11 +138,7 @@ final class DataStore {
                 String base = path + ".templates." + name;
                 config.set(base + ".whitelist", t.isWhitelist());
                 config.set(base + ".auto-destroy", t.isAutoDestroy());
-                if (t.getLinkedBoxName() != null && !t.getLinkedBoxName().isEmpty()) {
-                    config.set(base + ".linked-box", t.getLinkedBoxName());
-                } else {
-                    config.set(base + ".linked-box", null);
-                }
+                config.set(base + ".linked-box", null);
                 config.set(base + ".filter-items", ItemStackUtil.serializeList(t.getFilterPrototypes()));
                 if (t.getDurabilityThreshold() != null) {
                     config.set(base + ".durability-threshold", t.getDurabilityThreshold());
@@ -208,43 +160,6 @@ final class DataStore {
             config.save(file);
         } catch (IOException e) {
             logger.severe("[XLRHopper] 无法保存 data.yml: " + e.getMessage());
-        }
-    }
-
-    private void savePlayerBoxes(FileConfiguration config, String path, UUID uuid, PlayerBoxManager boxManager) {
-        Map<String, ItemStack[]> boxes = boxManager.getAllPlayerBoxes().get(uuid);
-        if (boxes == null || boxes.isEmpty()) {
-            return;
-        }
-        String boxesPath = path + ".boxes";
-        ConfigurationSection existing = config.getConfigurationSection(boxesPath);
-        if (existing != null) {
-            for (String oldName : existing.getKeys(false)) {
-                if (!boxes.containsKey(oldName)) {
-                    config.set(boxesPath + "." + oldName, null);
-                }
-            }
-        }
-        for (Map.Entry<String, ItemStack[]> boxEntry : boxes.entrySet()) {
-            String boxPath = boxesPath + "." + boxEntry.getKey();
-            ItemStack[] contents = boxEntry.getValue();
-            boolean hasItem = false;
-            if (contents != null) {
-                for (int i = 0; i < PlayerBoxManager.BOX_CAPACITY; i++) {
-                    ItemStack stack = contents[i];
-                    if (stack != null && !stack.getType().isAir()) {
-                        config.set(boxPath + "." + i, stack);
-                        hasItem = true;
-                    } else {
-                        config.set(boxPath + "." + i, null);
-                    }
-                }
-            }
-            if (!hasItem) {
-                config.set(boxPath + "." + BOX_EMPTY_MARKER, true);
-            } else {
-                config.set(boxPath + "." + BOX_EMPTY_MARKER, null);
-            }
         }
     }
 }

@@ -3,7 +3,7 @@
 | 项目 | 说明 |
 |------|------|
 | 插件名称 | XLRHopper |
-| 版本 | 1.0.0 |
+| 版本 | 1.1.0 |
 | 作者 | Shan |
 | API | Spigot/Paper 1.21.1 |
 | 主类 | `xlingran.Shan` |
@@ -25,10 +25,9 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `/xlrhopper create mode <名称>` | `xlrhopper.create.mode` | 创建名为 `<名称>` 的模板（默认启用该模板、黑名单），并打开「模板设置」 |
 | `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode` | 编辑已有模板，打开「模板设置」 |
 | `/xlrhopper mode` | `xlrhopper.mode` | 打开「漏斗模板」列表 GUI |
-| `/xlrhopper box` | `xlrhopper.box` | 打开「漏斗仓库」列表 GUI |
-| `/xlrhopper create box <名称>` | `xlrhopper.create.box` | 创建名为 `<名称>` 的漏斗仓库（6 行 54 格） |
 
-- 根命令不在 `plugin.yml` 绑定单一 permission；各子命令在代码内分别校验。
+- 根命令 `xlrhopper` 在 `plugin.yml` 注册；子命令在代码内解析。已移除的 `box` / `create box` 子命令会提示新用法。
+- 各子命令在代码内分别校验权限。
 - 无权限时发送对应拒绝提示（硬编码）。
 
 ---
@@ -53,20 +52,17 @@ players:
           - DIAMOND
         filter-items: []             # ItemStack 序列化列表（样板匹配）
         auto-destroy: false          # 模板级：不符合过滤的吸入物体会被销毁
-        linked-box: "仓库名"         # 可选，链接玩家漏斗仓库
         durability-threshold: 100    # 可选
-    boxes:
-      <仓库名>:
-        0: {ItemStack 序列化}        # 槽位索引 0–53
-        enchant-filters:             # 可选，key 为附魔 registry 名
+        enchant-filters:           # 可选，key 为附魔 registry 名
           sharpness: 5
 ```
 
 ### 3.2 读写时机
 
-- 启动：从 `data.yml` 加载模板与 **boxes**（含空仓库标记 `__empty__`）
+- 启动：从 `data.yml` 加载模板
 - 关闭插件：全量保存（合并已有 `data.yml`，不抹掉其他玩家数据）
-- 增量保存：模板/过滤 GUI 变更、**关闭仓库 GUI**、漏斗向链接仓库写入后
+- 增量保存：模板/过滤 GUI 变更时
+- 保存时会清除历史字段 `boxes`、`linked-box`（1.1.0 起已移除漏斗仓库功能）
 
 ---
 
@@ -129,7 +125,6 @@ players:
 
 | Slot | 材质 | 名称 | 行为 |
 |------|------|------|------|
-| 10 | 末影箱 | `&e链接漏斗仓库` | 左/右键打开仓库列表并选择链接；Lore `&e当前链接仓库: 无` 或 `&e当前链接仓库: <名称>` |
 | 12 | 草方块 | `&e自动销毁` | 左/右键切换模板级自动销毁 |
 | 14 | 箱子 | `&e过滤物品` | 打开「过滤的物品」（样板 ItemStack） |
 | 16 | 红石块 | `&e过滤模式` | 左/右键切换模板白/黑名单（单漏斗红石名单关闭时生效） |
@@ -170,13 +165,6 @@ players:
 - **Slot 10**：红石 `&e红石开关名单` → 方块 PDC `redstone-list-toggle`（充能=白名单，未充能=黑名单）
 - **Slot 12**：金锭 `&e反向吸取` → 方块 PDC `reverse-suction`
 - 其余为黑色玻璃，不可取出
-
-### 4.6 漏斗仓库
-
-- **列表**：`&e漏斗仓库`（3 行 × 9 = **27 格**），`/xlrhopper box`；左键打开 **自己创建** 的对应仓库
-- **单仓**：`&e仓库: <名称>`，**6 行 × 9 = 54 格**；可自由放入/拿出；关闭时保存；交互规则同「过滤的物品」
-- 「模板设置 → 链接漏斗仓库」流程中，在列表左键为 **选择链接**（不打开储物）
-- 链接漏斗启用双路输出（仓库优先，仓库满才进下方；总量不超过漏斗转出数）
 
 ---
 
@@ -228,18 +216,7 @@ players:
 
 - 单漏斗 PDC `reverse-suction` 为 true 时：**取消**从上吸入与向下输出；尝试从下方向上搬运（见 `HopperReverseHandler`）
 
-### 6.3.1 漏斗仓库双路按比例拆分
-
-- 模板 `linked-box` 已设置时，漏斗向 **正下方** 转出 N 个物品：**优先写入链接仓库**，仅当仓库放不下时才写入下方容器，**总量仍为 N**（不复制）
-- 例：N=64，仓库能收 64、下方能收 5 → 64 全部进仓库；仓库仅能收 61 时 → 61 进仓库、3 进下方（或退回漏斗）
-- **传输管线**（`HopperBoxOutputHandler` → `HopperTransferQueue` → `HopperDualPathTransfer`）：
-  - `InventoryMoveItemEvent` **LOWEST** 取消原版向下传输，仅 **入队**（不直接改事件内库存）
-  - 按漏斗方块 `world:x:y:z` **单 lane 串行**；同一漏斗同时只跑一个 worker，TPS 低时请求排队而非叠多个 `runTask` 重复扣写
-  - 单 tick 单 lane 最多处理 256 条，超出打 warning 并延后
-  - 执行时从 **方块实体** `Container` 扣减；扣减前后 `countMatching` 校验实际减少量，再写入下方与仓库；写入失败 **退回漏斗**（满则掉落）
-- 仓库变更后写入 `data.yml`（关服、关仓库 GUI、漏斗写入后均保存）
-
-### 6.3.2 自动销毁（auto-destroy）
+### 6.3.1 自动销毁（auto-destroy）
 
 - 模板开启后，不符合过滤规则的 **地上吸入** 会被取消并移除物品实体
 
@@ -312,4 +289,4 @@ players:
 
 ---
 
-*文档版本：与实现计划同步，适用于 XLRHopper 1.0.0 首版开发。*
+*文档版本：与实现同步，适用于 XLRHopper 1.1.0（已移除漏斗仓库）。*

@@ -13,7 +13,6 @@ public class HopperTemplate {
 
     private boolean whitelist = false;
     private boolean autoDestroy;
-    private String linkedBoxName;
     private final List<ItemStack> filterPrototypes = new ArrayList<>();
     private Integer durabilityThreshold;
     private final Map<Enchantment, Integer> enchantMinLevels = new LinkedHashMap<>();
@@ -40,18 +39,6 @@ public class HopperTemplate {
 
     public void toggleAutoDestroy() {
         this.autoDestroy = !this.autoDestroy;
-    }
-
-    public String getLinkedBoxName() {
-        return linkedBoxName;
-    }
-
-    public void setLinkedBoxName(String linkedBoxName) {
-        if (linkedBoxName == null || linkedBoxName.isBlank()) {
-            this.linkedBoxName = null;
-        } else {
-            this.linkedBoxName = linkedBoxName.trim();
-        }
     }
 
     public List<ItemStack> getFilterPrototypes() {
