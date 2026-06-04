@@ -8,6 +8,8 @@ import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 import xlingran.core.HopperLaneListener;
 import xlingran.core.HopperLaneRegistry;
+import xlingran.display.HopperOverlayDisplayService;
+import xlingran.display.HopperOverlayListener;
 import xlingran.gui.GuiConfig;
 import xlingran.gui.MessageConfig;
 import xlingran.storage.ShanDatabase;
@@ -28,6 +30,7 @@ public class Shan extends JavaPlugin {
     private HopperTickService hopperTickService;
     private HopperLaneListener hopperLaneListener;
     private HopperLaneRegistry laneRegistry;
+    private HopperOverlayDisplayService overlayDisplayService;
 
     public static Shan getInstance() {
         return instance;
@@ -91,9 +94,10 @@ public class Shan extends JavaPlugin {
         laneRegistry = new HopperLaneRegistry();
         hopperTickService = new HopperTickService(this, templateManager, hopperKeys, laneRegistry);
         hopperLaneListener = new HopperLaneListener(this, hopperTickService);
+        overlayDisplayService = new HopperOverlayDisplayService(this, hopperKeys, templateManager);
 
         gui = new Gui(this, templateManager, playerGuiSession, templateRepository, hopperKeys, guiConfig,
-                messageConfig, hopperTickService, hopperLaneListener);
+                messageConfig, hopperTickService, hopperLaneListener, overlayDisplayService);
 
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
@@ -117,6 +121,8 @@ public class Shan extends JavaPlugin {
                 new HopperListener(this, templateManager, hopperKeys, hopperLaneListener, messageConfig), this);
         getServer().getPluginManager().registerEvents(hopperLaneListener, this);
         getServer().getPluginManager().registerEvents(
+                new HopperOverlayListener(this, overlayDisplayService, hopperKeys), this);
+        getServer().getPluginManager().registerEvents(
                 new HopperReverseHandler(hopperKeys, hopperTickService, hopperLaneListener), this);
         getServer().getPluginManager().registerEvents(
                 new BatchModeListener(hopperKeys, playerGuiSession, hopperLaneListener, messageConfig), this);
@@ -131,6 +137,9 @@ public class Shan extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (overlayDisplayService != null) {
+            overlayDisplayService.hideAll();
+        }
         if (templateRepository != null && templateManager != null) {
             templateRepository.flushSync(templateManager);
         }

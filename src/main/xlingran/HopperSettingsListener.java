@@ -28,7 +28,7 @@ public class HopperSettingsListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
-        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) {
+        if (event.getAction() != Action.LEFT_CLICK_BLOCK) {
             return;
         }
         Player player = event.getPlayer();

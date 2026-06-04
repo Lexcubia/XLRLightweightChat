@@ -8,7 +8,7 @@
 | API | Spigot/Paper 1.21.1 |
 | 主类 | `xlingran.Shan` |
 | 开发分支 | `XLRHopper` |
-| 文案与 GUI 布局 | **`Gui.yml`**（界面）；**`Message.yml`**（聊天提示） |
+| 文案与 GUI 布局 | **`Gui.yml`**（界面与悬浮开关按钮）；**`Message.yml`**（仅聊天提示）；**悬浮 Display 四行**在 Java 硬编码 |
 | 模板业务数据 | **`shan.db`（SQLite）**；仅读取遗留 `data.yml` 一次性导入 |
 
 ---
@@ -51,12 +51,14 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - **仅** `Auto-Crafting`、`Filter-Item`、`Auto-Furnace` 可配置 **`rows`（≥1，建议 ≤6）**；其余界面行数在 `GuiConfig` 中硬编码（3/5/6 行等）。
 - 附魔显示名：key 为 **registry 小写**（如 `fire_protection`）；`EnchantNameTable` 委托 `GuiConfig` 查询。
 - 修改后执行 `/xlrhopper reload` 生效。
+- **`HopperSetting.FloatOverlay`**（绿宝石，默认 slot 14）：仅悬浮**开关**按钮的名称/Lore（`%toggle%`）；**无** 世界上空四行 Display 布局或文案配置。
 
 ### 3.2 Message.yml 要点
 
 - JAR 预置 **`saveResource("Message.yml", false)`**；根节点 `Messages`，key 如 `reload-success`、`no-template`、`enchant-prompt` 等。
 - 支持 `%Enchant%` 等占位符（如 `enchant-cleared`）。
 - `/xlrhopper reload` 与 `Gui.yml` 一并热重载。
+- **仅** `sendMessage` 类聊天提示；**不包含** 漏斗上方悬浮 Display 文案、`overlay-*` / `hover-*` 键；`MessageConfig` **不参与** 构建悬浮实体。
 
 ### 3.3 shan.db 与迁移
 
@@ -188,10 +190,19 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 ### 4.5 漏斗设置（3 行硬编码）
 
 - **标题**：`HopperSetting.name`（默认 `&e漏斗设置`）
-- **打开**：对已套用模板（PDC 含 `template` + `owner`）的漏斗 **Shift + 右键**（**主手与副手均须为空**）；无模板时提示（`Message.yml` → `no-template`），不打开 GUI
+- **打开**：对已套用模板（PDC 含 `template` + `owner`）的漏斗 **Shift + 左键**（**主手与副手均须为空**）；无模板时提示（`Message.yml` → `no-template`），不打开 GUI
 - **`HopperSetting.Redstone`**（默认 slot 10）→ PDC `redstone-list-toggle`
 - **`HopperSetting.Reverse`**（默认 slot 12）→ PDC `reverse-suction`
+- **`HopperSetting.FloatOverlay`**（默认 slot 14，绿宝石）→ PDC `hover-display`（默认 **false**）；左/右键切换后**同一 tick、主线程**立即 `show` / `hide` 悬浮实体，再刷新本 GUI 的 `%toggle%`（不依赖关 GUI 或重进世界）
 - **`HopperSetting.Filler`**：占位玻璃
+
+### 4.6 漏斗上方悬浮 Display（硬编码）
+
+- 实现：`display.HopperOverlayDisplayService` + `display.HopperOverlayListener`；**不**进入 `HopperTickService`。
+- 实体：`ItemDisplay`（漏斗 5 槽内非空物品，各显示 1 个、无数量）+ 四行 `TextDisplay`（模板名、白/黑名单模式、附魔过滤条数、最低耐久）。
+- 文案与 Y 偏移均在 Java 常量中拼接；**不读** `Message.yml` / `Gui.yml` 悬浮行配置。
+- PDC：`hover-display`（开关）、`overlay-marker`（实体归属标记）；套模板/初始化时 `hover-display=false`。
+- 已开启时：库存移动/吸取、区块加载恢复 `show`；破坏/爆炸/卸载 `hide`；插件 `onDisable` → `hideAll`。
 
 ---
 
@@ -230,7 +241,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | 玩家丢弃（Q / 背包丢出 / 死亡掉落等） | 不取消丢弃；物品正常落地后由 `InventoryPickupItemEvent` 决定是否吸入 |
 | 打开漏斗 GUI 放入 | `InventoryClickEvent` / `InventoryDragEvent` |
 
-- 漏斗 PDC：`template`、`owner`、`redstone-list-toggle`、`reverse-suction`；过滤样板/附魔/耐久仍来自模板，修改模板后绑定漏斗立即生效。
+- 漏斗 PDC：`template`、`owner`、`redstone-list-toggle`、`reverse-suction`、`hover-display`（默认 false）；过滤样板/附魔/耐久仍来自模板，修改模板后绑定漏斗立即生效。
 
 ### 6.2 样板物品（FilterItemMatcher）— 受有效白/黑名单影响
 
@@ -312,6 +323,9 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `FilterItem` / `FilterItemMatcher` 等 | 过滤维度 |
 | `HopperAutoCraftService` / `HopperAutoSmeltService` | 漏斗内合成与熔炼 |
 | `HopperCommand` | 指令（含 `reload`） |
+| `display.HopperOverlayDisplayService` | 悬浮 TextDisplay/ItemDisplay 生成与刷新（硬编码文案） |
+| `display.HopperOverlayListener` | 库存/区块/破坏事件驱动悬浮刷新与清理 |
+| `HopperSettingsListener` | Shift+左键打开漏斗设置 |
 
 ---
 
@@ -337,7 +351,9 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 8. 模板设置等 GUI：无法取出玻璃/命名牌；连点被冷却限制。
 9. 过滤物品 GUI：可拿可取；关闭时重复材质退回（堆叠×2 或多格各 1 均退回 1 个）。
 10. 空漏斗 / 无 pending：不在 8 tick 盲扫；有货或邻居变化事件入队后才处理。
+11. 漏斗设置内点「悬浮开关」：不开关重进世界，悬浮**立即**出现/消失；`Message.yml` 无 `overlay-*` 键；`Gui.yml` 仅有 `FloatOverlay` 开关项。
+12. 打开漏斗设置：**Shift+左键**（双手空）；默认无悬浮直至开启 `hover-display`。
 
 ---
 
-*文档版本：与实现同步，适用于 XLRHopper 1.3.0（Gui.yml、Message.yml、shan.db、事件驱动 workQueue、reload）。*
+*文档版本：与实现同步，适用于 XLRHopper 1.3.0（Gui.yml、Message.yml、shan.db、事件驱动 workQueue、悬浮 Display、reload）。*

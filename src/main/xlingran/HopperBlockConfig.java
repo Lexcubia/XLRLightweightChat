@@ -11,10 +11,12 @@ public final class HopperBlockConfig {
 
     private final boolean redstoneListToggle;
     private final boolean reverseSuction;
+    private final boolean hoverDisplay;
 
-    public HopperBlockConfig(boolean redstoneListToggle, boolean reverseSuction) {
+    public HopperBlockConfig(boolean redstoneListToggle, boolean reverseSuction, boolean hoverDisplay) {
         this.redstoneListToggle = redstoneListToggle;
         this.reverseSuction = reverseSuction;
+        this.hoverDisplay = hoverDisplay;
     }
 
     public boolean isRedstoneListToggle() {
@@ -25,12 +27,20 @@ public final class HopperBlockConfig {
         return reverseSuction;
     }
 
+    public boolean isHoverDisplay() {
+        return hoverDisplay;
+    }
+
     public HopperBlockConfig withRedstoneListToggle(boolean value) {
-        return new HopperBlockConfig(value, reverseSuction);
+        return new HopperBlockConfig(value, reverseSuction, hoverDisplay);
     }
 
     public HopperBlockConfig withReverseSuction(boolean value) {
-        return new HopperBlockConfig(redstoneListToggle, value);
+        return new HopperBlockConfig(redstoneListToggle, value, hoverDisplay);
+    }
+
+    public HopperBlockConfig withHoverDisplay(boolean value) {
+        return new HopperBlockConfig(redstoneListToggle, reverseSuction, value);
     }
 
     public static HopperBlockConfig read(Block block, HopperKeys keys) {
@@ -44,7 +54,8 @@ public final class HopperBlockConfig {
         PersistentDataContainer pdc = tileState.getPersistentDataContainer();
         boolean redstone = Boolean.TRUE.equals(pdc.get(keys.redstoneListToggle, PersistentDataType.BOOLEAN));
         boolean reverse = Boolean.TRUE.equals(pdc.get(keys.reverseSuction, PersistentDataType.BOOLEAN));
-        return new HopperBlockConfig(redstone, reverse);
+        boolean hover = Boolean.TRUE.equals(pdc.get(keys.hoverDisplay, PersistentDataType.BOOLEAN));
+        return new HopperBlockConfig(redstone, reverse, hover);
     }
 
     public static void write(Block block, HopperKeys keys, HopperBlockConfig config) {
@@ -58,6 +69,7 @@ public final class HopperBlockConfig {
         PersistentDataContainer pdc = tileState.getPersistentDataContainer();
         pdc.set(keys.redstoneListToggle, PersistentDataType.BOOLEAN, config.isRedstoneListToggle());
         pdc.set(keys.reverseSuction, PersistentDataType.BOOLEAN, config.isReverseSuction());
+        pdc.set(keys.hoverDisplay, PersistentDataType.BOOLEAN, config.isHoverDisplay());
         tileState.update(true);
     }
 
@@ -81,6 +93,6 @@ public final class HopperBlockConfig {
     }
 
     private static HopperBlockConfig defaults() {
-        return new HopperBlockConfig(false, false);
+        return new HopperBlockConfig(false, false, false);
     }
 }

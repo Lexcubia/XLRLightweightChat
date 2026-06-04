@@ -25,6 +25,7 @@ import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import xlingran.core.HopperLaneListener;
+import xlingran.display.HopperOverlayDisplayService;
 import xlingran.gui.GuiConfig;
 import xlingran.gui.MessageConfig;
 import xlingran.gui.GuiType;
@@ -47,6 +48,7 @@ public class Gui implements Listener {
     private final MessageConfig messageConfig;
     private final HopperTickService tickService;
     private final HopperLaneListener laneListener;
+    private final HopperOverlayDisplayService overlayService;
 
     private final int slotAutoCraft;
     private final int slotAutoDestroy;
@@ -58,10 +60,12 @@ public class Gui implements Listener {
     private final int slotBatch;
     private final int slotHopperRedstone;
     private final int slotHopperReverse;
+    private final int slotHopperFloatOverlay;
 
     public Gui(Shan plugin, HopperTemplateManager templateManager, PlayerGuiSession sessions,
                TemplateRepository templateRepository, HopperKeys hopperKeys, GuiConfig guiConfig,
-               MessageConfig messageConfig, HopperTickService tickService, HopperLaneListener laneListener) {
+               MessageConfig messageConfig, HopperTickService tickService, HopperLaneListener laneListener,
+               HopperOverlayDisplayService overlayService) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.sessions = sessions;
@@ -71,6 +75,7 @@ public class Gui implements Listener {
         this.messageConfig = messageConfig;
         this.tickService = tickService;
         this.laneListener = laneListener;
+        this.overlayService = overlayService;
         slotAutoCraft = guiConfig.templateButtonSlot("AutoCrafting", 10);
         slotAutoDestroy = guiConfig.templateButtonSlot("Break", 12);
         slotFilterItems = guiConfig.templateButtonSlot("FilterItem", 14);
@@ -81,6 +86,7 @@ public class Gui implements Listener {
         slotBatch = guiConfig.templateButtonSlot("Batch", 34);
         slotHopperRedstone = guiConfig.hopperSettingSlot("Redstone", 10);
         slotHopperReverse = guiConfig.hopperSettingSlot("Reverse", 12);
+        slotHopperFloatOverlay = guiConfig.hopperSettingSlot("FloatOverlay", 14);
     }
 
     public void saveData() {
@@ -153,6 +159,7 @@ public class Gui implements Listener {
         HopperBlockConfig config = HopperBlockConfig.read(hopperBlock, hopperKeys);
         inv.setItem(slotHopperRedstone, hopperSettingToggle("Redstone", config.isRedstoneListToggle()));
         inv.setItem(slotHopperReverse, hopperSettingToggle("Reverse", config.isReverseSuction()));
+        inv.setItem(slotHopperFloatOverlay, hopperSettingToggle("FloatOverlay", config.isHoverDisplay()));
 
         player.openInventory(inv);
     }
@@ -490,11 +497,19 @@ public class Gui implements Listener {
         } else if (slot == slotHopperReverse) {
             config = config.withReverseSuction(!config.isReverseSuction());
             changed = true;
+        } else if (slot == slotHopperFloatOverlay) {
+            config = config.withHoverDisplay(!config.isHoverDisplay());
+            changed = true;
         }
         if (changed) {
             HopperBlockConfig.write(block, hopperKeys, config);
             tickService.getLaneRegistry().registerLane(block, hopperKeys, templateManager);
             laneListener.scheduleEvaluate(block);
+            if (config.isHoverDisplay()) {
+                overlayService.show(block);
+            } else {
+                overlayService.hide(block);
+            }
             openHopperSettings(player, block);
         }
     }

@@ -27,6 +27,7 @@ public final class HopperPdc {
         pdc.set(keys.owner, PersistentDataType.STRING, ownerId.toString());
         pdc.set(keys.redstoneListToggle, PersistentDataType.BOOLEAN, false);
         pdc.set(keys.reverseSuction, PersistentDataType.BOOLEAN, false);
+        pdc.set(keys.hoverDisplay, PersistentDataType.BOOLEAN, false);
         tileState.update(true);
         return true;
     }
