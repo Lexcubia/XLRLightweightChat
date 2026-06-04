@@ -1,0 +1,42 @@
+# 服务器默认漏斗参数
+default:
+    # 因为架构是固定8tick调度，这个地方必须是8的倍数
+    # 最低为8
+    transfer-tick: 24
+    # 每次最多传输物品
+    max-item: 1
+# 可以通过指令 /xlrhopper give 玩家名 / %player% iron 数量 = 给予玩家一个iron的漏斗
+levels:
+    # 唯一名称
+    copper:
+        # 展示名称
+        name: "&a铜漏斗"
+        # 8的倍数
+        transfer-tick: 16
+        # 每次最多传输物品
+        max-item: 1
+        # 描述
+        Lore:
+            - "&a传输速度: 16 Tick"
+            - "&a最大传输: 1 个物品"
+    iron:
+        name: "&a铁漏斗"
+        transfer-tick: 16
+        max-item: 2
+        Lore:
+            - "&a传输速度: 16 Tick"
+            - "&a最大传输: 2 个物品"
+    gold:
+        name: "&a金漏斗"
+        transfer-tick: 16
+        max-item: 4
+        Lore:
+            - "&a传输速度: 16 Tick"
+            - "&a最大传输: 4 个物品"
+    diamond:
+        name: "&a钻石漏斗"
+        transfer-tick: 8
+        max-item: 8
+        Lore:
+            - "&a传输速度: 8 Tick"
+            - "&a最大传输: 8 个物品"

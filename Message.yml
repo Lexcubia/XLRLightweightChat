@@ -44,4 +44,13 @@ Messages:
     no-permission-edit-mode: "&c你没有权限编辑模板"
     template-not-found: "&c模板不存在: &f%Template%"
     no-permission-mode: "&c你没有权限打开模板列表"
-    usage-command: "&c用法: /xlrhopper <mode|create mode <名称>|edit mode <名称>|reload>"
+    usage-command: "&c用法: /xlrhopper <mode|create mode <名称>|edit mode <名称>|give|reload>"
+
+    # give 等级漏斗
+    give-no-permission: "&c你没有权限给予等级漏斗"
+    give-usage: "&c用法: /xlrhopper give <玩家|%player%> <等级ID> [数量]"
+    give-success: "&a已给予 &f%Player% &a等级漏斗 &e%Level% &ax%Amount%"
+    give-unknown-level: "&c未知漏斗等级: &f%Level%"
+    give-player-not-found: "&c玩家不在线: &f%Player%"
+    give-invalid-amount: "&c数量须为正整数"
+    give-console-no-player: "&c控制台不能使用 %player%，请指定玩家名"

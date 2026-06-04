@@ -22,7 +22,7 @@ public final class HopperTransferReverse {
      * @return 本 tick 是否完成了一次物品位移
      */
     public static boolean transferStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
-                                       HopperReservation reservation) {
+                                       HopperReservation reservation, int maxItem) {
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER
                 || !HopperBlockConfig.isReverse(hopperBlock, keys) || template == null) {
             return false;
@@ -33,21 +33,33 @@ public final class HopperTransferReverse {
         Inventory hopperInv = hopperContainer.getInventory();
         Set<Integer> reserved = reservation.getReserved(hopperBlock.getLocation());
 
-        Block aboveBlock = hopperBlock.getRelative(BlockFace.UP);
-        Inventory aboveInv = HopperContainerUtil.getContainerInventory(aboveBlock);
-        if (aboveInv != null && tryPushOne(hopperInv, hopperBlock, aboveInv, aboveBlock, template, keys, reserved)) {
+        int limit = Math.max(1, maxItem);
+        boolean moved = false;
+        for (int i = 0; i < limit; i++) {
+            Block aboveBlock = hopperBlock.getRelative(BlockFace.UP);
+            Inventory aboveInv = HopperContainerUtil.getContainerInventory(aboveBlock);
+            if (aboveInv == null || !tryPushOne(hopperInv, hopperBlock, aboveInv, aboveBlock, template, keys, reserved)) {
+                break;
+            }
+            moved = true;
+        }
+        if (moved) {
             HopperContainerUtil.syncContainer(hopperBlock);
             return true;
         }
 
-        Block belowBlock = hopperBlock.getRelative(BlockFace.DOWN);
-        Inventory belowInv = HopperContainerUtil.getContainerInventory(belowBlock);
-        if (belowInv != null && tryPullOne(belowInv, belowBlock, hopperInv, hopperBlock, template, keys, reserved)) {
-            HopperContainerUtil.syncContainer(hopperBlock);
-            return true;
+        for (int i = 0; i < limit; i++) {
+            Block belowBlock = hopperBlock.getRelative(BlockFace.DOWN);
+            Inventory belowInv = HopperContainerUtil.getContainerInventory(belowBlock);
+            if (belowInv == null || !tryPullOne(belowInv, belowBlock, hopperInv, hopperBlock, template, keys, reserved)) {
+                break;
+            }
+            moved = true;
         }
-
-        return false;
+        if (moved) {
+            HopperContainerUtil.syncContainer(hopperBlock);
+        }
+        return moved;
     }
 
     private static boolean tryPushOne(Inventory hopperInv, Block hopperBlock, Inventory to, Block toBlock,

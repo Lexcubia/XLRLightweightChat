@@ -26,7 +26,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `/xlrhopper create mode <名称>` | `xlrhopper.create.mode` | 创建名为 `<名称>` 的模板（默认启用该模板、黑名单），并打开「模板设置」 |
 | `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode` | 编辑已有模板，打开「模板设置」 |
 | `/xlrhopper mode` | `xlrhopper.mode` | 打开「漏斗模板」列表 GUI |
-| `/xlrhopper reload` | `xlrhopper.admin` | 重载 `Gui.yml` + `Message.yml`、从 `shan.db` 重读模板、异步重登记已加载区块漏斗（玩家与控制台均可） |
+| `/xlrhopper give <玩家\|%player%> <等级ID> [数量]` | `xlrhopper.give` | 给予指定等级的漏斗物品（数量缺省 1）；`%player%` 表示执行者本人（仅玩家执行时） |
+| `/xlrhopper reload` | `xlrhopper.admin` | 重载 `Gui.yml` + `Message.yml` + `Update.yml`、从 `shan.db` 重读模板、异步重登记已加载区块漏斗（玩家与控制台均可） |
 
 - 根命令 `xlrhopper` 在 `plugin.yml` 注册；子命令在代码内解析。已移除的 `box` / `create box` 子命令会提示新用法。
 - 各子命令在代码内分别校验权限。
@@ -42,7 +43,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `Gui.yml` | `plugins/XLRHopper/Gui.yml` | GUI 标题、按钮材质/槽位/Lore、附魔中文表 |
 | `Message.yml` | `plugins/XLRHopper/Message.yml` | 聊天栏提示（`Messages.*`） |
 | `shan.db` | `plugins/XLRHopper/shan.db` | **模板业务数据**（SQLite） |
-| `Update.yml` | `plugins/XLRHopper/Update.yml` | 占位（JAR 内空文件，后续扩展；当前不 `saveResource`） |
+| `Update.yml` | `plugins/XLRHopper/Update.yml` | 漏斗等级：`default` 服务器默认 + `levels.<id>`（`transfer-tick`、`max-item`、`name`、`Lore`） |
 
 ### 3.1 Gui.yml 要点
 
@@ -60,14 +61,21 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - `/xlrhopper reload` 与 `Gui.yml` 一并热重载。
 - **仅** `sendMessage` 类聊天提示；**不包含** 漏斗上方悬浮 Display 文案、`overlay-*` / `hover-*` 键；`MessageConfig` **不参与** 构建悬浮实体。
 
-### 3.3 shan.db
+### 3.3 Update.yml 要点
+
+- JAR 预置 **`saveResource("Update.yml", false)`**；`UpdateConfig` 加载并校验：`transfer-tick` ≥ 8 且为 8 的倍数，`max-item` ≥ 1。
+- **`default`**：无 `hopper-level` PDC 的漏斗使用此段参数。
+- **`levels.<id>`**：唯一 ID（如 `iron`）；`/xlrhopper give` 与物品 PDC / 方块 PDC `hopper-level` 引用同一 ID。
+- 全局 **8 tick** 定时器不变；每 lane 的 `transfer-tick` 为门控间隔（累计达阈值才执行一步自动化）；`max-item` 限制单步反向搬运与 `InventoryMoveItem` 单次数量。
+
+### 3.4 shan.db
 
 - 表结构由 `ShanDatabase` 初始化；读写经 `TemplateRepository`（异步加载、防抖保存、关服 `flushSync`）。
 - 模板字段：白名单、filter-items、自动合成/熔炼、附魔过滤、耐久阈值等。
 - `/xlrhopper reload` 会 **重读数据库**（不先 save），便于外部工具改库后热重载。
 - **1.2 遗留 `data.yml` / `data.yml.bak` 可安全删除**；插件不再读取或生成。
 
-### 3.4 主线程 / 异步边界
+### 3.5 主线程 / 异步边界
 
 | 主线程 | 异步 |
 |--------|------|
@@ -242,7 +250,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | 玩家丢弃（Q / 背包丢出 / 死亡掉落等） | 不取消丢弃；物品正常落地后由 `InventoryPickupItemEvent` 决定是否吸入 |
 | 打开漏斗 GUI 放入 | `InventoryClickEvent` / `InventoryDragEvent` |
 
-- 漏斗 PDC：`template`、`owner`、`redstone-list-toggle`、`reverse-suction`、`hover-display`（默认 false）；过滤样板/附魔/耐久仍来自模板，修改模板后绑定漏斗立即生效。
+- 漏斗 PDC：`template`、`owner`、`redstone-list-toggle`、`reverse-suction`、`hover-display`（默认 false）、`hopper-level`（等级 ID，来自 give 物品放置）；过滤样板/附魔/耐久仍来自模板，修改模板后绑定漏斗立即生效。
 
 ### 6.2 样板物品（FilterItemMatcher）— 受有效白/黑名单影响
 
@@ -310,6 +318,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `Shan` | 插件入口；`saveResource(Gui.yml)`；异步 DB；`reload()` |
 | `gui.GuiConfig` | 解析 `Gui.yml`、占位符、slot 校验、附魔显示名 |
 | `gui.MessageConfig` | 解析 `Message.yml` 聊天提示 |
+| `gui.UpdateConfig` | 解析 `Update.yml` 漏斗等级与传输参数 |
+| `HopperLevelItems` / `HopperLevelResolver` | 等级物品、方块 PDC、lane 参数解析 |
 | `Gui` | GUI 构建与事件（读 `GuiConfig`） |
 | `storage.ShanDatabase` / `TemplateRepository` | SQLite 与迁移、异步加载/防抖保存 |
 | `core.HopperLane` / `FilterSnapshot` | 单漏斗运行态与模板快照缓存 |

@@ -11,6 +11,9 @@ public final class HopperLane {
     private boolean autoCraft;
     private boolean autoSmelt;
     private boolean targetHasSpace = true;
+    private int transferTick = 24;
+    private int maxItem = 1;
+    private int ticksSinceLastStep;
 
     public HopperLane(Location location) {
         this.location = location.clone();
@@ -70,6 +73,36 @@ public final class HopperLane {
 
     public void setTargetHasSpace(boolean targetHasSpace) {
         this.targetHasSpace = targetHasSpace;
+    }
+
+    public int transferTick() {
+        return transferTick;
+    }
+
+    public void setTransferTick(int transferTick) {
+        this.transferTick = transferTick;
+    }
+
+    public int maxItem() {
+        return maxItem;
+    }
+
+    public void setMaxItem(int maxItem) {
+        this.maxItem = maxItem;
+    }
+
+    public int ticksSinceLastStep() {
+        return ticksSinceLastStep;
+    }
+
+    private static final int GLOBAL_TICK_PERIOD = 8;
+
+    public void incrementTicksSinceLastStep() {
+        ticksSinceLastStep += GLOBAL_TICK_PERIOD;
+    }
+
+    public void resetTicksSinceLastStep() {
+        ticksSinceLastStep = 0;
     }
 
     public static String laneKey(Location loc) {

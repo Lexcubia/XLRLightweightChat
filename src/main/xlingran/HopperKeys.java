@@ -11,6 +11,8 @@ public final class HopperKeys {
     public final NamespacedKey reverseSuction;
     public final NamespacedKey hoverDisplay;
     public final NamespacedKey overlayMarker;
+    public final NamespacedKey hopperLevel;
+    public final NamespacedKey hopperLevelItem;
 
     public HopperKeys(JavaPlugin plugin) {
         this.template = new NamespacedKey(plugin, "template");
@@ -19,5 +21,7 @@ public final class HopperKeys {
         this.reverseSuction = new NamespacedKey(plugin, "reverse-suction");
         this.hoverDisplay = new NamespacedKey(plugin, "hover-display");
         this.overlayMarker = new NamespacedKey(plugin, "overlay-marker");
+        this.hopperLevel = new NamespacedKey(plugin, "hopper-level");
+        this.hopperLevelItem = new NamespacedKey(plugin, "hopper-level-item");
     }
 }

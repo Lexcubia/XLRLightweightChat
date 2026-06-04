@@ -8,7 +8,9 @@ import xlingran.HopperBlockConfig;
 import xlingran.HopperKeys;
 import xlingran.HopperTemplate;
 import xlingran.HopperTemplateManager;
+import xlingran.HopperLevelResolver;
 import xlingran.HopperTemplateResolver;
+import xlingran.gui.UpdateConfig;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +30,8 @@ public final class HopperLaneRegistry {
         return lanes.get(HopperLane.laneKey(loc));
     }
 
-    public HopperLane registerLane(Block block, HopperKeys keys, HopperTemplateManager templateManager) {
+    public HopperLane registerLane(Block block, HopperKeys keys, HopperTemplateManager templateManager,
+                                    UpdateConfig updateConfig) {
         if (block == null || block.getType() != Material.HOPPER) {
             return null;
         }
@@ -45,6 +48,7 @@ public final class HopperLaneRegistry {
         lane.setReverse(config.isReverseSuction());
         lane.setAutoCraft(template.isAutoCraftEnabled());
         lane.setAutoSmelt(template.isAutoSmeltEnabled());
+        HopperLevelResolver.applyLevelToLane(lane, block, keys, updateConfig);
         if (!lane.hasAutomation()) {
             removeFromWorkQueue(key);
         }

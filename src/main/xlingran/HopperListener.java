@@ -23,7 +23,9 @@ import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import xlingran.core.HopperLaneListener;
+import xlingran.gui.HopperLevelDef;
 import xlingran.gui.MessageConfig;
+import xlingran.gui.UpdateConfig;
 
 import java.util.Map;
 
@@ -34,20 +36,27 @@ public class HopperListener implements Listener {
     private final HopperKeys keys;
     private final HopperLaneListener laneListener;
     private final MessageConfig messageConfig;
+    private final UpdateConfig updateConfig;
 
     public HopperListener(JavaPlugin plugin, HopperTemplateManager templateManager, HopperKeys keys,
-                          HopperLaneListener laneListener, MessageConfig messageConfig) {
+                          HopperLaneListener laneListener, MessageConfig messageConfig, UpdateConfig updateConfig) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.keys = keys;
         this.laneListener = laneListener;
         this.messageConfig = messageConfig;
+        this.updateConfig = updateConfig;
     }
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
         if (event.getBlockPlaced().getType() != Material.HOPPER) {
             return;
+        }
+        Block placed = event.getBlockPlaced();
+        String levelId = HopperLevelItems.readLevelFromItem(event.getItemInHand(), keys);
+        if (levelId != null) {
+            HopperLevelItems.applyLevelToBlock(placed, keys, levelId);
         }
         Player player = event.getPlayer();
         String enabledName = templateManager.getEnabledTemplateName(player.getUniqueId());
@@ -57,7 +66,7 @@ public class HopperListener implements Listener {
         if (templateManager.getTemplate(player.getUniqueId(), enabledName) == null) {
             return;
         }
-        Location placeLoc = event.getBlockPlaced().getLocation().clone();
+        Location placeLoc = placed.getLocation().clone();
         if (applyHopperTemplate(placeLoc, player, enabledName)) {
             return;
         }
@@ -91,6 +100,34 @@ public class HopperListener implements Listener {
             if (!shouldAllowTransfer(hopperBlock, moving)) {
                 event.setCancelled(true);
             }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onInventoryMoveCap(InventoryMoveItemEvent event) {
+        ItemStack moving = event.getItem();
+        if (moving == null || moving.getType().isAir()) {
+            return;
+        }
+        if (event.getDestination().getType() == InventoryType.HOPPER) {
+            capMoveAmount(getHopperBlock(event.getDestination()), moving);
+        }
+        if (event.getSource().getType() == InventoryType.HOPPER) {
+            capMoveAmount(getHopperBlock(event.getSource()), moving);
+        }
+    }
+
+    private void capMoveAmount(Block hopperBlock, ItemStack moving) {
+        if (hopperBlock == null || updateConfig == null) {
+            return;
+        }
+        HopperLevelDef def = HopperLevelResolver.resolveForBlock(hopperBlock, keys, updateConfig);
+        if (def == null) {
+            return;
+        }
+        int max = def.maxItem();
+        if (moving.getAmount() > max) {
+            moving.setAmount(max);
         }
     }
 

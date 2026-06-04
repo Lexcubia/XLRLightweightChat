@@ -503,7 +503,8 @@ public class Gui implements Listener {
         }
         if (changed) {
             HopperBlockConfig.write(block, hopperKeys, config);
-            tickService.getLaneRegistry().registerLane(block, hopperKeys, templateManager);
+            tickService.getLaneRegistry().registerLane(block, hopperKeys, templateManager,
+                    plugin.getUpdateConfig());
             laneListener.scheduleEvaluate(block);
             if (config.isHoverDisplay()) {
                 overlayService.show(block);

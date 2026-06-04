@@ -9,6 +9,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import xlingran.core.HopperLane;
 import xlingran.core.HopperLaneRegistry;
 import xlingran.core.HopperWorkEvaluator;
+import xlingran.gui.UpdateConfig;
 
 import java.util.HashSet;
 import java.util.List;
@@ -29,9 +30,10 @@ public final class HopperTickService implements Listener {
     private final HopperReservation reservation;
     private final HopperAutoSmeltService smeltService;
     private final HopperAutoCraftService craftService;
+    private final UpdateConfig updateConfig;
 
     public HopperTickService(JavaPlugin plugin, HopperTemplateManager templateManager, HopperKeys keys,
-                             HopperLaneRegistry laneRegistry) {
+                             HopperLaneRegistry laneRegistry, UpdateConfig updateConfig) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.keys = keys;
@@ -39,6 +41,7 @@ public final class HopperTickService implements Listener {
         this.reservation = new HopperReservation();
         this.smeltService = new HopperAutoSmeltService();
         this.craftService = new HopperAutoCraftService();
+        this.updateConfig = updateConfig;
         Bukkit.getScheduler().runTaskTimer(plugin, this::tickAll, HOPPER_TICK_PERIOD, HOPPER_TICK_PERIOD);
     }
 
@@ -62,6 +65,10 @@ public final class HopperTickService implements Listener {
         return smeltService;
     }
 
+    public UpdateConfig getUpdateConfig() {
+        return updateConfig;
+    }
+
     public void onLaneRemoved(Location loc) {
         laneRegistry.unregisterLane(loc);
         smeltService.clear(loc);
@@ -72,7 +79,7 @@ public final class HopperTickService implements Listener {
      * 异步 reindex 完成后在主线程调用。
      */
     public void registerLoadedHopper(Block block) {
-        HopperLane lane = laneRegistry.registerLane(block, keys, templateManager);
+        HopperLane lane = laneRegistry.registerLane(block, keys, templateManager, updateConfig);
         if (lane != null) {
             HopperWorkEvaluator.evaluateAndQueue(block, laneRegistry, keys, smeltService);
         }
@@ -102,6 +109,15 @@ public final class HopperTickService implements Listener {
                 continue;
             }
 
+            HopperLevelResolver.applyLevelToLane(lane, block, keys, updateConfig);
+            lane.incrementTicksSinceLastStep();
+            if (lane.ticksSinceLastStep() < lane.transferTick()) {
+                boolean keepWaiting = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService);
+                laneRegistry.removeLaneFromQueueAfterTick(lane, keepWaiting);
+                continue;
+            }
+            lane.resetTicksSinceLastStep();
+
             Set<Integer> reserved = new HashSet<>();
             if (lane.isAutoSmelt()) {
                 reserved.addAll(smeltService.tick(block, template, keys));
@@ -112,7 +128,7 @@ public final class HopperTickService implements Listener {
             reservation.setReserved(loc, reserved);
 
             if (lane.isReverse()) {
-                HopperTransferReverse.transferStep(block, template, keys, reservation);
+                HopperTransferReverse.transferStep(block, template, keys, reservation, lane.maxItem());
             }
 
             boolean keep = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService);

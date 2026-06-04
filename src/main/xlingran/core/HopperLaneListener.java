@@ -67,7 +67,7 @@ public final class HopperLaneListener implements Listener {
             if (block.getType() != Material.HOPPER) {
                 continue;
             }
-            HopperLane lane = registry.registerLane(block, keys, tm);
+            HopperLane lane = registry.registerLane(block, keys, tm, tickService.getUpdateConfig());
             if (lane != null) {
                 HopperWorkEvaluator.evaluateAndQueue(block, registry, keys, smelt);
             }
@@ -138,7 +138,7 @@ public final class HopperLaneListener implements Listener {
     public void scheduleEvaluate(Block hopperBlock) {
         Bukkit.getScheduler().runTask(plugin, () -> {
             HopperLane lane = tickService.getLaneRegistry().registerLane(hopperBlock, tickService.getKeys(),
-                    tickService.getTemplateManager());
+                    tickService.getTemplateManager(), tickService.getUpdateConfig());
             if (lane != null) {
                 HopperWorkEvaluator.markPending(hopperBlock, tickService.getLaneRegistry(), tickService.getKeys(),
                         tickService.getSmeltService());

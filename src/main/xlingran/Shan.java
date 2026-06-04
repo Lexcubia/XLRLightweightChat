@@ -12,6 +12,7 @@ import xlingran.display.HopperOverlayDisplayService;
 import xlingran.display.HopperOverlayListener;
 import xlingran.gui.GuiConfig;
 import xlingran.gui.MessageConfig;
+import xlingran.gui.UpdateConfig;
 import xlingran.storage.ShanDatabase;
 import xlingran.storage.TemplateRepository;
 
@@ -23,6 +24,7 @@ public class Shan extends JavaPlugin {
     private PlayerGuiSession playerGuiSession;
     private GuiConfig guiConfig;
     private MessageConfig messageConfig;
+    private UpdateConfig updateConfig;
     private TemplateRepository templateRepository;
     private ShanDatabase database;
     private Gui gui;
@@ -52,6 +54,10 @@ public class Shan extends JavaPlugin {
         return messageConfig;
     }
 
+    public UpdateConfig getUpdateConfig() {
+        return updateConfig;
+    }
+
     public TemplateRepository getTemplateRepository() {
         return templateRepository;
     }
@@ -74,6 +80,7 @@ public class Shan extends JavaPlugin {
         saveDefaultConfig();
         saveResource("Gui.yml", false);
         saveResource("Message.yml", false);
+        saveResource("Update.yml", false);
 
         templateManager = new HopperTemplateManager();
         playerGuiSession = new PlayerGuiSession();
@@ -81,6 +88,8 @@ public class Shan extends JavaPlugin {
         guiConfig.load();
         messageConfig = new MessageConfig(this);
         messageConfig.load();
+        updateConfig = new UpdateConfig(this);
+        updateConfig.load();
 
         database = new ShanDatabase(this);
         try {
@@ -92,7 +101,7 @@ public class Shan extends JavaPlugin {
 
         hopperKeys = new HopperKeys(this);
         laneRegistry = new HopperLaneRegistry();
-        hopperTickService = new HopperTickService(this, templateManager, hopperKeys, laneRegistry);
+        hopperTickService = new HopperTickService(this, templateManager, hopperKeys, laneRegistry, updateConfig);
         hopperLaneListener = new HopperLaneListener(this, hopperTickService);
         overlayDisplayService = new HopperOverlayDisplayService(this, hopperKeys, templateManager);
 
@@ -117,7 +126,8 @@ public class Shan extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(gui, this);
         getServer().getPluginManager().registerEvents(
-                new HopperListener(this, templateManager, hopperKeys, hopperLaneListener, messageConfig), this);
+                new HopperListener(this, templateManager, hopperKeys, hopperLaneListener, messageConfig, updateConfig),
+                this);
         getServer().getPluginManager().registerEvents(hopperLaneListener, this);
         getServer().getPluginManager().registerEvents(
                 new HopperOverlayListener(this, overlayDisplayService, hopperKeys), this);
@@ -171,6 +181,7 @@ public class Shan extends JavaPlugin {
             Bukkit.getScheduler().runTask(this, () -> {
                 guiConfig.reload();
                 messageConfig.reload();
+                updateConfig.reload();
                 asyncReindexLoadedChunks();
                 if (sender != null) {
                     sender.sendMessage(messageConfig.message("reload-success"));
