@@ -17,7 +17,6 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.plugin.java.JavaPlugin;
-import xlingran.HopperBlockConfig;
 import xlingran.HopperKeys;
 
 import java.util.ArrayList;
@@ -92,31 +91,32 @@ public final class HopperOverlayListener implements Listener {
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
         Chunk chunk = event.getChunk();
+        // 异步线程仅扫描方块类型；PDC / getState 必须在主线程（与 HopperLaneListener 一致）
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            List<Location> enabled = new ArrayList<>();
+            List<Location> hoppers = new ArrayList<>();
             for (int x = 0; x < 16; x++) {
                 for (int z = 0; z < 16; z++) {
                     for (int y = chunk.getWorld().getMinHeight(); y < chunk.getWorld().getMaxHeight(); y++) {
-                        Block block = chunk.getBlock(x, y, z);
-                        if (block.getType() == Material.HOPPER
-                                && HopperBlockConfig.read(block, keys).isHoverDisplay()) {
-                            enabled.add(block.getLocation());
+                        if (chunk.getBlock(x, y, z).getType() == Material.HOPPER) {
+                            hoppers.add(chunk.getBlock(x, y, z).getLocation());
                         }
                     }
                 }
             }
-            if (enabled.isEmpty()) {
+            if (hoppers.isEmpty()) {
                 return;
             }
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                for (Location loc : enabled) {
-                    Block block = loc.getBlock();
-                    if (block.getType() == Material.HOPPER && overlayService.isHoverEnabled(block)) {
-                        overlayService.show(block);
-                    }
-                }
-            });
+            Bukkit.getScheduler().runTask(plugin, () -> restoreOverlays(hoppers));
         });
+    }
+
+    private void restoreOverlays(List<Location> hoppers) {
+        for (Location loc : hoppers) {
+            Block block = loc.getBlock();
+            if (block.getType() == Material.HOPPER && overlayService.isHoverEnabled(block)) {
+                overlayService.show(block);
+            }
+        }
     }
 
     private static Block hopperBlock(Inventory inventory) {

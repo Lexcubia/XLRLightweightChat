@@ -155,8 +155,6 @@ public class Shan extends JavaPlugin {
     public void reload(CommandSender sender) {
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
-                guiConfig.reload();
-                messageConfig.reload();
                 templateRepository.loadInto(templateManager);
             } catch (Exception e) {
                 getLogger().severe("[XLRHopper] reload 失败: " + e.getMessage());
@@ -172,6 +170,8 @@ public class Shan extends JavaPlugin {
                 return;
             }
             Bukkit.getScheduler().runTask(this, () -> {
+                guiConfig.reload();
+                messageConfig.reload();
                 asyncReindexLoadedChunks();
                 if (sender != null) {
                     sender.sendMessage(messageConfig.message("reload-success"));
