@@ -8,7 +8,6 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
-import xlingran.DataStore;
 import xlingran.HopperTemplate;
 import xlingran.HopperTemplateManager;
 import xlingran.ItemStackUtil;
@@ -252,7 +251,7 @@ public final class TemplateRepository {
                 }
             }
         }
-        new DataStore(plugin.getDataFolder(), logger).load(manager);
+        new LegacyDataYmlMigrator(plugin.getDataFolder(), logger).load(manager);
         saveAll(manager);
         File backup = new File(plugin.getDataFolder(), "data.yml.bak");
         if (!dataYml.renameTo(backup)) {

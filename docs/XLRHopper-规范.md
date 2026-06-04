@@ -9,7 +9,7 @@
 | 主类 | `xlingran.Shan` |
 | 开发分支 | `XLRHopper` |
 | 文案与 GUI 布局 | **`Gui.yml`**（界面）；**`Message.yml`**（聊天提示） |
-| 模板业务数据 | **`shan.db`（SQLite）**；旧 `data.yml` 首次启动迁移 |
+| 模板业务数据 | **`shan.db`（SQLite）**；仅读取遗留 `data.yml` 一次性导入 |
 
 ---
 
@@ -42,7 +42,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `Gui.yml` | `plugins/XLRHopper/Gui.yml` | GUI 标题、按钮材质/槽位/Lore、附魔中文表 |
 | `Message.yml` | `plugins/XLRHopper/Message.yml` | 聊天栏提示（`Messages.*`） |
 | `shan.db` | `plugins/XLRHopper/shan.db` | **模板业务数据**（SQLite） |
-| `data.yml` | （已废弃） | 若存在则**一次性迁移**至 `shan.db` 后改名为 `data.yml.bak` |
+| `data.yml` | 不生成、不写入 | 仅 1.2 遗留文件：若磁盘上存在则**一次性只读导入** `shan.db` 后改名为 `data.yml.bak` |
 
 ### 3.1 Gui.yml 要点
 
@@ -308,7 +308,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `HopperReverseHandler` | 反向四向取消 + `scheduleEvaluate` |
 | `feature.HopperFeature` | 自动化扩展接口（预留） |
 | `HopperTemplate` / `HopperTemplateManager` | 模板模型与内存集合 |
-| `DataStore` | 旧 `data.yml` 迁移读取 |
+| `storage.LegacyDataYmlMigrator` | 旧 `data.yml` 一次性只读导入 |
 | `FilterItem` / `FilterItemMatcher` 等 | 过滤维度 |
 | `HopperAutoCraftService` / `HopperAutoSmeltService` | 漏斗内合成与熔炼 |
 | `HopperCommand` | 指令（含 `reload`） |

@@ -1,4 +1,4 @@
-package xlingran;
+package xlingran.storage;
 
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -8,21 +8,25 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
+import xlingran.HopperTemplate;
+import xlingran.HopperTemplateManager;
+import xlingran.ItemStackUtil;
 
 import java.io.File;
-import java.io.IOException;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Logger;
 
-public final class DataStore {
+/**
+ * 一次性从旧版 plugins/XLRHopper/data.yml 导入模板（只读，不写入 YAML）。
+ */
+public final class LegacyDataYmlMigrator {
 
     private final File file;
     private final Logger logger;
 
-    public DataStore(File dataFolder, Logger logger) {
+    public LegacyDataYmlMigrator(File dataFolder, Logger logger) {
         this.file = new File(dataFolder, "data.yml");
         this.logger = logger;
     }
@@ -99,7 +103,7 @@ public final class DataStore {
         if (matNames.isEmpty()) {
             return;
         }
-        List<ItemStack> migrated = new java.util.ArrayList<>();
+        List<ItemStack> migrated = new ArrayList<>();
         for (String matName : matNames) {
             Material mat = Material.matchMaterial(matName);
             if (mat != null) {
@@ -133,55 +137,5 @@ public final class DataStore {
         }
         NamespacedKey namespacedKey = NamespacedKey.minecraft(key.toLowerCase());
         return Registry.ENCHANTMENT.get(namespacedKey);
-    }
-
-    void save(HopperTemplateManager manager) {
-        FileConfiguration config = file.exists()
-                ? YamlConfiguration.loadConfiguration(file)
-                : new YamlConfiguration();
-
-        for (UUID uuid : manager.getAllPlayerTemplates().keySet()) {
-            String path = "players." + uuid;
-            config.set(path + ".boxes", null);
-            String enabled = manager.getEnabledTemplateName(uuid);
-            if (enabled != null && !enabled.isEmpty()) {
-                config.set(path + ".enabled-template", enabled);
-            } else {
-                config.set(path + ".enabled-template", null);
-            }
-            Map<String, HopperTemplate> templates = manager.getTemplates(uuid);
-            for (Map.Entry<String, HopperTemplate> templateEntry : templates.entrySet()) {
-                String name = templateEntry.getKey();
-                HopperTemplate t = templateEntry.getValue();
-                String base = path + ".templates." + name;
-                config.set(base + ".whitelist", t.isWhitelist());
-                config.set(base + ".auto-destroy", t.isAutoDestroy());
-                config.set(base + ".auto-craft-enabled", t.isAutoCraftEnabled());
-                config.set(base + ".auto-smelt-enabled", t.isAutoSmeltEnabled());
-                config.set(base + ".auto-craft-targets", ItemStackUtil.serializeList(t.getAutoCraftTargets()));
-                config.set(base + ".auto-smelt-outputs", ItemStackUtil.serializeList(t.getAutoSmeltOutputs()));
-                config.set(base + ".linked-box", null);
-                config.set(base + ".filter-items", ItemStackUtil.serializeList(t.getFilterPrototypes()));
-                if (t.getDurabilityThreshold() != null) {
-                    config.set(base + ".durability-threshold", t.getDurabilityThreshold());
-                } else {
-                    config.set(base + ".durability-threshold", null);
-                }
-                Map<String, Integer> enchantMap = new HashMap<>();
-                for (Map.Entry<Enchantment, Integer> enchEntry : t.getEnchantMinLevels().entrySet()) {
-                    enchantMap.put(enchEntry.getKey().getKey().getKey(), enchEntry.getValue());
-                }
-                if (!enchantMap.isEmpty()) {
-                    config.set(base + ".enchant-filters", enchantMap);
-                } else {
-                    config.set(base + ".enchant-filters", null);
-                }
-            }
-        }
-        try {
-            config.save(file);
-        } catch (IOException e) {
-            logger.severe("[XLRHopper] 无法保存 data.yml: " + e.getMessage());
-        }
     }
 }

@@ -69,7 +69,6 @@ public class Shan extends JavaPlugin {
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
-        saveResource("data.yml", false);
         saveResource("Gui.yml", false);
         saveResource("Message.yml", false);
 

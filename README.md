@@ -28,7 +28,9 @@ mvn clean package
 | `config.yml` | 插件占位配置（可为空） |
 | `Gui.yml` | **GUI 标题、按钮槽位/Lore、附魔中文表**（由 JAR 内预置文件复制，不覆盖已有文件） |
 | `Message.yml` | **聊天栏提示**（reload、批量模式、耐久/附魔输入等） |
-| `shan.db` | **模板业务数据**（SQLite）；若存在旧版 `data.yml` 会一次性迁移并改名为 `data.yml.bak` |
+| `shan.db` | **模板业务数据**（SQLite，唯一持久化存储） |
+
+从 1.2 升级：若数据目录里**已有**旧 `data.yml`，首次启动会自动导入 `shan.db` 并改名为 `data.yml.bak`；**不会**新建 `data.yml`。
 
 ## 配置与重载
 
