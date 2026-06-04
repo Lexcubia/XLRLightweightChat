@@ -103,31 +103,27 @@ public class HopperListener implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onInventoryMoveCap(InventoryMoveItemEvent event) {
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    public void onInventoryMoveGate(InventoryMoveItemEvent event) {
         ItemStack moving = event.getItem();
-        if (moving == null || moving.getType().isAir()) {
+        if (moving == null || moving.getType().isAir() || updateConfig == null) {
             return;
         }
+        long tick = GameTickCounter.getInstance().currentTick();
+        HopperTransferGate gate = HopperTransferGate.getInstance();
+
         if (event.getDestination().getType() == InventoryType.HOPPER) {
-            capMoveAmount(getHopperBlock(event.getDestination()), moving);
+            Block hopperBlock = getHopperBlock(event.getDestination());
+            if (hopperBlock != null && !allowTieredTransfer(hopperBlock, moving, tick, gate)) {
+                event.setCancelled(true);
+                return;
+            }
         }
         if (event.getSource().getType() == InventoryType.HOPPER) {
-            capMoveAmount(getHopperBlock(event.getSource()), moving);
-        }
-    }
-
-    private void capMoveAmount(Block hopperBlock, ItemStack moving) {
-        if (hopperBlock == null || updateConfig == null) {
-            return;
-        }
-        HopperLevelDef def = HopperLevelResolver.resolveForBlock(hopperBlock, keys, updateConfig);
-        if (def == null) {
-            return;
-        }
-        int max = def.maxItem();
-        if (moving.getAmount() > max) {
-            moving.setAmount(max);
+            Block hopperBlock = getHopperBlock(event.getSource());
+            if (hopperBlock != null && !allowTieredTransfer(hopperBlock, moving, tick, gate)) {
+                event.setCancelled(true);
+            }
         }
     }
 
@@ -143,6 +139,34 @@ public class HopperListener implements Listener {
             event.setCancelled(true);
             destroyIfAuto(hopperBlock, stack, event.getItem());
         }
+    }
+
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    public void onInventoryPickupGate(InventoryPickupItemEvent event) {
+        Inventory inventory = event.getInventory();
+        if (inventory.getType() != InventoryType.HOPPER || updateConfig == null) {
+            return;
+        }
+        Block hopperBlock = getHopperBlock(inventory);
+        if (hopperBlock == null) {
+            return;
+        }
+        ItemStack stack = event.getItem().getItemStack();
+        if (!allowTieredTransfer(hopperBlock, stack, GameTickCounter.getInstance().currentTick(), HopperTransferGate.getInstance())) {
+            event.setCancelled(true);
+            destroyIfAuto(hopperBlock, stack, event.getItem());
+        }
+    }
+
+    private boolean allowTieredTransfer(Block hopperBlock, ItemStack moving, long tick, HopperTransferGate gate) {
+        HopperLevelDef def = HopperLevelResolver.resolveForBlock(hopperBlock, keys, updateConfig);
+        if (def == null || !gate.tryAcquire(hopperBlock, def, tick)) {
+            return false;
+        }
+        if (moving.getAmount() > def.maxItem()) {
+            moving.setAmount(def.maxItem());
+        }
+        return true;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

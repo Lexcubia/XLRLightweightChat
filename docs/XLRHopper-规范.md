@@ -64,9 +64,20 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 ### 3.3 Update.yml 要点
 
 - JAR 预置 **`saveResource("Update.yml", false)`**；`UpdateConfig` 加载并校验：`transfer-tick` ≥ 8 且为 8 的倍数，`max-item` ≥ 1。
-- **`default`**：无 `hopper-level` PDC 的漏斗使用此段参数。
-- **`levels.<id>`**：唯一 ID（如 `iron`）；`/xlrhopper give` 与物品 PDC / 方块 PDC `hopper-level` 引用同一 ID。
-- 全局 **8 tick** 定时器不变；每 lane 的 `transfer-tick` 为门控间隔（累计达阈值才执行一步自动化）；`max-item` 限制单步反向搬运与 `InventoryMoveItem` 单次数量。
+- **`default`**：无 `hopper-level` PDC 的漏斗（普通放置）使用此段参数，**不是**任意 `levels` 条目。
+- **`levels.<id>`**：唯一 ID（如 `iron`）；`/xlrhopper give` 与物品 PDC / 方块 PDC `hopper-level` 引用同一 ID；改仓库内 `Update.yml` 后须 **`/xlrhopper reload`**，已放置方块 PDC 等级 ID 不变。
+- **`transfer-tick` / `max-item`**（`HopperTransferGate` + `HopperLevelResolver.resolveForBlock`）同时作用于：
+  - **原版漏斗链**：`InventoryMoveItemEvent`、`InventoryPickupItemEvent`（NORMAL 门控；LOWEST 仍为模板过滤）；
+  - **插件反向搬运**：`HopperTickService` workQueue 内 `HopperTransferReverse` 成功后 `recordMoves`，与 MoveItem 共用同一窗口计数。
+- 窗口语义：以主线程 `GameTickCounter`（每 game tick +1）为基准，两次**成功允许**的搬移之间至少间隔 `transfer-tick` tick；每个窗口内该漏斗最多 `max-item` 次搬移（单次事件数量上限亦为 `max-item`）。
+- 全局 **8 tick** `HopperTickService` 定时器不变；lane 上 `transfer-tick` 仍门控熔炼/合成/反向**自动化步**；原版传输不再绕过等级参数。
+
+**验收（漏斗链）**
+
+1. `/xlrhopper give %player% iron 1`，上方满箱、下方空箱：铁漏斗（如 16/2）整体节奏慢于钻石（如 8/8），快于 default（24/1）。
+2. 铁漏斗每 `transfer-tick` 窗口内最多 **2** 件进入下方（对比 `max-item: 1` 的铜或 default）。
+3. 无等级 PDC 的普通漏斗行为等同 `default`。
+4. `reload` 后修改 `Update.yml` 中数值，后续传输节奏随之变化。
 
 ### 3.4 shan.db
 

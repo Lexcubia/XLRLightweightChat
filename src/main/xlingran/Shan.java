@@ -100,6 +100,7 @@ public class Shan extends JavaPlugin {
         templateRepository = new TemplateRepository(this, database);
 
         hopperKeys = new HopperKeys(this);
+        GameTickCounter.getInstance().start(this);
         laneRegistry = new HopperLaneRegistry();
         hopperTickService = new HopperTickService(this, templateManager, hopperKeys, laneRegistry, updateConfig);
         hopperLaneListener = new HopperLaneListener(this, hopperTickService);
@@ -146,6 +147,7 @@ public class Shan extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        GameTickCounter.getInstance().stop();
         if (overlayDisplayService != null) {
             overlayDisplayService.hideAll();
         }
@@ -182,6 +184,7 @@ public class Shan extends JavaPlugin {
                 guiConfig.reload();
                 messageConfig.reload();
                 updateConfig.reload();
+                HopperTransferGate.getInstance().clearAll();
                 asyncReindexLoadedChunks();
                 if (sender != null) {
                     sender.sendMessage(messageConfig.message("reload-success"));

@@ -9,6 +9,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import xlingran.core.HopperLane;
 import xlingran.core.HopperLaneRegistry;
 import xlingran.core.HopperWorkEvaluator;
+import xlingran.gui.HopperLevelDef;
 import xlingran.gui.UpdateConfig;
 
 import java.util.HashSet;
@@ -73,6 +74,7 @@ public final class HopperTickService implements Listener {
         laneRegistry.unregisterLane(loc);
         smeltService.clear(loc);
         reservation.clear(loc);
+        HopperTransferGate.getInstance().clear(loc);
     }
 
     /**
@@ -128,7 +130,13 @@ public final class HopperTickService implements Listener {
             reservation.setReserved(loc, reserved);
 
             if (lane.isReverse()) {
-                HopperTransferReverse.transferStep(block, template, keys, reservation, lane.maxItem());
+                int moved = HopperTransferReverse.transferStep(block, template, keys, reservation, lane.maxItem());
+                if (moved > 0) {
+                    HopperLevelDef levelDef = HopperLevelResolver.resolveForBlock(block, keys, updateConfig);
+                    if (levelDef != null) {
+                        HopperTransferGate.getInstance().recordMoves(block, levelDef, GameTickCounter.getInstance().currentTick(), moved);
+                    }
+                }
             }
 
             boolean keep = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService);

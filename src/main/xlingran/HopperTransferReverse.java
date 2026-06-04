@@ -19,33 +19,33 @@ public final class HopperTransferReverse {
     }
 
     /**
-     * @return 本 tick 是否完成了一次物品位移
+     * @return 本 tick 成功搬运的物品件数（用于传输门控计数）
      */
-    public static boolean transferStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
-                                       HopperReservation reservation, int maxItem) {
+    public static int transferStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                   HopperReservation reservation, int maxItem) {
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER
                 || !HopperBlockConfig.isReverse(hopperBlock, keys) || template == null) {
-            return false;
+            return 0;
         }
         if (!(hopperBlock.getState() instanceof Container hopperContainer)) {
-            return false;
+            return 0;
         }
         Inventory hopperInv = hopperContainer.getInventory();
         Set<Integer> reserved = reservation.getReserved(hopperBlock.getLocation());
 
         int limit = Math.max(1, maxItem);
-        boolean moved = false;
+        int moved = 0;
         for (int i = 0; i < limit; i++) {
             Block aboveBlock = hopperBlock.getRelative(BlockFace.UP);
             Inventory aboveInv = HopperContainerUtil.getContainerInventory(aboveBlock);
             if (aboveInv == null || !tryPushOne(hopperInv, hopperBlock, aboveInv, aboveBlock, template, keys, reserved)) {
                 break;
             }
-            moved = true;
+            moved++;
         }
-        if (moved) {
+        if (moved > 0) {
             HopperContainerUtil.syncContainer(hopperBlock);
-            return true;
+            return moved;
         }
 
         for (int i = 0; i < limit; i++) {
@@ -54,9 +54,9 @@ public final class HopperTransferReverse {
             if (belowInv == null || !tryPullOne(belowInv, belowBlock, hopperInv, hopperBlock, template, keys, reserved)) {
                 break;
             }
-            moved = true;
+            moved++;
         }
-        if (moved) {
+        if (moved > 0) {
             HopperContainerUtil.syncContainer(hopperBlock);
         }
         return moved;
