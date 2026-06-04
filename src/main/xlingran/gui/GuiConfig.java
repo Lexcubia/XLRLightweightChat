@@ -1,6 +1,5 @@
 package xlingran.gui;
 
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -94,23 +93,11 @@ public final class GuiConfig {
     }
 
     public String color(String text) {
-        if (text == null) {
-            return "";
-        }
-        return ChatColor.translateAlternateColorCodes('&', text);
+        return TextPlaceholders.color(text);
     }
 
     public String apply(String template, Map<String, String> vars) {
-        if (template == null) {
-            return "";
-        }
-        String out = template;
-        if (vars != null) {
-            for (Map.Entry<String, String> e : vars.entrySet()) {
-                out = out.replace("%" + e.getKey() + "%", e.getValue() != null ? e.getValue() : "");
-            }
-        }
-        return color(out);
+        return TextPlaceholders.apply(template, vars);
     }
 
     public String toggle(boolean on) {
@@ -146,14 +133,6 @@ public final class GuiConfig {
             sb.append(' ');
         }
         return sb.toString().trim();
-    }
-
-    public String message(String path) {
-        return color(config.getString("Messages." + path, ""));
-    }
-
-    public String message(String path, Map<String, String> vars) {
-        return apply(config.getString("Messages." + path, ""), vars);
     }
 
     public String templateListTitle() {
@@ -235,8 +214,11 @@ public final class GuiConfig {
 
     public GuiButtonDef filterEnchantBook(boolean configured) {
         String path = configured ? "FilterEnchantGui.SetEnchant" : "FilterEnchantGui.Enchant";
+        List<String> fallbackLore = configured
+                ? List.of("&a当前过滤: &e%Enchant% %EnchantLevel%", "&7左键 修改等级", "&7右键 清除过滤")
+                : List.of("&7左键 设置最低等级");
         return readButton(path, configured ? Material.ENCHANTED_BOOK : Material.BOOK,
-                "&e%Enchant%", List.of("&7左键 设置最低等级"), 0);
+                "&e%Enchant%", fallbackLore, 0);
     }
 
     public List<String> durabilityLore(boolean configured, Integer threshold) {

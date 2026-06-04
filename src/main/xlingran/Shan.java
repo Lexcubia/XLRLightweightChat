@@ -9,6 +9,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import xlingran.core.HopperLaneListener;
 import xlingran.core.HopperLaneRegistry;
 import xlingran.gui.GuiConfig;
+import xlingran.gui.MessageConfig;
 import xlingran.storage.ShanDatabase;
 import xlingran.storage.TemplateRepository;
 
@@ -19,6 +20,7 @@ public class Shan extends JavaPlugin {
     private HopperTemplateManager templateManager;
     private PlayerGuiSession playerGuiSession;
     private GuiConfig guiConfig;
+    private MessageConfig messageConfig;
     private TemplateRepository templateRepository;
     private ShanDatabase database;
     private Gui gui;
@@ -43,6 +45,10 @@ public class Shan extends JavaPlugin {
         return guiConfig;
     }
 
+    public MessageConfig getMessageConfig() {
+        return messageConfig;
+    }
+
     public TemplateRepository getTemplateRepository() {
         return templateRepository;
     }
@@ -65,11 +71,14 @@ public class Shan extends JavaPlugin {
         saveDefaultConfig();
         saveResource("data.yml", false);
         saveResource("Gui.yml", false);
+        saveResource("Message.yml", false);
 
         templateManager = new HopperTemplateManager();
         playerGuiSession = new PlayerGuiSession();
         guiConfig = new GuiConfig(this);
         guiConfig.load();
+        messageConfig = new MessageConfig(this);
+        messageConfig.load();
 
         database = new ShanDatabase(this);
         try {
@@ -85,7 +94,7 @@ public class Shan extends JavaPlugin {
         hopperLaneListener = new HopperLaneListener(this, hopperTickService);
 
         gui = new Gui(this, templateManager, playerGuiSession, templateRepository, hopperKeys, guiConfig,
-                hopperTickService, hopperLaneListener);
+                messageConfig, hopperTickService, hopperLaneListener);
 
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
@@ -113,7 +122,7 @@ public class Shan extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new BatchModeListener(hopperKeys, playerGuiSession, hopperLaneListener), this);
         getServer().getPluginManager().registerEvents(
-                new HopperSettingsListener(gui, templateManager, hopperKeys), this);
+                new HopperSettingsListener(gui, templateManager, hopperKeys, messageConfig), this);
 
         Bukkit.getConsoleSender().sendMessage(
                 ChatColor.GREEN + "欢迎使用寄寄の家 "
@@ -139,12 +148,17 @@ public class Shan extends JavaPlugin {
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
                 guiConfig.reload();
+                messageConfig.reload();
                 templateRepository.loadInto(templateManager);
             } catch (Exception e) {
                 getLogger().severe("[XLRHopper] reload 失败: " + e.getMessage());
                 Bukkit.getScheduler().runTask(this, () -> {
                     if (sender != null) {
-                        sender.sendMessage(guiConfig.message("reload-fail"));
+                        if (sender instanceof org.bukkit.entity.Player) {
+                            sender.sendMessage(messageConfig.message("reload-fail"));
+                        } else {
+                            sender.sendMessage(messageConfig.message("reload-console-only-fail"));
+                        }
                     }
                 });
                 return;
@@ -152,7 +166,7 @@ public class Shan extends JavaPlugin {
             Bukkit.getScheduler().runTask(this, () -> {
                 asyncReindexLoadedChunks();
                 if (sender != null) {
-                    sender.sendMessage(guiConfig.message("reload-success"));
+                    sender.sendMessage(messageConfig.message("reload-success"));
                 }
             });
         });

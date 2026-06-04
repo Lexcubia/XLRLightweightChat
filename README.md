@@ -26,12 +26,13 @@ mvn clean package
 | 文件 | 说明 |
 |------|------|
 | `config.yml` | 插件占位配置（可为空） |
-| `Gui.yml` | **GUI 文案、槽位、附魔中文名**（由 JAR 内预置文件复制，不覆盖已有文件） |
+| `Gui.yml` | **GUI 标题、按钮槽位/Lore、附魔中文表**（由 JAR 内预置文件复制，不覆盖已有文件） |
+| `Message.yml` | **聊天栏提示**（reload、批量模式、耐久/附魔输入等） |
 | `shan.db` | **模板业务数据**（SQLite）；若存在旧版 `data.yml` 会一次性迁移并改名为 `data.yml.bak` |
 
 ## 配置与重载
 
-- 修改 `Gui.yml` 或外部工具编辑 `shan.db` 后，执行 **`/xlrhopper reload`**（权限 **`xlrhopper.admin`**，玩家与控制台均可），无需整服 `/reload`。
+- 修改 `Gui.yml`、`Message.yml` 或外部工具编辑 `shan.db` 后，执行 **`/xlrhopper reload`**（权限 **`xlrhopper.admin`**，玩家与控制台均可），无需整服 `/reload`。
 - 存储类界面（自动合成 / 过滤的物品 / 自动熔炼）可在 `Gui.yml` 中配置 **`rows`（≥1）**；其余界面行数在代码中固定。
 
 完整行为说明见 [docs/XLRHopper-规范.md](docs/XLRHopper-规范.md)。

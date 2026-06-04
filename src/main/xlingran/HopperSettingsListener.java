@@ -1,7 +1,7 @@
 package xlingran;
 
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import xlingran.gui.MessageConfig;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -13,16 +13,17 @@ import org.bukkit.inventory.ItemStack;
 
 public class HopperSettingsListener implements Listener {
 
-    private static final String NO_TEMPLATE_MESSAGE = ChatColor.RED + "玩家当前漏斗没有模板";
-
     private final Gui gui;
     private final HopperTemplateManager templateManager;
     private final HopperKeys keys;
+    private final MessageConfig messageConfig;
 
-    public HopperSettingsListener(Gui gui, HopperTemplateManager templateManager, HopperKeys keys) {
+    public HopperSettingsListener(Gui gui, HopperTemplateManager templateManager, HopperKeys keys,
+                                  MessageConfig messageConfig) {
         this.gui = gui;
         this.templateManager = templateManager;
         this.keys = keys;
+        this.messageConfig = messageConfig;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -42,7 +43,7 @@ public class HopperSettingsListener implements Listener {
             return;
         }
         if (!HopperTemplateResolver.hasValidTemplate(block, keys, templateManager)) {
-            player.sendMessage(NO_TEMPLATE_MESSAGE);
+            player.sendMessage(messageConfig.message("no-template"));
             return;
         }
         event.setCancelled(true);

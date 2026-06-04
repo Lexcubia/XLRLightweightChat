@@ -28,6 +28,7 @@
                     <include>config.yml</include>
                     <include>data.yml</include>
                     <include>Gui.yml</include>
+                    <include>Message.yml</include>
                 </includes>
             </resource>
         </resources>

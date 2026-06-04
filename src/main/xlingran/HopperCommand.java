@@ -26,7 +26,7 @@ public class HopperCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length >= 1 && args[0].equalsIgnoreCase("reload")) {
             if (!sender.hasPermission("xlrhopper.admin")) {
-                sender.sendMessage(plugin.getGuiConfig().message("reload-no-permission"));
+                sender.sendMessage(plugin.getMessageConfig().message("reload-no-permission"));
                 return true;
             }
             plugin.reload(sender);

@@ -26,6 +26,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 
 import xlingran.core.HopperLaneListener;
 import xlingran.gui.GuiConfig;
+import xlingran.gui.MessageConfig;
 import xlingran.gui.GuiType;
 import xlingran.gui.XlrGuiHolder;
 import xlingran.storage.TemplateRepository;
@@ -43,6 +44,7 @@ public class Gui implements Listener {
     private final TemplateRepository templateRepository;
     private final HopperKeys hopperKeys;
     private final GuiConfig guiConfig;
+    private final MessageConfig messageConfig;
     private final HopperTickService tickService;
     private final HopperLaneListener laneListener;
 
@@ -59,13 +61,14 @@ public class Gui implements Listener {
 
     public Gui(Shan plugin, HopperTemplateManager templateManager, PlayerGuiSession sessions,
                TemplateRepository templateRepository, HopperKeys hopperKeys, GuiConfig guiConfig,
-               HopperTickService tickService, HopperLaneListener laneListener) {
+               MessageConfig messageConfig, HopperTickService tickService, HopperLaneListener laneListener) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.sessions = sessions;
         this.templateRepository = templateRepository;
         this.hopperKeys = hopperKeys;
         this.guiConfig = guiConfig;
+        this.messageConfig = messageConfig;
         this.tickService = tickService;
         this.laneListener = laneListener;
         slotAutoCraft = guiConfig.templateButtonSlot("AutoCrafting", 10);
@@ -424,7 +427,7 @@ public class Gui implements Listener {
             player.closeInventory();
             sessions.clearInput(player.getUniqueId());
             sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.DURABILITY, templateName);
-            player.sendMessage(guiConfig.message("durability-prompt"));
+            player.sendMessage(messageConfig.message("durability-prompt"));
         } else if (slot == slotAutoCraft) {
             if (click == ClickType.LEFT || click == ClickType.RIGHT) {
                 if (click == ClickType.LEFT) {
@@ -449,8 +452,8 @@ public class Gui implements Listener {
             player.closeInventory();
             sessions.clearInput(player.getUniqueId());
             sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.BATCH_APPLY, templateName);
-            player.sendMessage(guiConfig.message("batch-enter"));
-            player.sendMessage(guiConfig.message("batch-quit-hint"));
+            player.sendMessage(messageConfig.message("batch-enter"));
+            player.sendMessage(messageConfig.message("batch-quit-hint"));
         }
     }
 
@@ -472,7 +475,7 @@ public class Gui implements Listener {
         }
         if (!HopperTemplateResolver.hasValidTemplate(block, hopperKeys, templateManager)) {
             player.closeInventory();
-            player.sendMessage(guiConfig.message("no-template"));
+            player.sendMessage(messageConfig.message("no-template"));
             return;
         }
         HopperBlockConfig config = HopperBlockConfig.read(block, hopperKeys);
@@ -513,7 +516,7 @@ public class Gui implements Listener {
             if (template.getEnchantMinLevels().containsKey(selected)) {
                 template.removeEnchantMinLevel(selected);
                 saveData();
-                player.sendMessage(guiConfig.message("enchant-cleared",
+                player.sendMessage(messageConfig.message("enchant-cleared",
                         Map.of("Enchant", formatEnchantName(selected))));
                 openFilterEnchants(player, templateName);
             }
@@ -525,7 +528,7 @@ public class Gui implements Listener {
         player.closeInventory();
         sessions.setPendingEnchant(player.getUniqueId(), selected);
         sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.ENCHANT_LEVEL, templateName);
-        player.sendMessage(color("&a请输入附魔等级 &7(低于该等级的附魔将被过滤，输入 xlrquit 退出设置)"));
+        player.sendMessage(messageConfig.message("enchant-prompt"));
     }
 
     public void openAutoCraft(Player player, String templateName) {

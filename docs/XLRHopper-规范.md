@@ -8,7 +8,7 @@
 | API | Spigot/Paper 1.21.1 |
 | 主类 | `xlingran.Shan` |
 | 开发分支 | `XLRHopper` |
-| 文案与 GUI 布局 | **`Gui.yml`**（JAR 预置 + `saveResource`；槽位/标题/附魔表可配） |
+| 文案与 GUI 布局 | **`Gui.yml`**（界面）；**`Message.yml`**（聊天提示） |
 | 模板业务数据 | **`shan.db`（SQLite）**；旧 `data.yml` 首次启动迁移 |
 
 ---
@@ -26,7 +26,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `/xlrhopper create mode <名称>` | `xlrhopper.create.mode` | 创建名为 `<名称>` 的模板（默认启用该模板、黑名单），并打开「模板设置」 |
 | `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode` | 编辑已有模板，打开「模板设置」 |
 | `/xlrhopper mode` | `xlrhopper.mode` | 打开「漏斗模板」列表 GUI |
-| `/xlrhopper reload` | `xlrhopper.admin` | 重载 `Gui.yml`、从 `shan.db` 重读模板、异步重登记已加载区块漏斗（玩家与控制台均可） |
+| `/xlrhopper reload` | `xlrhopper.admin` | 重载 `Gui.yml` + `Message.yml`、从 `shan.db` 重读模板、异步重登记已加载区块漏斗（玩家与控制台均可） |
 
 - 根命令 `xlrhopper` 在 `plugin.yml` 注册；子命令在代码内解析。已移除的 `box` / `create box` 子命令会提示新用法。
 - 各子命令在代码内分别校验权限。
@@ -39,7 +39,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | 文件 | 路径 | 用途 |
 |------|------|------|
 | `config.yml` | `plugins/XLRHopper/config.yml` | 插件配置占位（可为空） |
-| `Gui.yml` | `plugins/XLRHopper/Gui.yml` | GUI 标题、按钮材质/槽位/Lore、附魔中文表、`Messages` 等 |
+| `Gui.yml` | `plugins/XLRHopper/Gui.yml` | GUI 标题、按钮材质/槽位/Lore、附魔中文表 |
+| `Message.yml` | `plugins/XLRHopper/Message.yml` | 聊天栏提示（`Messages.*`） |
 | `shan.db` | `plugins/XLRHopper/shan.db` | **模板业务数据**（SQLite） |
 | `data.yml` | （已废弃） | 若存在则**一次性迁移**至 `shan.db` 后改名为 `data.yml.bak` |
 
@@ -51,13 +52,19 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - 附魔显示名：key 为 **registry 小写**（如 `fire_protection`）；`EnchantNameTable` 委托 `GuiConfig` 查询。
 - 修改后执行 `/xlrhopper reload` 生效。
 
-### 3.2 shan.db 与迁移
+### 3.2 Message.yml 要点
+
+- JAR 预置 **`saveResource("Message.yml", false)`**；根节点 `Messages`，key 如 `reload-success`、`no-template`、`enchant-prompt` 等。
+- 支持 `%Enchant%` 等占位符（如 `enchant-cleared`）。
+- `/xlrhopper reload` 与 `Gui.yml` 一并热重载。
+
+### 3.3 shan.db 与迁移
 
 - 表结构由 `ShanDatabase` 初始化；读写经 `TemplateRepository`（异步加载、防抖保存、关服 `flushSync`）。
 - 逻辑字段与旧 `data.yml` 的 `players.<UUID>.templates` 一致（白名单、filter-items、自动合成/熔炼、附魔过滤等）。
 - `/xlrhopper reload` 会 **重读数据库**（不先 save），便于外部工具改库后热重载。
 
-### 3.3 主线程 / 异步边界
+### 3.4 主线程 / 异步边界
 
 | 主线程 | 异步 |
 |--------|------|
@@ -125,7 +132,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | 配置键 | 默认 slot | 行为 |
 |--------|-----------|------|
 | `TemplateSet.AutoCrafting` | 10 | **左键** 开/关；**右键** 打开「自动合成」（`Auto-Crafting.rows` 决定格数） |
-| `TemplateSet.AutoDestroy` | 12 | 左/右键切换模板级自动销毁 |
+| `TemplateSet.Break` | 12 | 左/右键切换模板级自动销毁 |
 | `TemplateSet.FilterItem` | 14 | 打开「过滤的物品」 |
 | `TemplateSet.FilterMode` | 16 | 左/右键切换模板白/黑名单 |
 | `TemplateSet.FilterEnchant` | 28 | 打开「过滤附魔属性」 |
@@ -181,7 +188,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 ### 4.5 漏斗设置（3 行硬编码）
 
 - **标题**：`HopperSetting.name`（默认 `&e漏斗设置`）
-- **打开**：对已套用模板（PDC 含 `template` + `owner`）的漏斗 **Shift + 右键**（**主手与副手均须为空**）；无模板时提示（`Messages` 可配），不打开 GUI
+- **打开**：对已套用模板（PDC 含 `template` + `owner`）的漏斗 **Shift + 右键**（**主手与副手均须为空**）；无模板时提示（`Message.yml` → `no-template`），不打开 GUI
 - **`HopperSetting.Redstone`**（默认 slot 10）→ PDC `redstone-list-toggle`
 - **`HopperSetting.Reverse`**（默认 slot 12）→ PDC `reverse-suction`
 - **`HopperSetting.Filler`**：占位玻璃
@@ -290,6 +297,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 |---------|------|
 | `Shan` | 插件入口；`saveResource(Gui.yml)`；异步 DB；`reload()` |
 | `gui.GuiConfig` | 解析 `Gui.yml`、占位符、slot 校验、附魔显示名 |
+| `gui.MessageConfig` | 解析 `Message.yml` 聊天提示 |
 | `Gui` | GUI 构建与事件（读 `GuiConfig`） |
 | `storage.ShanDatabase` / `TemplateRepository` | SQLite 与迁移、异步加载/防抖保存 |
 | `core.HopperLane` / `FilterSnapshot` | 单漏斗运行态与模板快照缓存 |
@@ -324,7 +332,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 3. 全部关闭时放置漏斗无过滤；启用后放置有 PDC 且过滤生效。
 4. 白/黑名单**仅影响材质**；名称/Lore **固定黑名单**（命中规则即拒绝，不可切换）。
 5. 重启后 `shan.db` 与 GUI 数据一致；旧 `data.yml` 仅首次迁移。
-6. `/xlrhopper reload`：无 `xlrhopper.admin` 拒绝；改 `Gui.yml` 后重载标题/Lore 变化。
+6. `/xlrhopper reload`：无 `xlrhopper.admin` 拒绝；改 `Gui.yml` / `Message.yml` 后重载界面与聊天提示变化。
 7. `Filter-Item.rows: 2` 重载后为 18 格且可存取。
 8. 模板设置等 GUI：无法取出玻璃/命名牌；连点被冷却限制。
 9. 过滤物品 GUI：可拿可取；关闭时重复材质退回（堆叠×2 或多格各 1 均退回 1 个）。
@@ -332,4 +340,4 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 ---
 
-*文档版本：与实现同步，适用于 XLRHopper 1.3.0（Gui.yml、shan.db、事件驱动 workQueue、reload）。*
+*文档版本：与实现同步，适用于 XLRHopper 1.3.0（Gui.yml、Message.yml、shan.db、事件驱动 workQueue、reload）。*
