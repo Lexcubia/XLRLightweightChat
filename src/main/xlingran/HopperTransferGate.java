@@ -8,13 +8,13 @@ import xlingran.gui.HopperLevelDef;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 漏斗等级传输门控：transfer-tick 窗口 + 每窗口 max-item 次数（原版 MoveItem / 吸取 / 插件反向共用）。
+ * 漏斗等级传输门控：transfer-tick 为两次传输最小间隔；max-item 由事件侧限制单次数量。
  */
 public final class HopperTransferGate {
 
     private static final HopperTransferGate INSTANCE = new HopperTransferGate();
 
-    private final ConcurrentHashMap<String, WindowState> byLocation = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CooldownState> byLocation = new ConcurrentHashMap<>();
 
     private HopperTransferGate() {
     }
@@ -24,7 +24,7 @@ public final class HopperTransferGate {
     }
 
     /**
-     * 尝试占用一次传输配额；失败表示本窗口已达 max-item 或仍在冷却。
+     * 尝试开始一次传输；失败表示仍在 transfer-tick 冷却中。
      */
     public boolean tryAcquire(Block hopper, HopperLevelDef def, long currentTick) {
         if (hopper == null || def == null) {
@@ -34,45 +34,30 @@ public final class HopperTransferGate {
         if (key.isEmpty()) {
             return false;
         }
-        WindowState state = byLocation.computeIfAbsent(key, k -> new WindowState());
+        CooldownState state = byLocation.computeIfAbsent(key, k -> new CooldownState());
         synchronized (state) {
-            if (state.movesInWindow >= def.maxItem()) {
-                if (currentTick < state.windowDeadlineTick) {
-                    return false;
-                }
-                state.movesInWindow = 0;
+            if (currentTick < state.nextAllowedTick) {
+                return false;
             }
-            if (state.movesInWindow == 0) {
-                state.windowDeadlineTick = currentTick + def.transferTick();
-            }
-            state.movesInWindow++;
+            state.nextAllowedTick = currentTick + def.transferTick();
             return true;
         }
     }
 
     /**
-     * 插件反向搬运成功时计入配额（与 MoveItem 共用窗口）。
+     * 插件反向搬运成功时推进冷却（一步反向计为一次传输）。
      */
-    public void recordMoves(Block hopper, HopperLevelDef def, long currentTick, int count) {
-        if (hopper == null || def == null || count <= 0) {
+    public void recordTransfer(Block hopper, HopperLevelDef def, long currentTick) {
+        if (hopper == null || def == null) {
             return;
         }
         String key = HopperLane.laneKey(hopper.getLocation());
         if (key.isEmpty()) {
             return;
         }
-        WindowState state = byLocation.computeIfAbsent(key, k -> new WindowState());
+        CooldownState state = byLocation.computeIfAbsent(key, k -> new CooldownState());
         synchronized (state) {
-            if (state.movesInWindow >= def.maxItem()) {
-                if (currentTick < state.windowDeadlineTick) {
-                    return;
-                }
-                state.movesInWindow = 0;
-            }
-            if (state.movesInWindow == 0) {
-                state.windowDeadlineTick = currentTick + def.transferTick();
-            }
-            state.movesInWindow = Math.min(def.maxItem(), state.movesInWindow + count);
+            state.nextAllowedTick = currentTick + def.transferTick();
         }
     }
 
@@ -87,8 +72,7 @@ public final class HopperTransferGate {
         byLocation.clear();
     }
 
-    private static final class WindowState {
-        long windowDeadlineTick;
-        int movesInWindow;
+    private static final class CooldownState {
+        long nextAllowedTick;
     }
 }

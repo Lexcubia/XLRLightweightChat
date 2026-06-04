@@ -2,8 +2,6 @@ package xlingran.core;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
-import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -17,19 +15,27 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 import xlingran.HopperAutoSmeltService;
+import xlingran.HopperBlockUtil;
+import xlingran.HopperChunkScanUtil;
 import xlingran.HopperKeys;
-import xlingran.HopperReservation;
 import xlingran.HopperTemplateManager;
+import xlingran.HopperTemplateResolver;
 import xlingran.HopperTickService;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class HopperLaneListener implements Listener {
 
+    private static final long EVALUATE_DEBOUNCE_TICKS = 4L;
+
     private final JavaPlugin plugin;
     private final HopperTickService tickService;
+    private final Map<String, BukkitTask> debouncedEvaluate = new ConcurrentHashMap<>();
 
     public HopperLaneListener(JavaPlugin plugin, HopperTickService tickService) {
         this.plugin = plugin;
@@ -39,34 +45,19 @@ public final class HopperLaneListener implements Listener {
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
         Chunk chunk = event.getChunk();
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            List<Location> hoppers = new ArrayList<>();
-            for (int x = 0; x < 16; x++) {
-                for (int z = 0; z < 16; z++) {
-                    for (int y = chunk.getWorld().getMinHeight(); y < chunk.getWorld().getMaxHeight(); y++) {
-                        if (chunk.getBlock(x, y, z).getType() == Material.HOPPER) {
-                            hoppers.add(chunk.getBlock(x, y, z).getLocation());
-                        }
-                    }
-                }
-            }
-            if (hoppers.isEmpty()) {
-                return;
-            }
-            Bukkit.getScheduler().runTask(plugin, () -> registerLocations(hoppers));
-        });
+        Bukkit.getScheduler().runTask(plugin, () -> registerChunkHoppers(chunk));
     }
 
-    private void registerLocations(List<Location> locations) {
+    private void registerChunkHoppers(Chunk chunk) {
+        List<Block> hoppers = HopperChunkScanUtil.hoppersInChunk(chunk);
+        if (hoppers.isEmpty()) {
+            return;
+        }
         HopperKeys keys = tickService.getKeys();
         HopperTemplateManager tm = tickService.getTemplateManager();
         HopperLaneRegistry registry = tickService.getLaneRegistry();
         HopperAutoSmeltService smelt = tickService.getSmeltService();
-        for (Location loc : locations) {
-            Block block = loc.getBlock();
-            if (block.getType() != Material.HOPPER) {
-                continue;
-            }
+        for (Block block : hoppers) {
             HopperLane lane = registry.registerLane(block, keys, tm, tickService.getUpdateConfig());
             if (lane != null) {
                 HopperWorkEvaluator.evaluateAndQueue(block, registry, keys, smelt);
@@ -76,30 +67,22 @@ public final class HopperLaneListener implements Listener {
 
     @EventHandler
     public void onChunkUnload(ChunkUnloadEvent event) {
-        Chunk chunk = event.getChunk();
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                for (int y = chunk.getWorld().getMinHeight(); y < chunk.getWorld().getMaxHeight(); y++) {
-                    if (chunk.getBlock(x, y, z).getType() == Material.HOPPER) {
-                        Location loc = chunk.getBlock(x, y, z).getLocation();
-                        tickService.onLaneRemoved(loc);
-                    }
-                }
-            }
+        for (Block block : HopperChunkScanUtil.hoppersInChunk(event.getChunk())) {
+            tickService.onLaneRemoved(block.getLocation());
         }
     }
 
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
-        if (event.getBlockPlaced().getType() != Material.HOPPER) {
-            return;
+        if (event.getBlockPlaced().getType() == org.bukkit.Material.HOPPER) {
+            scheduleEvaluate(event.getBlockPlaced());
         }
-        scheduleEvaluate(event.getBlockPlaced());
     }
 
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
-        if (event.getBlock().getType() == Material.HOPPER) {
+        if (event.getBlock().getType() == org.bukkit.Material.HOPPER) {
+            cancelEvaluate(event.getBlock());
             tickService.onLaneRemoved(event.getBlock().getLocation());
         }
     }
@@ -107,7 +90,8 @@ public final class HopperLaneListener implements Listener {
     @EventHandler
     public void onBlockExplode(BlockExplodeEvent event) {
         for (Block block : event.blockList()) {
-            if (block.getType() == Material.HOPPER) {
+            if (block.getType() == org.bukkit.Material.HOPPER) {
+                cancelEvaluate(block);
                 tickService.onLaneRemoved(block.getLocation());
             }
         }
@@ -115,8 +99,8 @@ public final class HopperLaneListener implements Listener {
 
     @EventHandler
     public void onInventoryMove(InventoryMoveItemEvent event) {
-        Block dest = hopperBlock(event.getDestination());
-        Block src = hopperBlock(event.getSource());
+        Block dest = HopperBlockUtil.resolveHopperBlock(event.getDestination());
+        Block src = HopperBlockUtil.resolveHopperBlock(event.getSource());
         if (dest != null) {
             scheduleEvaluate(dest);
         }
@@ -127,35 +111,56 @@ public final class HopperLaneListener implements Listener {
 
     @EventHandler
     public void onPickup(InventoryPickupItemEvent event) {
-        if (event.getInventory().getType() == InventoryType.HOPPER) {
-            Block block = hopperBlock(event.getInventory());
-            if (block != null) {
-                scheduleEvaluate(block);
-            }
+        if (event.getInventory().getType() != InventoryType.HOPPER) {
+            return;
+        }
+        Block block = HopperBlockUtil.resolveHopperBlock(event.getInventory());
+        if (block != null) {
+            scheduleEvaluate(block);
         }
     }
 
     public void scheduleEvaluate(Block hopperBlock) {
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            HopperLane lane = tickService.getLaneRegistry().registerLane(hopperBlock, tickService.getKeys(),
-                    tickService.getTemplateManager(), tickService.getUpdateConfig());
-            if (lane != null) {
-                HopperWorkEvaluator.markPending(hopperBlock, tickService.getLaneRegistry(), tickService.getKeys(),
-                        tickService.getSmeltService());
-            }
-        });
+        if (hopperBlock == null || hopperBlock.getType() != org.bukkit.Material.HOPPER) {
+            return;
+        }
+        if (HopperTemplateResolver.resolve(hopperBlock, tickService.getKeys(), tickService.getTemplateManager()) == null) {
+            return;
+        }
+        String key = HopperLane.laneKey(hopperBlock.getLocation());
+        if (key.isEmpty()) {
+            return;
+        }
+        BukkitTask pending = debouncedEvaluate.remove(key);
+        if (pending != null) {
+            pending.cancel();
+        }
+        BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            debouncedEvaluate.remove(key);
+            runEvaluate(hopperBlock);
+        }, EVALUATE_DEBOUNCE_TICKS);
+        debouncedEvaluate.put(key, task);
     }
 
-    private static Block hopperBlock(Inventory inventory) {
-        if (inventory == null || inventory.getType() != InventoryType.HOPPER) {
-            return null;
+    private void runEvaluate(Block hopperBlock) {
+        if (hopperBlock.getType() != org.bukkit.Material.HOPPER) {
+            return;
         }
-        if (inventory.getHolder() instanceof org.bukkit.block.BlockState state) {
-            return state.getBlock();
+        HopperLane lane = tickService.getLaneRegistry().registerLane(hopperBlock, tickService.getKeys(),
+                tickService.getTemplateManager(), tickService.getUpdateConfig());
+        if (lane != null) {
+            HopperWorkEvaluator.markPending(hopperBlock, tickService.getLaneRegistry(), tickService.getKeys(),
+                    tickService.getSmeltService());
         }
-        if (inventory.getLocation() != null) {
-            return inventory.getLocation().getBlock();
+    }
+
+    private void cancelEvaluate(Block block) {
+        if (block == null) {
+            return;
         }
-        return null;
+        BukkitTask pending = debouncedEvaluate.remove(HopperLane.laneKey(block.getLocation()));
+        if (pending != null) {
+            pending.cancel();
+        }
     }
 }

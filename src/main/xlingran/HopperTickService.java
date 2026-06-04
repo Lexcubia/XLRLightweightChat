@@ -134,7 +134,7 @@ public final class HopperTickService implements Listener {
                 if (moved > 0) {
                     HopperLevelDef levelDef = HopperLevelResolver.resolveForBlock(block, keys, updateConfig);
                     if (levelDef != null) {
-                        HopperTransferGate.getInstance().recordMoves(block, levelDef, GameTickCounter.getInstance().currentTick(), moved);
+                        HopperTransferGate.getInstance().recordTransfer(block, levelDef, GameTickCounter.getInstance().currentTick());
                     }
                 }
             }

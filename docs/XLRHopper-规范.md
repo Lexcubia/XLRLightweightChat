@@ -67,17 +67,19 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - **`default`**：无 `hopper-level` PDC 的漏斗（普通放置）使用此段参数，**不是**任意 `levels` 条目。
 - **`levels.<id>`**：唯一 ID（如 `iron`）；`/xlrhopper give` 与物品 PDC / 方块 PDC `hopper-level` 引用同一 ID；改仓库内 `Update.yml` 后须 **`/xlrhopper reload`**，已放置方块 PDC 等级 ID 不变。
 - **`transfer-tick` / `max-item`**（`HopperTransferGate` + `HopperLevelResolver.resolveForBlock`）同时作用于：
-  - **原版漏斗链**：`InventoryMoveItemEvent`、`InventoryPickupItemEvent`（NORMAL 门控；LOWEST 仍为模板过滤）；
-  - **插件反向搬运**：`HopperTickService` workQueue 内 `HopperTransferReverse` 成功后 `recordMoves`，与 MoveItem 共用同一窗口计数。
-- 窗口语义：以主线程 `GameTickCounter`（每 game tick +1）为基准，两次**成功允许**的搬移之间至少间隔 `transfer-tick` tick；每个窗口内该漏斗最多 `max-item` 次搬移（单次事件数量上限亦为 `max-item`）。
+  - **原版漏斗链**：`InventoryMoveItemEvent`、`InventoryPickupItemEvent`（HIGH 门控；LOWEST 仍为模板过滤）；
+  - **插件反向搬运**：`HopperTickService` workQueue 内 `HopperTransferReverse` 成功后 `recordTransfer`，与 MoveItem 共用冷却。
+- **`transfer-tick`**：两次**传输**之间至少间隔 N game tick（`HopperTransferGate.tryAcquire` 冷却）。
+- **`max-item`**：**单次传输**最多搬运的物品数量（`setAmount` 上限，非窗口内次数）；Q 丢一组会分多次入漏斗（每次 ≤max-item，间隔 ≥transfer-tick）。
 - 全局 **8 tick** `HopperTickService` 定时器不变；lane 上 `transfer-tick` 仍门控熔炼/合成/反向**自动化步**；原版传输不再绕过等级参数。
 
 **验收（漏斗链）**
 
 1. 必须用 **`/xlrhopper give %player% <等级> 1` 放置**（方块须有 `hopper-level` PDC）；仅改名/颜色的漏斗仍走 `default`。
 2. 上方满箱、下方空箱对比：钻石（如 8/8）应明显快于铁（16/2）与普通放置漏斗（`default` 24/1）。
-3. 铁漏斗每 `transfer-tick` 窗口内最多 **2** 件进入下方（对比 `max-item: 1` 的铜或 default）。
-4. `reload` 后修改 `Update.yml` 中数值，后续传输节奏随之变化。
+3. 铁漏斗每次传输最多 **2** 个，且每 **16 tick** 可传输一次（对比铜 `max-item: 1`）。
+4. 钻石漏斗 Q 丢 64：首次约 8 个入漏斗，地面剩余每隔 **8 tick** 再继续传输。
+5. `reload` 后修改 `Update.yml` 中数值，后续传输节奏随之变化。
 
 **排错**：若各等级速度仍一致，检查 Paper 是否关闭 `InventoryMoveItem`（如 `hopper.disable-move-event`）；并确认 `plugins/XLRHopper/Update.yml` 已 reload。
 
@@ -222,7 +224,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 - 实现：`display.HopperOverlayDisplayService` + `display.HopperOverlayListener`；**不**进入 `HopperTickService`（属 P0 事件驱动，与 8 tick `workQueue` 排水无关）。
 - 实体：`ItemDisplay`（`ItemDisplayTransform.GUI`，独立 scale；漏斗 5 槽非空物品各 1 个、无数量）+ 五行 `TextDisplay`（漏斗等级 `Update.yml` 的 `name`、`%name%` 占位；模板名、白/黑名单模式、附魔过滤条数、最低耐久）。
-- 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用 **4 tick 防抖**，避免每 tick 销毁/重建 Display 导致主线程卡顿。
+- 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用 **4 tick 防抖**；内容未变时跳过刷新，否则就地 `setText`/`setItemStack`，减少 Display 重建。
 - 文案与 Y 偏移均在 Java 常量中拼接；**不读** `Message.yml` / `Gui.yml` 悬浮行配置。
 - PDC：`hover-display`（开关）、`overlay-marker`（实体归属标记）；套模板/初始化时 `hover-display=false`。
 - **刷新事件**（仅 `hover-display=true`）：`InventoryMoveItemEvent`、`InventoryPickupItemEvent`、漏斗 GUI 的 `InventoryClickEvent` / `InventoryDragEvent` / `InventoryCloseEvent`；`ChunkLoad` 恢复 `show`；破坏/爆炸/卸载 `hide`；`onDisable` → `hideAll`。

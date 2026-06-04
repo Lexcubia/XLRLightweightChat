@@ -5,6 +5,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -148,10 +149,13 @@ public class HopperListener implements Listener {
             return;
         }
         Block hopperBlock = HopperBlockUtil.resolveHopperBlock(inventory);
-        ItemStack stack = event.getItem().getItemStack();
-        if (hopperBlock != null && !allowTieredTransfer(hopperBlock, stack, GameTickCounter.getInstance().currentTick(), HopperTransferGate.getInstance())) {
+        if (hopperBlock == null) {
+            return;
+        }
+        Item entity = event.getItem();
+        if (!allowTieredPickup(hopperBlock, entity, GameTickCounter.getInstance().currentTick())) {
             event.setCancelled(true);
-            destroyIfAuto(hopperBlock, stack, event.getItem());
+            destroyIfAuto(hopperBlock, entity.getItemStack(), entity);
         }
     }
 
@@ -160,10 +164,30 @@ public class HopperListener implements Listener {
         if (def == null || !gate.tryAcquire(hopperBlock, def, tick)) {
             return false;
         }
-        if (moving.getAmount() > def.maxItem()) {
-            moving.setAmount(def.maxItem());
-        }
+        capTransferAmount(moving, def.maxItem());
         return true;
+    }
+
+    private boolean allowTieredPickup(Block hopperBlock, Item entity, long tick) {
+        if (entity == null) {
+            return false;
+        }
+        ItemStack onGround = entity.getItemStack();
+        if (onGround == null || onGround.getType().isAir()) {
+            return false;
+        }
+        HopperLevelDef def = HopperLevelResolver.resolveForBlock(hopperBlock, keys, updateConfig);
+        if (def == null || !HopperTransferGate.getInstance().tryAcquire(hopperBlock, def, tick)) {
+            return false;
+        }
+        capTransferAmount(onGround, def.maxItem());
+        return true;
+    }
+
+    private static void capTransferAmount(ItemStack moving, int maxItem) {
+        if (moving != null && moving.getAmount() > maxItem) {
+            moving.setAmount(maxItem);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

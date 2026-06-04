@@ -22,6 +22,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+import xlingran.HopperChunkScanUtil;
 import xlingran.HopperKeys;
 
 import java.util.ArrayList;
@@ -117,14 +118,9 @@ public final class HopperOverlayListener implements Listener {
 
     private void restoreChunkOverlays(Chunk chunk) {
         List<Location> hoppers = new ArrayList<>();
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                for (int y = chunk.getWorld().getMinHeight(); y < chunk.getWorld().getMaxHeight(); y++) {
-                    Block block = chunk.getBlock(x, y, z);
-                    if (block.getType() == Material.HOPPER && overlayService.isHoverEnabled(block)) {
-                        hoppers.add(block.getLocation());
-                    }
-                }
+        for (Block block : HopperChunkScanUtil.hoppersInChunk(chunk)) {
+            if (overlayService.isHoverEnabled(block)) {
+                hoppers.add(block.getLocation());
             }
         }
         restoreOverlays(hoppers);

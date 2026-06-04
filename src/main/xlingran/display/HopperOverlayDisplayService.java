@@ -13,10 +13,10 @@ import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Transformation;
 import org.joml.AxisAngle4f;
 import org.joml.Vector3f;
-import org.bukkit.scheduler.BukkitTask;
 import xlingran.HopperBlockConfig;
 import xlingran.HopperContainerUtil;
 import xlingran.HopperKeys;
@@ -24,10 +24,10 @@ import xlingran.HopperLevelResolver;
 import xlingran.HopperTemplate;
 import xlingran.HopperTemplateManager;
 import xlingran.HopperTemplateResolver;
+import xlingran.Shan;
 import xlingran.gui.HopperLevelDef;
 import xlingran.gui.TextPlaceholders;
 import xlingran.gui.UpdateConfig;
-import xlingran.Shan;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,7 +53,7 @@ public final class HopperOverlayDisplayService {
     private final HopperKeys keys;
     private final HopperTemplateManager templateManager;
     private final UpdateConfig updateConfig;
-    private final Map<String, List<UUID>> activeByLocation = new ConcurrentHashMap<>();
+    private final Map<String, ActiveOverlay> activeByLocation = new ConcurrentHashMap<>();
     private final Map<String, BukkitTask> debouncedRefresh = new ConcurrentHashMap<>();
 
     public HopperOverlayDisplayService(Shan plugin, HopperKeys keys, HopperTemplateManager templateManager,
@@ -64,9 +64,6 @@ public final class HopperOverlayDisplayService {
         this.updateConfig = updateConfig;
     }
 
-    /**
-     * 合并高频事件（如漏斗链 InventoryMoveItem）的刷新，避免每 tick 销毁/重建 Display。
-     */
     public void refreshDebounced(Block block) {
         if (block == null || block.getType() != Material.HOPPER) {
             return;
@@ -103,20 +100,15 @@ public final class HopperOverlayDisplayService {
         }
         cancelPendingRefresh(block);
         String locKey = locationKey(block.getLocation());
-        List<UUID> ids = activeByLocation.remove(locKey);
-        if (ids == null) {
+        ActiveOverlay active = activeByLocation.remove(locKey);
+        if (active == null) {
             return;
         }
         World world = block.getWorld();
         if (world == null) {
             return;
         }
-        for (UUID id : ids) {
-            Entity entity = plugin.getServer().getEntity(id);
-            if (entity != null) {
-                entity.remove();
-            }
-        }
+        removeOverlayEntities(active, world);
     }
 
     public void refresh(Block block) {
@@ -133,8 +125,24 @@ public final class HopperOverlayDisplayService {
             hide(block);
             return;
         }
+
+        List<ItemStack> items = collectHopperItems(block);
+        List<String> lines = buildOverlayLines(block, template, config);
+        String signature = contentSignature(lines, items);
+        String locKey = locationKey(block.getLocation());
+        ActiveOverlay active = activeByLocation.get(locKey);
+
+        if (active != null && signature.equals(active.signature) && entitiesAlive(active, block.getWorld())) {
+            return;
+        }
+        if (active != null && entitiesAlive(active, block.getWorld())) {
+            if (updateInPlace(block, active, lines, items)) {
+                active.signature = signature;
+                return;
+            }
+        }
         hide(block);
-        spawnOverlay(block, template, config);
+        spawnOverlay(block, template, config, lines, items, signature);
     }
 
     public void hideAllInChunk(Chunk chunk) {
@@ -153,7 +161,10 @@ public final class HopperOverlayDisplayService {
                 if (block.getType() == Material.HOPPER) {
                     hide(block);
                 } else {
-                    removeEntitiesByIds(activeByLocation.remove(key), loc.getWorld());
+                    ActiveOverlay active = activeByLocation.remove(key);
+                    if (active != null) {
+                        removeOverlayEntities(active, loc.getWorld());
+                    }
                 }
             }
         }
@@ -168,12 +179,10 @@ public final class HopperOverlayDisplayService {
         debouncedRefresh.clear();
         for (String key : new ArrayList<>(activeByLocation.keySet())) {
             Location loc = parseLocationKey(key);
-            if (loc != null) {
-                Block block = loc.getBlock();
-                if (block.getType() == Material.HOPPER) {
-                    hide(block);
-                } else {
-                    removeEntitiesByIds(activeByLocation.remove(key), loc.getWorld());
+            if (loc != null && loc.getWorld() != null) {
+                ActiveOverlay active = activeByLocation.remove(key);
+                if (active != null) {
+                    removeOverlayEntities(active, loc.getWorld());
                 }
             } else {
                 activeByLocation.remove(key);
@@ -186,44 +195,105 @@ public final class HopperOverlayDisplayService {
                 && HopperBlockConfig.read(block, keys).isHoverDisplay();
     }
 
-    private void spawnOverlay(Block block, HopperTemplate template, HopperBlockConfig config) {
+    private boolean updateInPlace(Block block, ActiveOverlay active, List<String> lines, List<ItemStack> items) {
+        World world = block.getWorld();
+        if (world == null) {
+            return false;
+        }
+        Location center = block.getLocation().add(0.5, 0.0, 0.5);
+        String marker = locKey(block);
+
+        while (active.textDisplays.size() > lines.size()) {
+            UUID id = active.textDisplays.remove(active.textDisplays.size() - 1);
+            removeEntity(world, id);
+        }
+        while (active.textDisplays.size() < lines.size()) {
+            int i = active.textDisplays.size();
+            String line = lines.get(i);
+            if (line == null || line.isEmpty()) {
+                break;
+            }
+            float y = LINE_START_Y - i * LINE_SPACING;
+            TextDisplay display = spawnText(world, center.clone().add(0, y, 0), marker, line);
+            active.textDisplays.add(display.getUniqueId());
+        }
+        for (int i = 0; i < active.textDisplays.size() && i < lines.size(); i++) {
+            Entity entity = plugin.getServer().getEntity(active.textDisplays.get(i));
+            if (entity instanceof TextDisplay textDisplay) {
+                textDisplay.setText(lines.get(i));
+            }
+        }
+
+        int itemCount = items.size();
+        while (active.itemDisplays.size() > itemCount) {
+            UUID id = active.itemDisplays.remove(active.itemDisplays.size() - 1);
+            removeEntity(world, id);
+        }
+        float itemStartX = itemCount <= 1 ? 0f : -((itemCount - 1) * ITEM_SPACING) / 2f;
+        while (active.itemDisplays.size() < itemCount) {
+            int i = active.itemDisplays.size();
+            Location at = center.clone().add(itemStartX + i * ITEM_SPACING, ITEM_ROW_Y, 0);
+            ItemDisplay display = spawnItem(world, at, marker, items.get(i));
+            active.itemDisplays.add(display.getUniqueId());
+        }
+        for (int i = 0; i < active.itemDisplays.size() && i < itemCount; i++) {
+            Entity entity = plugin.getServer().getEntity(active.itemDisplays.get(i));
+            if (entity instanceof ItemDisplay itemDisplay) {
+                itemDisplay.setItemStack(singleDisplayStack(items.get(i)));
+            }
+        }
+        return true;
+    }
+
+    private void spawnOverlay(Block block, HopperTemplate template, HopperBlockConfig config,
+                              List<String> lines, List<ItemStack> items, String signature) {
         World world = block.getWorld();
         if (world == null) {
             return;
         }
         Location center = block.getLocation().add(0.5, 0.0, 0.5);
-        List<UUID> spawned = new ArrayList<>();
+        String marker = locKey(block);
+        ActiveOverlay active = new ActiveOverlay();
+        active.signature = signature;
 
-        List<ItemStack> items = collectHopperItems(block);
         int itemCount = items.size();
         float itemStartX = itemCount <= 1 ? 0f : -((itemCount - 1) * ITEM_SPACING) / 2f;
         for (int i = 0; i < itemCount; i++) {
-            ItemStack stack = items.get(i);
             Location at = center.clone().add(itemStartX + i * ITEM_SPACING, ITEM_ROW_Y, 0);
-            ItemDisplay display = world.spawn(at, ItemDisplay.class, entity -> configureItemDisplayEntity(entity, locKey(block)));
-            display.setItemStack(singleDisplayStack(stack));
-            display.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.GUI);
-            spawned.add(display.getUniqueId());
+            ItemDisplay display = spawnItem(world, at, marker, items.get(i));
+            active.itemDisplays.add(display.getUniqueId());
         }
 
-        List<String> lines = buildOverlayLines(block, template, config);
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i);
             if (line == null || line.isEmpty()) {
                 continue;
             }
             float y = LINE_START_Y - i * LINE_SPACING;
-            Location at = center.clone().add(0, y, 0);
-            TextDisplay display = world.spawn(at, TextDisplay.class, entity -> configureTextDisplayEntity(entity, locKey(block)));
-            display.setText(line);
-            display.setDefaultBackground(false);
-            display.setSeeThrough(true);
-            spawned.add(display.getUniqueId());
+            TextDisplay display = spawnText(world, center.clone().add(0, y, 0), marker, line);
+            active.textDisplays.add(display.getUniqueId());
         }
 
-        if (!spawned.isEmpty()) {
-            activeByLocation.put(locationKey(block.getLocation()), spawned);
+        if (!active.itemDisplays.isEmpty() || !active.textDisplays.isEmpty()) {
+            activeByLocation.put(locationKey(block.getLocation()), active);
         }
+    }
+
+    private ItemDisplay spawnItem(World world, Location at, String marker, ItemStack stack) {
+        return world.spawn(at, ItemDisplay.class, entity -> {
+            configureItemDisplayEntity(entity, marker);
+            entity.setItemStack(singleDisplayStack(stack));
+            entity.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.GUI);
+        });
+    }
+
+    private TextDisplay spawnText(World world, Location at, String marker, String line) {
+        return world.spawn(at, TextDisplay.class, entity -> {
+            configureTextDisplayEntity(entity, marker);
+            entity.setText(line);
+            entity.setDefaultBackground(false);
+            entity.setSeeThrough(true);
+        });
     }
 
     private void configureItemDisplayEntity(ItemDisplay entity, String locKey) {
@@ -248,6 +318,62 @@ public final class HopperOverlayDisplayService {
                 new Vector3f(scale, scale, scale),
                 new AxisAngle4f(0, 0, 0, 1)));
         entity.getPersistentDataContainer().set(keys.overlayMarker, PersistentDataType.STRING, locKey);
+    }
+
+    private static boolean entitiesAlive(ActiveOverlay active, World world) {
+        if (active == null || world == null) {
+            return false;
+        }
+        for (UUID id : active.itemDisplays) {
+            if (!isAlive(world, id)) {
+                return false;
+            }
+        }
+        for (UUID id : active.textDisplays) {
+            if (!isAlive(world, id)) {
+                return false;
+            }
+        }
+        return !active.itemDisplays.isEmpty() || !active.textDisplays.isEmpty();
+    }
+
+    private static boolean isAlive(World world, UUID id) {
+        Entity entity = Bukkit.getServer().getEntity(id);
+        return entity != null && entity.isValid() && entity.getWorld().equals(world);
+    }
+
+    private static void removeEntity(World world, UUID id) {
+        Entity entity = Bukkit.getServer().getEntity(id);
+        if (entity != null) {
+            entity.remove();
+        }
+    }
+
+    private static void removeOverlayEntities(ActiveOverlay active, World world) {
+        if (active == null || world == null) {
+            return;
+        }
+        for (UUID id : active.itemDisplays) {
+            removeEntity(world, id);
+        }
+        for (UUID id : active.textDisplays) {
+            removeEntity(world, id);
+        }
+    }
+
+    private static String contentSignature(List<String> lines, List<ItemStack> items) {
+        StringBuilder sb = new StringBuilder();
+        for (String line : lines) {
+            sb.append(line).append('\n');
+        }
+        for (ItemStack stack : items) {
+            if (stack == null || stack.getType().isAir()) {
+                sb.append("air;");
+            } else {
+                sb.append(stack.getType().name()).append(':').append(stack.getAmount()).append(';');
+            }
+        }
+        return sb.toString();
     }
 
     private List<ItemStack> collectHopperItems(Block block) {
@@ -337,15 +463,9 @@ public final class HopperOverlayDisplayService {
         }
     }
 
-    private static void removeEntitiesByIds(List<UUID> ids, World world) {
-        if (ids == null || world == null) {
-            return;
-        }
-        for (UUID id : ids) {
-            Entity entity = Bukkit.getServer().getEntity(id);
-            if (entity != null) {
-                entity.remove();
-            }
-        }
+    private static final class ActiveOverlay {
+        final List<UUID> itemDisplays = new ArrayList<>();
+        final List<UUID> textDisplays = new ArrayList<>();
+        String signature = "";
     }
 }
