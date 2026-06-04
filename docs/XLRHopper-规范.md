@@ -198,11 +198,11 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 ### 4.6 漏斗上方悬浮 Display（硬编码）
 
-- 实现：`display.HopperOverlayDisplayService` + `display.HopperOverlayListener`；**不**进入 `HopperTickService`。
-- 实体：`ItemDisplay`（漏斗 5 槽内非空物品，各显示 1 个、无数量）+ 四行 `TextDisplay`（模板名、白/黑名单模式、附魔过滤条数、最低耐久）。
+- 实现：`display.HopperOverlayDisplayService` + `display.HopperOverlayListener`；**不**进入 `HopperTickService`（属 P0 事件驱动，与 8 tick `workQueue` 排水无关）。
+- 实体：`ItemDisplay`（`ItemDisplayTransform.GUI`，独立 scale；漏斗 5 槽非空物品各 1 个、无数量）+ 四行 `TextDisplay`（模板名、白/黑名单模式、附魔过滤条数、最低耐久）。
 - 文案与 Y 偏移均在 Java 常量中拼接；**不读** `Message.yml` / `Gui.yml` 悬浮行配置。
 - PDC：`hover-display`（开关）、`overlay-marker`（实体归属标记）；套模板/初始化时 `hover-display=false`。
-- 已开启时：库存移动/吸取、区块加载恢复 `show`；破坏/爆炸/卸载 `hide`；插件 `onDisable` → `hideAll`。
+- **刷新事件**（仅 `hover-display=true`）：`InventoryMoveItemEvent`、`InventoryPickupItemEvent`、漏斗 GUI 的 `InventoryClickEvent` / `InventoryDragEvent` / `InventoryCloseEvent`；`ChunkLoad` 恢复 `show`；破坏/爆炸/卸载 `hide`；`onDisable` → `hideAll`。
 
 ---
 

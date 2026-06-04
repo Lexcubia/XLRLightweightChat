@@ -39,7 +39,8 @@ public final class HopperOverlayDisplayService {
     private static final float LINE_START_Y = 1.28f;
     private static final float LINE_SPACING = 0.22f;
     private static final float ITEM_SPACING = 0.32f;
-    private static final float DISPLAY_SCALE = 0.45f;
+    private static final float TEXT_DISPLAY_SCALE = 0.45f;
+    private static final float ITEM_DISPLAY_SCALE = 0.8f;
     private static final float VIEW_RANGE = 32f;
 
     private final Shan plugin;
@@ -131,9 +132,9 @@ public final class HopperOverlayDisplayService {
         for (int i = 0; i < itemCount; i++) {
             ItemStack stack = items.get(i);
             Location at = center.clone().add(itemStartX + i * ITEM_SPACING, ITEM_ROW_Y, 0);
-            ItemDisplay display = world.spawn(at, ItemDisplay.class, entity -> configureDisplayEntity(entity, locKey(block)));
+            ItemDisplay display = world.spawn(at, ItemDisplay.class, entity -> configureItemDisplayEntity(entity, locKey(block)));
             display.setItemStack(singleDisplayStack(stack));
-            display.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.GROUND);
+            display.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.GUI);
             spawned.add(display.getUniqueId());
         }
 
@@ -145,7 +146,7 @@ public final class HopperOverlayDisplayService {
             }
             float y = LINE_START_Y - i * LINE_SPACING;
             Location at = center.clone().add(0, y, 0);
-            TextDisplay display = world.spawn(at, TextDisplay.class, entity -> configureDisplayEntity(entity, locKey(block)));
+            TextDisplay display = world.spawn(at, TextDisplay.class, entity -> configureTextDisplayEntity(entity, locKey(block)));
             display.setText(line);
             display.setDefaultBackground(false);
             display.setSeeThrough(true);
@@ -157,7 +158,15 @@ public final class HopperOverlayDisplayService {
         }
     }
 
-    private void configureDisplayEntity(Display entity, String locKey) {
+    private void configureItemDisplayEntity(ItemDisplay entity, String locKey) {
+        applyDisplayBase(entity, locKey, ITEM_DISPLAY_SCALE);
+    }
+
+    private void configureTextDisplayEntity(TextDisplay entity, String locKey) {
+        applyDisplayBase(entity, locKey, TEXT_DISPLAY_SCALE);
+    }
+
+    private void applyDisplayBase(Display entity, String locKey, float scale) {
         entity.setPersistent(false);
         entity.setInvulnerable(true);
         entity.setSilent(true);
@@ -168,7 +177,7 @@ public final class HopperOverlayDisplayService {
         entity.setTransformation(new Transformation(
                 new Vector3f(0, 0, 0),
                 new AxisAngle4f(0, 0, 0, 1),
-                new Vector3f(DISPLAY_SCALE, DISPLAY_SCALE, DISPLAY_SCALE),
+                new Vector3f(scale, scale, scale),
                 new AxisAngle4f(0, 0, 0, 1)));
         entity.getPersistentDataContainer().set(keys.overlayMarker, PersistentDataType.STRING, locKey);
     }

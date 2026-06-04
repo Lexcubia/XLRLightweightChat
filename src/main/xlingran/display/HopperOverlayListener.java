@@ -10,12 +10,17 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryView;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import xlingran.HopperKeys;
 
@@ -58,6 +63,32 @@ public final class HopperOverlayListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onInventoryClick(InventoryClickEvent event) {
+        Block block = hopperBlockFromView(event.getView());
+        if (block == null || !touchesHopperTop(event)) {
+            return;
+        }
+        refreshIfEnabled(block);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        Block block = hopperBlockFromView(event.getView());
+        if (block == null || !dragTouchesHopperTop(event)) {
+            return;
+        }
+        refreshIfEnabled(block);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onInventoryClose(InventoryCloseEvent event) {
+        Block block = hopperBlockFromView(event.getView());
+        if (block != null) {
+            refreshIfEnabled(block);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         if (event.getBlock().getType() == Material.HOPPER) {
             overlayService.hide(event.getBlock());
@@ -91,7 +122,6 @@ public final class HopperOverlayListener implements Listener {
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
         Chunk chunk = event.getChunk();
-        // 异步线程仅扫描方块类型；PDC / getState 必须在主线程（与 HopperLaneListener 一致）
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             List<Location> hoppers = new ArrayList<>();
             for (int x = 0; x < 16; x++) {
@@ -110,6 +140,12 @@ public final class HopperOverlayListener implements Listener {
         });
     }
 
+    private void refreshIfEnabled(Block block) {
+        if (overlayService.isHoverEnabled(block)) {
+            overlayService.refresh(block);
+        }
+    }
+
     private void restoreOverlays(List<Location> hoppers) {
         for (Location loc : hoppers) {
             Block block = loc.getBlock();
@@ -117,6 +153,41 @@ public final class HopperOverlayListener implements Listener {
                 overlayService.show(block);
             }
         }
+    }
+
+    private static Block hopperBlockFromView(InventoryView view) {
+        if (view == null || view.getTopInventory().getType() != InventoryType.HOPPER) {
+            return null;
+        }
+        return hopperBlock(view.getTopInventory());
+    }
+
+    private static boolean touchesHopperTop(InventoryClickEvent event) {
+        InventoryView view = event.getView();
+        int topSize = view.getTopInventory().getSize();
+        int rawSlot = event.getRawSlot();
+        if (rawSlot >= 0 && rawSlot < topSize) {
+            return true;
+        }
+        if (event.isShiftClick()) {
+            Inventory clicked = event.getClickedInventory();
+            if (clicked != null && clicked.getType() != InventoryType.HOPPER) {
+                ItemStack current = event.getCurrentItem();
+                return current != null && !current.getType().isAir();
+            }
+        }
+        return false;
+    }
+
+    private static boolean dragTouchesHopperTop(InventoryDragEvent event) {
+        InventoryView view = event.getView();
+        int topSize = view.getTopInventory().getSize();
+        for (int rawSlot : event.getRawSlots()) {
+            if (rawSlot >= 0 && rawSlot < topSize) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Block hopperBlock(Inventory inventory) {
