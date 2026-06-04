@@ -1,6 +1,5 @@
 package xlingran;
 
-import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -34,23 +33,23 @@ public class HopperCommand implements CommandExecutor, TabCompleter {
         }
 
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(ChatColor.RED + "此命令只能由玩家执行");
+            sender.sendMessage(plugin.getMessageConfig().message("command-players-only"));
             return true;
         }
 
         if (args.length >= 2 && args[0].equalsIgnoreCase("create") && args[1].equalsIgnoreCase("mode")) {
             if (!player.hasPermission("xlrhopper.create.mode")) {
-                player.sendMessage(ChatColor.RED + "你没有权限创建模板");
+                player.sendMessage(plugin.getMessageConfig().message("no-permission-create-mode"));
                 return true;
             }
             if (args.length < 3) {
-                player.sendMessage(ChatColor.RED + "用法: /xlrhopper create mode <名称>");
+                player.sendMessage(plugin.getMessageConfig().message("usage-create-mode"));
                 return true;
             }
             String name = joinArgs(args, 2);
             Shan plugin = Shan.getInstance();
             if (!plugin.getTemplateManager().createTemplate(player, name)) {
-                player.sendMessage(ChatColor.RED + "模板已存在或名称无效");
+                player.sendMessage(plugin.getMessageConfig().message("template-create-fail"));
                 return true;
             }
             plugin.getGui().saveData();
@@ -60,13 +59,14 @@ public class HopperCommand implements CommandExecutor, TabCompleter {
 
         if (args.length >= 3 && args[0].equalsIgnoreCase("edit") && args[1].equalsIgnoreCase("mode")) {
             if (!player.hasPermission("xlrhopper.edit.mode")) {
-                player.sendMessage(ChatColor.RED + "你没有权限编辑模板");
+                player.sendMessage(plugin.getMessageConfig().message("no-permission-edit-mode"));
                 return true;
             }
             String name = joinArgs(args, 2);
             HopperTemplate template = Shan.getInstance().getTemplateManager().getTemplate(player.getUniqueId(), name);
             if (template == null) {
-                player.sendMessage(ChatColor.RED + "模板不存在: " + name);
+                player.sendMessage(plugin.getMessageConfig().message("template-not-found",
+                        java.util.Map.of("Template", name)));
                 return true;
             }
             gui.openTemplateSettings(player, name);
@@ -75,14 +75,14 @@ public class HopperCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 0 || args[0].equalsIgnoreCase("mode")) {
             if (!player.hasPermission("xlrhopper.mode")) {
-                player.sendMessage(ChatColor.RED + "你没有权限打开模板列表");
+                player.sendMessage(plugin.getMessageConfig().message("no-permission-mode"));
                 return true;
             }
             gui.openTemplateList(player);
             return true;
         }
 
-        player.sendMessage(ChatColor.RED + "用法: /xlrhopper <mode|create mode <名称>|edit mode <名称>|reload>");
+        player.sendMessage(plugin.getMessageConfig().message("usage-command"));
         return true;
     }
 

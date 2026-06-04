@@ -1,11 +1,46 @@
 Messages:
-  reload-success: "&a[XLRHopper] 配置已重载"
-  reload-fail: "&c[XLRHopper] 重载失败"
-  reload-no-permission: "&c你没有权限执行此命令"
-  reload-console-only-fail: "&c重载失败，请查看控制台"
-  durability-prompt: "&a请在聊天栏输入数字耐久度 &7(低于该剩余耐久的物品将被过滤，输入 xlrquit 退出设置)"
-  enchant-prompt: "&a请输入附魔等级 &7(低于该等级的附魔将被过滤，输入 xlrquit 退出设置)"
-  batch-enter: "&a已进入批量设置模式，左键或右键点击漏斗套用模板"
-  batch-quit-hint: "&7输入 xlrquit 退出批量设置模式"
-  no-template: "&c玩家当前漏斗没有模板"
-  enchant-cleared: "&a已清除附魔过滤: &e%Enchant%"
+    # reload
+    reload-success: "&a[XLRHopper] 配置已重载"
+    reload-fail: "&c[XLRHopper] 重载失败"
+    reload-no-permission: "&c[XLRHopper] 你没有权限执行此命令"
+    reload-console-only-fail: "&c重载失败，请查看控制台"
+
+    # 聊天输入 / 批量
+    durability-prompt: "&a请在聊天栏输入数字耐久度 &7(低于该剩余耐久的物品将被过滤，输入 xlrquit 退出设置)"
+    enchant-prompt: "&a请输入附魔等级 &7(低于该等级的附魔将被过滤，输入 xlrquit 退出设置)"
+    batch-enter: "&a已进入批量设置模式，左键或右键点击漏斗套用模板"
+    batch-quit-hint: "&7输入 xlrquit 退出批量设置模式"
+    batch-quit-done: "&7已退出批量设置模式"
+    batch-mode-reminder: "&7批量设置模式中，输入 xlrquit 退出"
+    input-cancel-return-enchant: "&7已取消输入，返回过滤附魔属性"
+    input-cancel-return-settings: "&7已取消输入，返回模板设置"
+
+    durability-input-error: "&c输入错误，请输入纯数字耐久度，或输入 xlrquit 退出设置"
+    durability-set-success: "&a已设置过滤耐久度: &b%Durability%"
+    enchant-input-error: "&c输入错误，请重新输入附魔等级，或输入 xlrquit 退出设置"
+    enchant-set-success: "&a已设置附魔过滤: &e%Enchant% &a%Level%"
+
+    # 模板列表
+    template-enabled: "&a已启用模板: &b%Template%"
+    template-enabled-hint: "&7仅影响此后新放置的漏斗；已套用其它模板的漏斗不会改变"
+    template-disabled: "&7已关闭模板: &b%Template%"
+
+    # 漏斗 / 过滤
+    no-template: "&c玩家当前漏斗没有模板"
+    enchant-cleared: "&a已清除附魔过滤: &e%Enchant%"
+    filter-deny: "&c该物品不符合当前漏斗模板过滤规则"
+    hopper-place-template: "&a当前使用漏斗模板: &b%Template%"
+
+    # 批量套用漏斗
+    batch-wrong-block: "&c方块类型错误"
+    batch-template-success: "&a成功设置模板: &b%Template%"
+
+    # 指令
+    command-players-only: "&c此命令只能由玩家执行"
+    no-permission-create-mode: "&c你没有权限创建模板"
+    usage-create-mode: "&c用法: /xlrhopper create mode <名称>"
+    template-create-fail: "&c模板已存在或名称无效"
+    no-permission-edit-mode: "&c你没有权限编辑模板"
+    template-not-found: "&c模板不存在: &f%Template%"
+    no-permission-mode: "&c你没有权限打开模板列表"
+    usage-command: "&c用法: /xlrhopper <mode|create mode <名称>|edit mode <名称>|reload>"

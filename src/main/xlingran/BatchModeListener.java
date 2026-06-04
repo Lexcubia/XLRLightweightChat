@@ -1,6 +1,5 @@
 package xlingran;
 
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -10,17 +9,23 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import xlingran.core.HopperLaneListener;
+import xlingran.gui.MessageConfig;
+
+import java.util.Map;
 
 public class BatchModeListener implements Listener {
 
     private final HopperKeys keys;
     private final PlayerGuiSession sessions;
     private final HopperLaneListener laneListener;
+    private final MessageConfig messageConfig;
 
-    public BatchModeListener(HopperKeys keys, PlayerGuiSession sessions, HopperLaneListener laneListener) {
+    public BatchModeListener(HopperKeys keys, PlayerGuiSession sessions, HopperLaneListener laneListener,
+                             MessageConfig messageConfig) {
         this.keys = keys;
         this.sessions = sessions;
         this.laneListener = laneListener;
+        this.messageConfig = messageConfig;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -45,12 +50,13 @@ public class BatchModeListener implements Listener {
         }
 
         if (block.getType() != Material.HOPPER) {
-            player.sendMessage(ChatColor.RED + "方块类型错误");
+            player.sendMessage(messageConfig.message("batch-wrong-block"));
             return;
         }
 
         if (HopperPdc.applyTemplate(block, keys, player.getUniqueId(), templateName)) {
-            player.sendMessage(ChatColor.GREEN + "成功设置模板: " + ChatColor.AQUA + templateName);
+            player.sendMessage(messageConfig.message("batch-template-success",
+                    Map.of("Template", templateName)));
             laneListener.scheduleEvaluate(block);
         }
     }

@@ -1,7 +1,6 @@
 package xlingran;
 
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -24,23 +23,25 @@ import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import xlingran.core.HopperLaneListener;
+import xlingran.gui.MessageConfig;
+
+import java.util.Map;
 
 public class HopperListener implements Listener {
-
-    private static final String DENY_MESSAGE = ChatColor.RED + "该物品不符合当前漏斗模板过滤规则";
-    private static final String PLACE_MESSAGE_PREFIX = ChatColor.GREEN + "当前使用漏斗模板: ";
 
     private final JavaPlugin plugin;
     private final HopperTemplateManager templateManager;
     private final HopperKeys keys;
     private final HopperLaneListener laneListener;
+    private final MessageConfig messageConfig;
 
     public HopperListener(JavaPlugin plugin, HopperTemplateManager templateManager, HopperKeys keys,
-                          HopperLaneListener laneListener) {
+                          HopperLaneListener laneListener, MessageConfig messageConfig) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.keys = keys;
         this.laneListener = laneListener;
+        this.messageConfig = messageConfig;
     }
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
@@ -68,7 +69,8 @@ public class HopperListener implements Listener {
         if (!HopperPdc.applyTemplate(block, keys, player.getUniqueId(), enabledName)) {
             return false;
         }
-        player.sendMessage(PLACE_MESSAGE_PREFIX + ChatColor.AQUA + enabledName);
+        player.sendMessage(messageConfig.message("hopper-place-template",
+                Map.of("Template", enabledName)));
         laneListener.scheduleEvaluate(block);
         return true;
     }
@@ -162,7 +164,7 @@ public class HopperListener implements Listener {
             return false;
         }
         if (!template.allows(stack.clone(), hopperBlock, keys)) {
-            player.sendMessage(DENY_MESSAGE);
+            player.sendMessage(messageConfig.message("filter-deny"));
             return true;
         }
         return false;

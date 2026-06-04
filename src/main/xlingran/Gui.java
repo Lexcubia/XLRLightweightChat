@@ -307,24 +307,24 @@ public class Gui implements Listener {
         if (message.equalsIgnoreCase("xlrquit")) {
             if (mode == PlayerGuiSession.InputMode.BATCH_APPLY) {
                 sessions.clearInput(player.getUniqueId());
-                player.sendMessage(color("&7已退出批量设置模式"));
+                player.sendMessage(messageConfig.message("batch-quit-done"));
                 openTemplateSettings(player, templateName);
                 return;
             }
             if (mode == PlayerGuiSession.InputMode.ENCHANT_LEVEL) {
                 sessions.clearInput(player.getUniqueId());
-                player.sendMessage(color("&7已取消输入，返回过滤附魔属性"));
+                player.sendMessage(messageConfig.message("input-cancel-return-enchant"));
                 openFilterEnchants(player, templateName);
                 return;
             }
             sessions.clearInput(player.getUniqueId());
-            player.sendMessage(color("&7已取消输入，返回模板设置"));
+            player.sendMessage(messageConfig.message("input-cancel-return-settings"));
             openTemplateSettings(player, templateName);
             return;
         }
 
         if (mode == PlayerGuiSession.InputMode.BATCH_APPLY) {
-            player.sendMessage(color("&7批量设置模式中，输入 xlrquit 退出"));
+            player.sendMessage(messageConfig.message("batch-mode-reminder"));
             return;
         }
 
@@ -337,13 +337,14 @@ public class Gui implements Listener {
         if (mode == PlayerGuiSession.InputMode.DURABILITY) {
             Integer value = parsePositiveInt(message);
             if (value == null) {
-                player.sendMessage(color("&c输入错误，请输入纯数字耐久度，或输入 xlrquit 退出设置"));
+                player.sendMessage(messageConfig.message("durability-input-error"));
                 return;
             }
             template.setDurabilityThreshold(value);
             sessions.clearInput(player.getUniqueId());
             saveData();
-            player.sendMessage(color("&a已设置过滤耐久度: &b" + value));
+            player.sendMessage(messageConfig.message("durability-set-success",
+                    Map.of("Durability", String.valueOf(value))));
             openTemplateSettings(player, templateName);
             return;
         }
@@ -356,13 +357,15 @@ public class Gui implements Listener {
             }
             Integer level = parsePositiveInt(message);
             if (level == null) {
-                player.sendMessage(color("&c输入错误，请重新输入附魔等级，或输入 xlrquit 退出设置"));
+                player.sendMessage(messageConfig.message("enchant-input-error"));
                 return;
             }
             template.setEnchantMinLevel(pending, level);
             sessions.clearInput(player.getUniqueId());
             saveData();
-            player.sendMessage(color("&a已设置附魔过滤: &e" + formatEnchantName(pending) + " &a" + level));
+            player.sendMessage(messageConfig.message("enchant-set-success", Map.of(
+                    "Enchant", formatEnchantName(pending),
+                    "Level", String.valueOf(level))));
             openFilterEnchants(player, templateName);
         }
     }
@@ -380,10 +383,12 @@ public class Gui implements Listener {
             templateManager.toggleTemplateEnabled(player, templateName);
             saveData();
             if (templateManager.isTemplateEnabled(player.getUniqueId(), templateName)) {
-                player.sendMessage(color("&a已启用模板: &b" + templateName));
-                player.sendMessage(color("&7仅影响此后新放置的漏斗；已套用其它模板的漏斗不会改变"));
+                player.sendMessage(messageConfig.message("template-enabled",
+                        Map.of("Template", templateName)));
+                player.sendMessage(messageConfig.message("template-enabled-hint"));
             } else {
-                player.sendMessage(color("&7已关闭模板: &b" + templateName));
+                player.sendMessage(messageConfig.message("template-disabled",
+                        Map.of("Template", templateName)));
             }
             openTemplateList(player);
         } else if (click == ClickType.RIGHT) {
