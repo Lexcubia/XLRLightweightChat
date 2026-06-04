@@ -1,6 +1,7 @@
 package xlingran.display;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -15,13 +16,17 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Transformation;
 import org.joml.AxisAngle4f;
 import org.joml.Vector3f;
+import org.bukkit.scheduler.BukkitTask;
 import xlingran.HopperBlockConfig;
 import xlingran.HopperContainerUtil;
 import xlingran.HopperKeys;
+import xlingran.HopperLevelResolver;
 import xlingran.HopperTemplate;
 import xlingran.HopperTemplateManager;
 import xlingran.HopperTemplateResolver;
+import xlingran.gui.HopperLevelDef;
 import xlingran.gui.TextPlaceholders;
+import xlingran.gui.UpdateConfig;
 import xlingran.Shan;
 
 import java.util.ArrayList;
@@ -42,16 +47,50 @@ public final class HopperOverlayDisplayService {
     private static final float TEXT_DISPLAY_SCALE = 0.45f;
     private static final float ITEM_DISPLAY_SCALE = 0.8f;
     private static final float VIEW_RANGE = 32f;
+    private static final long REFRESH_DEBOUNCE_TICKS = 4L;
 
     private final Shan plugin;
     private final HopperKeys keys;
     private final HopperTemplateManager templateManager;
+    private final UpdateConfig updateConfig;
     private final Map<String, List<UUID>> activeByLocation = new ConcurrentHashMap<>();
+    private final Map<String, BukkitTask> debouncedRefresh = new ConcurrentHashMap<>();
 
-    public HopperOverlayDisplayService(Shan plugin, HopperKeys keys, HopperTemplateManager templateManager) {
+    public HopperOverlayDisplayService(Shan plugin, HopperKeys keys, HopperTemplateManager templateManager,
+                                       UpdateConfig updateConfig) {
         this.plugin = plugin;
         this.keys = keys;
         this.templateManager = templateManager;
+        this.updateConfig = updateConfig;
+    }
+
+    /**
+     * 合并高频事件（如漏斗链 InventoryMoveItem）的刷新，避免每 tick 销毁/重建 Display。
+     */
+    public void refreshDebounced(Block block) {
+        if (block == null || block.getType() != Material.HOPPER) {
+            return;
+        }
+        String locKey = locationKey(block.getLocation());
+        BukkitTask pending = debouncedRefresh.remove(locKey);
+        if (pending != null) {
+            pending.cancel();
+        }
+        BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            debouncedRefresh.remove(locKey);
+            refresh(block);
+        }, REFRESH_DEBOUNCE_TICKS);
+        debouncedRefresh.put(locKey, task);
+    }
+
+    public void cancelPendingRefresh(Block block) {
+        if (block == null) {
+            return;
+        }
+        BukkitTask pending = debouncedRefresh.remove(locationKey(block.getLocation()));
+        if (pending != null) {
+            pending.cancel();
+        }
     }
 
     public void show(Block block) {
@@ -62,6 +101,7 @@ public final class HopperOverlayDisplayService {
         if (block == null) {
             return;
         }
+        cancelPendingRefresh(block);
         String locKey = locationKey(block.getLocation());
         List<UUID> ids = activeByLocation.remove(locKey);
         if (ids == null) {
@@ -97,7 +137,35 @@ public final class HopperOverlayDisplayService {
         spawnOverlay(block, template, config);
     }
 
+    public void hideAllInChunk(Chunk chunk) {
+        if (chunk == null) {
+            return;
+        }
+        for (String key : new ArrayList<>(activeByLocation.keySet())) {
+            Location loc = parseLocationKey(key);
+            if (loc == null || loc.getWorld() == null) {
+                continue;
+            }
+            if (loc.getWorld().equals(chunk.getWorld())
+                    && (loc.getBlockX() >> 4) == chunk.getX()
+                    && (loc.getBlockZ() >> 4) == chunk.getZ()) {
+                Block block = loc.getBlock();
+                if (block.getType() == Material.HOPPER) {
+                    hide(block);
+                } else {
+                    removeEntitiesByIds(activeByLocation.remove(key), loc.getWorld());
+                }
+            }
+        }
+    }
+
     public void hideAll() {
+        for (BukkitTask task : debouncedRefresh.values()) {
+            if (task != null) {
+                task.cancel();
+            }
+        }
+        debouncedRefresh.clear();
         for (String key : new ArrayList<>(activeByLocation.keySet())) {
             Location loc = parseLocationKey(key);
             if (loc != null) {
@@ -204,7 +272,11 @@ public final class HopperOverlayDisplayService {
     }
 
     private List<String> buildOverlayLines(Block block, HopperTemplate template, HopperBlockConfig config) {
-        List<String> lines = new ArrayList<>(4);
+        List<String> lines = new ArrayList<>(5);
+        HopperLevelDef levelDef = HopperLevelResolver.resolveForBlock(block, keys, updateConfig);
+        String levelName = levelDef != null ? levelDef.displayName() : "&7默认漏斗";
+        lines.add(TextPlaceholders.apply("&a漏斗等级: %name%", Map.of("name", levelName)));
+
         String templateName = readTemplateName(block);
         if (templateName == null) {
             templateName = "?";

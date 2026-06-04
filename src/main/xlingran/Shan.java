@@ -104,7 +104,7 @@ public class Shan extends JavaPlugin {
         laneRegistry = new HopperLaneRegistry();
         hopperTickService = new HopperTickService(this, templateManager, hopperKeys, laneRegistry, updateConfig);
         hopperLaneListener = new HopperLaneListener(this, hopperTickService);
-        overlayDisplayService = new HopperOverlayDisplayService(this, hopperKeys, templateManager);
+        overlayDisplayService = new HopperOverlayDisplayService(this, hopperKeys, templateManager, updateConfig);
 
         gui = new Gui(this, templateManager, playerGuiSession, templateRepository, hopperKeys, guiConfig,
                 messageConfig, hopperTickService, hopperLaneListener, overlayDisplayService);

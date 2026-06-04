@@ -44,10 +44,10 @@ public final class HopperOverlayListener implements Listener {
         Block dest = hopperBlock(event.getDestination());
         Block src = hopperBlock(event.getSource());
         if (dest != null && overlayService.isHoverEnabled(dest)) {
-            overlayService.refresh(dest);
+            overlayService.refreshDebounced(dest);
         }
         if (src != null && overlayService.isHoverEnabled(src)) {
-            overlayService.refresh(src);
+            overlayService.refreshDebounced(src);
         }
     }
 
@@ -58,7 +58,7 @@ public final class HopperOverlayListener implements Listener {
         }
         Block block = hopperBlock(event.getInventory());
         if (block != null && overlayService.isHoverEnabled(block)) {
-            overlayService.refresh(block);
+            overlayService.refreshDebounced(block);
         }
     }
 
@@ -106,38 +106,28 @@ public final class HopperOverlayListener implements Listener {
 
     @EventHandler
     public void onChunkUnload(ChunkUnloadEvent event) {
-        Chunk chunk = event.getChunk();
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                for (int y = chunk.getWorld().getMinHeight(); y < chunk.getWorld().getMaxHeight(); y++) {
-                    Block block = chunk.getBlock(x, y, z);
-                    if (block.getType() == Material.HOPPER && overlayService.isHoverEnabled(block)) {
-                        overlayService.hide(block);
-                    }
-                }
-            }
-        }
+        overlayService.hideAllInChunk(event.getChunk());
     }
 
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
         Chunk chunk = event.getChunk();
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            List<Location> hoppers = new ArrayList<>();
-            for (int x = 0; x < 16; x++) {
-                for (int z = 0; z < 16; z++) {
-                    for (int y = chunk.getWorld().getMinHeight(); y < chunk.getWorld().getMaxHeight(); y++) {
-                        if (chunk.getBlock(x, y, z).getType() == Material.HOPPER) {
-                            hoppers.add(chunk.getBlock(x, y, z).getLocation());
-                        }
+        Bukkit.getScheduler().runTask(plugin, () -> restoreChunkOverlays(chunk));
+    }
+
+    private void restoreChunkOverlays(Chunk chunk) {
+        List<Location> hoppers = new ArrayList<>();
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                for (int y = chunk.getWorld().getMinHeight(); y < chunk.getWorld().getMaxHeight(); y++) {
+                    Block block = chunk.getBlock(x, y, z);
+                    if (block.getType() == Material.HOPPER && overlayService.isHoverEnabled(block)) {
+                        hoppers.add(block.getLocation());
                     }
                 }
             }
-            if (hoppers.isEmpty()) {
-                return;
-            }
-            Bukkit.getScheduler().runTask(plugin, () -> restoreOverlays(hoppers));
-        });
+        }
+        restoreOverlays(hoppers);
     }
 
     private void refreshIfEnabled(Block block) {
