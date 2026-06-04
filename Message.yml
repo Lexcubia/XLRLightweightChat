@@ -20,16 +20,17 @@ Messages:
     enchant-input-error: "&c输入错误，请重新输入附魔等级，或输入 xlrquit 退出设置"
     enchant-set-success: "&a已设置附魔过滤: &e%Enchant% &a%Level%"
 
-    # 模板列表
+    # 模板列表（/xlrhopper mode 左键开/关）
     template-enabled: "&a已启用模板: &b%Template%"
-    template-enabled-hint: "&7仅影响此后新放置的漏斗；已套用其它模板的漏斗不会改变"
     template-disabled: "&7已关闭模板: &b%Template%"
+
+    # 放置漏斗（BlockPlaceEvent：玩家已启用模板时放置漏斗）
+    hopper-place-template: "&a已为新放置的漏斗套用模板: &b%Template%"
 
     # 漏斗 / 过滤
     no-template: "&c玩家当前漏斗没有模板"
     enchant-cleared: "&a已清除附魔过滤: &e%Enchant%"
     filter-deny: "&c该物品不符合当前漏斗模板过滤规则"
-    hopper-place-template: "&a当前使用漏斗模板: &b%Template%"
 
     # 批量套用漏斗
     batch-wrong-block: "&c方块类型错误"

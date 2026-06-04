@@ -385,7 +385,6 @@ public class Gui implements Listener {
             if (templateManager.isTemplateEnabled(player.getUniqueId(), templateName)) {
                 player.sendMessage(messageConfig.message("template-enabled",
                         Map.of("Template", templateName)));
-                player.sendMessage(messageConfig.message("template-enabled-hint"));
             } else {
                 player.sendMessage(messageConfig.message("template-disabled",
                         Map.of("Template", templateName)));
