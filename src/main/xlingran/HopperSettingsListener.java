@@ -9,7 +9,6 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.inventory.ItemStack;
 
 public class HopperSettingsListener implements Listener {
 
@@ -35,9 +34,6 @@ public class HopperSettingsListener implements Listener {
         if (!player.isSneaking()) {
             return;
         }
-        if (!hasEmptyHands(player)) {
-            return;
-        }
         Block block = event.getClickedBlock();
         if (block == null || block.getType() != Material.HOPPER) {
             return;
@@ -48,14 +44,5 @@ public class HopperSettingsListener implements Listener {
         }
         event.setCancelled(true);
         gui.openHopperSettings(player, block);
-    }
-
-    private static boolean hasEmptyHands(Player player) {
-        return isEmpty(player.getInventory().getItemInMainHand())
-                && isEmpty(player.getInventory().getItemInOffHand());
-    }
-
-    private static boolean isEmpty(ItemStack stack) {
-        return stack == null || stack.getType().isAir();
     }
 }

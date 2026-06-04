@@ -190,7 +190,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 ### 4.5 漏斗设置（3 行硬编码）
 
 - **标题**：`HopperSetting.name`（默认 `&e漏斗设置`）
-- **打开**：对已套用模板（PDC 含 `template` + `owner`）的漏斗 **Shift + 左键**（**主手与副手均须为空**）；无模板时提示（`Message.yml` → `no-template`），不打开 GUI
+- **打开**：对已套用模板（PDC 含 `template` + `owner`）的漏斗 **Shift + 左键**（手持物品亦可）；无模板时提示（`Message.yml` → `no-template`），不打开 GUI
 - **`HopperSetting.Redstone`**（默认 slot 10）→ PDC `redstone-list-toggle`
 - **`HopperSetting.Reverse`**（默认 slot 12）→ PDC `reverse-suction`
 - **`HopperSetting.FloatOverlay`**（默认 slot 14，绿宝石）→ PDC `hover-display`（默认 **false**）；左/右键切换后**同一 tick、主线程**立即 `show` / `hide` 悬浮实体，再刷新本 GUI 的 `%toggle%`（不依赖关 GUI 或重进世界）
@@ -352,7 +352,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 9. 过滤物品 GUI：可拿可取；关闭时重复材质退回（堆叠×2 或多格各 1 均退回 1 个）。
 10. 空漏斗 / 无 pending：不在 8 tick 盲扫；有货或邻居变化事件入队后才处理。
 11. 漏斗设置内点「悬浮开关」：不开关重进世界，悬浮**立即**出现/消失；`Message.yml` 无 `overlay-*` 键；`Gui.yml` 仅有 `FloatOverlay` 开关项。
-12. 打开漏斗设置：**Shift+左键**（双手空）；默认无悬浮直至开启 `hover-display`。
+12. 打开漏斗设置：**Shift+左键**；默认无悬浮直至开启 `hover-display`。
 
 ---
 
