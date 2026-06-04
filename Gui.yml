@@ -128,6 +128,13 @@ HopperSetting:
         Lore:
             - "&a当前状态: %toggle%"
             - "&7左键或右键点击切换"
+    FloatOverlay:
+        slot: 14
+        material: EMERALD
+        name: "&e悬浮开关"
+        Lore:
+            - "&a当前状态: %toggle%"
+            - "&7左键或右键点击切换"
 
 # 自动合成Gui
 Auto-Crafting:
