@@ -30,7 +30,7 @@ mvn clean package
 | `Message.yml` | **聊天栏提示**（reload、批量模式、耐久/附魔输入等） |
 | `shan.db` | **模板业务数据**（SQLite，唯一持久化存储） |
 
-从 1.2 升级：若数据目录里**已有**旧 `data.yml`，首次启动会自动导入 `shan.db` 并改名为 `data.yml.bak`；**不会**新建 `data.yml`。
+模板数据仅存于 `shan.db`。若仍留有 1.2 的 `data.yml` 或 `data.yml.bak`，确认已迁移后可**直接删除**，插件不再读取。
 
 ## 配置与重载
 

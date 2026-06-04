@@ -101,7 +101,6 @@ public class Shan extends JavaPlugin {
 
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
-                templateRepository.migrateFromDataYmlIfNeeded(templateManager);
                 templateRepository.loadInto(templateManager);
             } catch (Exception e) {
                 getLogger().severe("[XLRHopper] 加载 shan.db 失败: " + e.getMessage());

@@ -237,30 +237,6 @@ public final class TemplateRepository {
         }
     }
 
-    public void migrateFromDataYmlIfNeeded(HopperTemplateManager manager) throws Exception {
-        File dbFile = new File(plugin.getDataFolder(), ShanDatabase.FILE_NAME);
-        File dataYml = new File(plugin.getDataFolder(), "data.yml");
-        if (!dataYml.exists()) {
-            return;
-        }
-        if (dbFile.exists()) {
-            try (Connection conn = database.getConnection();
-                 ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) AS c FROM templates")) {
-                if (rs.next() && rs.getInt("c") > 0) {
-                    return;
-                }
-            }
-        }
-        new LegacyDataYmlMigrator(plugin.getDataFolder(), logger).load(manager);
-        saveAll(manager);
-        File backup = new File(plugin.getDataFolder(), "data.yml.bak");
-        if (!dataYml.renameTo(backup)) {
-            logger.warning("[XLRHopper] 无法重命名 data.yml 为 data.yml.bak");
-        } else {
-            logger.info("[XLRHopper] 已从 data.yml 迁移至 shan.db");
-        }
-    }
-
     private static String serializeBlob(ItemStack stack) {
         YamlConfiguration yml = new YamlConfiguration();
         yml.set("item", stack.serialize());

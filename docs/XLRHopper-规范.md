@@ -9,7 +9,7 @@
 | 主类 | `xlingran.Shan` |
 | 开发分支 | `XLRHopper` |
 | 文案与 GUI 布局 | **`Gui.yml`**（界面与悬浮开关按钮）；**`Message.yml`**（仅聊天提示）；**悬浮 Display 四行**在 Java 硬编码 |
-| 模板业务数据 | **`shan.db`（SQLite）**；仅读取遗留 `data.yml` 一次性导入 |
+| 模板业务数据 | **`shan.db`（SQLite）**；不再使用 `data.yml` |
 
 ---
 
@@ -42,7 +42,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `Gui.yml` | `plugins/XLRHopper/Gui.yml` | GUI 标题、按钮材质/槽位/Lore、附魔中文表 |
 | `Message.yml` | `plugins/XLRHopper/Message.yml` | 聊天栏提示（`Messages.*`） |
 | `shan.db` | `plugins/XLRHopper/shan.db` | **模板业务数据**（SQLite） |
-| `data.yml` | 不生成、不写入 | 仅 1.2 遗留文件：若磁盘上存在则**一次性只读导入** `shan.db` 后改名为 `data.yml.bak` |
+| `Update.yml` | `plugins/XLRHopper/Update.yml` | 占位（JAR 内空文件，后续扩展；当前不 `saveResource`） |
 
 ### 3.1 Gui.yml 要点
 
@@ -60,11 +60,12 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - `/xlrhopper reload` 与 `Gui.yml` 一并热重载。
 - **仅** `sendMessage` 类聊天提示；**不包含** 漏斗上方悬浮 Display 文案、`overlay-*` / `hover-*` 键；`MessageConfig` **不参与** 构建悬浮实体。
 
-### 3.3 shan.db 与迁移
+### 3.3 shan.db
 
 - 表结构由 `ShanDatabase` 初始化；读写经 `TemplateRepository`（异步加载、防抖保存、关服 `flushSync`）。
-- 逻辑字段与旧 `data.yml` 的 `players.<UUID>.templates` 一致（白名单、filter-items、自动合成/熔炼、附魔过滤等）。
+- 模板字段：白名单、filter-items、自动合成/熔炼、附魔过滤、耐久阈值等。
 - `/xlrhopper reload` 会 **重读数据库**（不先 save），便于外部工具改库后热重载。
+- **1.2 遗留 `data.yml` / `data.yml.bak` 可安全删除**；插件不再读取或生成。
 
 ### 3.4 主线程 / 异步边界
 
@@ -319,7 +320,6 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `HopperReverseHandler` | 反向四向取消 + `scheduleEvaluate` |
 | `feature.HopperFeature` | 自动化扩展接口（预留） |
 | `HopperTemplate` / `HopperTemplateManager` | 模板模型与内存集合 |
-| `storage.LegacyDataYmlMigrator` | 旧 `data.yml` 一次性只读导入 |
 | `FilterItem` / `FilterItemMatcher` 等 | 过滤维度 |
 | `HopperAutoCraftService` / `HopperAutoSmeltService` | 漏斗内合成与熔炼 |
 | `HopperCommand` | 指令（含 `reload`） |
@@ -345,7 +345,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 2. 左键开关：附魔 + `&a开` / 无附魔 + `&c关`；同时仅一个开。
 3. 全部关闭时放置漏斗无过滤；启用后放置有 PDC 且过滤生效。
 4. 白/黑名单**仅影响材质**；名称/Lore **固定黑名单**（命中规则即拒绝，不可切换）。
-5. 重启后 `shan.db` 与 GUI 数据一致；旧 `data.yml` 仅首次迁移。
+5. 重启后 `shan.db` 与 GUI 数据一致。
 6. `/xlrhopper reload`：无 `xlrhopper.admin` 拒绝；改 `Gui.yml` / `Message.yml` 后重载界面与聊天提示变化。
 7. `Filter-Item.rows: 2` 重载后为 18 格且可存取。
 8. 模板设置等 GUI：无法取出玻璃/命名牌；连点被冷却限制。
