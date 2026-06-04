@@ -36,12 +36,14 @@ public final class HopperTransferGate {
         }
         WindowState state = byLocation.computeIfAbsent(key, k -> new WindowState());
         synchronized (state) {
-            if (currentTick - state.windowStartTick >= def.transferTick()) {
-                state.windowStartTick = currentTick;
+            if (state.movesInWindow >= def.maxItem()) {
+                if (currentTick < state.windowDeadlineTick) {
+                    return false;
+                }
                 state.movesInWindow = 0;
             }
-            if (state.movesInWindow >= def.maxItem()) {
-                return false;
+            if (state.movesInWindow == 0) {
+                state.windowDeadlineTick = currentTick + def.transferTick();
             }
             state.movesInWindow++;
             return true;
@@ -61,9 +63,14 @@ public final class HopperTransferGate {
         }
         WindowState state = byLocation.computeIfAbsent(key, k -> new WindowState());
         synchronized (state) {
-            if (currentTick - state.windowStartTick >= def.transferTick()) {
-                state.windowStartTick = currentTick;
+            if (state.movesInWindow >= def.maxItem()) {
+                if (currentTick < state.windowDeadlineTick) {
+                    return;
+                }
                 state.movesInWindow = 0;
+            }
+            if (state.movesInWindow == 0) {
+                state.windowDeadlineTick = currentTick + def.transferTick();
             }
             state.movesInWindow = Math.min(def.maxItem(), state.movesInWindow + count);
         }
@@ -81,7 +88,7 @@ public final class HopperTransferGate {
     }
 
     private static final class WindowState {
-        long windowStartTick;
+        long windowDeadlineTick;
         int movesInWindow;
     }
 }

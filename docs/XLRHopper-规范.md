@@ -74,10 +74,12 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 **验收（漏斗链）**
 
-1. `/xlrhopper give %player% iron 1`，上方满箱、下方空箱：铁漏斗（如 16/2）整体节奏慢于钻石（如 8/8），快于 default（24/1）。
-2. 铁漏斗每 `transfer-tick` 窗口内最多 **2** 件进入下方（对比 `max-item: 1` 的铜或 default）。
-3. 无等级 PDC 的普通漏斗行为等同 `default`。
+1. 必须用 **`/xlrhopper give %player% <等级> 1` 放置**（方块须有 `hopper-level` PDC）；仅改名/颜色的漏斗仍走 `default`。
+2. 上方满箱、下方空箱对比：钻石（如 8/8）应明显快于铁（16/2）与普通放置漏斗（`default` 24/1）。
+3. 铁漏斗每 `transfer-tick` 窗口内最多 **2** 件进入下方（对比 `max-item: 1` 的铜或 default）。
 4. `reload` 后修改 `Update.yml` 中数值，后续传输节奏随之变化。
+
+**排错**：若各等级速度仍一致，检查 Paper 是否关闭 `InventoryMoveItem`（如 `hopper.disable-move-event`）；并确认 `plugins/XLRHopper/Update.yml` 已 reload。
 
 ### 3.4 shan.db
 

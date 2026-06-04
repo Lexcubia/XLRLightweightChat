@@ -1,8 +1,8 @@
 package xlingran;
 
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
+import org.bukkit.block.BlockFace;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -49,16 +49,7 @@ public class HopperReverseHandler implements Listener {
     }
 
     private static Block getHopperBlock(Inventory inventory) {
-        if (inventory == null || inventory.getType() != InventoryType.HOPPER) {
-            return null;
-        }
-        if (inventory.getHolder() instanceof BlockState blockState) {
-            return blockState.getBlock();
-        }
-        if (inventory.getLocation() != null) {
-            return inventory.getLocation().getBlock();
-        }
-        return null;
+        return HopperBlockUtil.resolveHopperBlock(inventory);
     }
 
     private static boolean isInventoryAboveHopper(Block hopper, Inventory other) {

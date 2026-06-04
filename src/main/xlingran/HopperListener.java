@@ -90,20 +90,20 @@ public class HopperListener implements Listener {
         Inventory src = event.getSource();
         ItemStack moving = event.getItem();
         if (dest.getType() == InventoryType.HOPPER) {
-            Block hopperBlock = getHopperBlock(dest);
+            Block hopperBlock = HopperBlockUtil.resolveHopperBlock(dest);
             if (!shouldAllowTransfer(hopperBlock, moving)) {
                 event.setCancelled(true);
             }
         }
         if (src.getType() == InventoryType.HOPPER) {
-            Block hopperBlock = getHopperBlock(src);
+            Block hopperBlock = HopperBlockUtil.resolveHopperBlock(src);
             if (!shouldAllowTransfer(hopperBlock, moving)) {
                 event.setCancelled(true);
             }
         }
     }
 
-    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInventoryMoveGate(InventoryMoveItemEvent event) {
         ItemStack moving = event.getItem();
         if (moving == null || moving.getType().isAir() || updateConfig == null) {
@@ -113,14 +113,14 @@ public class HopperListener implements Listener {
         HopperTransferGate gate = HopperTransferGate.getInstance();
 
         if (event.getDestination().getType() == InventoryType.HOPPER) {
-            Block hopperBlock = getHopperBlock(event.getDestination());
+            Block hopperBlock = HopperBlockUtil.resolveHopperBlock(event.getDestination());
             if (hopperBlock != null && !allowTieredTransfer(hopperBlock, moving, tick, gate)) {
                 event.setCancelled(true);
                 return;
             }
         }
         if (event.getSource().getType() == InventoryType.HOPPER) {
-            Block hopperBlock = getHopperBlock(event.getSource());
+            Block hopperBlock = HopperBlockUtil.resolveHopperBlock(event.getSource());
             if (hopperBlock != null && !allowTieredTransfer(hopperBlock, moving, tick, gate)) {
                 event.setCancelled(true);
             }
@@ -133,7 +133,7 @@ public class HopperListener implements Listener {
         if (inventory.getType() != InventoryType.HOPPER) {
             return;
         }
-        Block hopperBlock = getHopperBlock(inventory);
+        Block hopperBlock = HopperBlockUtil.resolveHopperBlock(inventory);
         ItemStack stack = event.getItem().getItemStack();
         if (!shouldAllowTransfer(hopperBlock, stack)) {
             event.setCancelled(true);
@@ -141,18 +141,15 @@ public class HopperListener implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInventoryPickupGate(InventoryPickupItemEvent event) {
         Inventory inventory = event.getInventory();
         if (inventory.getType() != InventoryType.HOPPER || updateConfig == null) {
             return;
         }
-        Block hopperBlock = getHopperBlock(inventory);
-        if (hopperBlock == null) {
-            return;
-        }
+        Block hopperBlock = HopperBlockUtil.resolveHopperBlock(inventory);
         ItemStack stack = event.getItem().getItemStack();
-        if (!allowTieredTransfer(hopperBlock, stack, GameTickCounter.getInstance().currentTick(), HopperTransferGate.getInstance())) {
+        if (hopperBlock != null && !allowTieredTransfer(hopperBlock, stack, GameTickCounter.getInstance().currentTick(), HopperTransferGate.getInstance())) {
             event.setCancelled(true);
             destroyIfAuto(hopperBlock, stack, event.getItem());
         }
@@ -178,7 +175,7 @@ public class HopperListener implements Listener {
         if (view.getTopInventory().getType() != InventoryType.HOPPER) {
             return;
         }
-        Block hopperBlock = getHopperBlock(view.getTopInventory());
+        Block hopperBlock = HopperBlockUtil.resolveHopperBlock(view.getTopInventory());
         ItemStack incoming = extractItemEnteringHopper(event);
         if (incoming == null || incoming.getType().isAir()) {
             return;
@@ -213,7 +210,7 @@ public class HopperListener implements Listener {
         if (!touchesHopper) {
             return;
         }
-        Block hopperBlock = getHopperBlock(top);
+        Block hopperBlock = HopperBlockUtil.resolveHopperBlock(top);
         if (rejectIfFiltered(player, hopperBlock, dragged)) {
             event.setCancelled(true);
         }
@@ -260,21 +257,6 @@ public class HopperListener implements Listener {
 
     private HopperTemplate resolveTemplate(Block block) {
         return HopperTemplateResolver.resolve(block, keys, templateManager);
-    }
-
-    private Block getHopperBlock(Inventory inventory) {
-        if (inventory == null) {
-            return null;
-        }
-        InventoryHolder holder = inventory.getHolder();
-        if (holder instanceof BlockState blockState) {
-            return blockState.getBlock();
-        }
-        Location location = inventory.getLocation();
-        if (location != null) {
-            return location.getBlock();
-        }
-        return null;
     }
 
     private ItemStack extractItemEnteringHopper(InventoryClickEvent event) {

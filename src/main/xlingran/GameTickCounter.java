@@ -23,7 +23,8 @@ public final class GameTickCounter {
     public void start(JavaPlugin plugin) {
         stop();
         tick = 0L;
-        task = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> tick++, 1L, 1L);
+        // 与 game tick 对齐：首帧即 +1，此后每 tick +1（避免首 1 tick 内 window 基准为 0 的偏差）
+        task = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> tick++, 0L, 1L);
     }
 
     public void stop() {
