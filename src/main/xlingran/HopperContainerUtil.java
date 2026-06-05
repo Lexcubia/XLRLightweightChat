@@ -1,6 +1,7 @@
 package xlingran;
 
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Container;
 import org.bukkit.inventory.Inventory;
@@ -42,6 +43,34 @@ public final class HopperContainerUtil {
         for (ItemStack drop : left.values()) {
             block.getWorld().dropItemNaturally(block.getLocation().add(0.5, 0.5, 0.5), drop);
         }
+    }
+
+    /**
+     * 优先将物品放入漏斗正下方容器；无容器或已满时回退填入漏斗。
+     *
+     * @return 是否全部交付到下方容器
+     */
+    public static boolean deliverDownstream(Block hopperBlock, ItemStack stack) {
+        if (hopperBlock == null || stack == null || stack.getType().isAir()) {
+            return false;
+        }
+        ItemStack remaining = stack.clone();
+        Block below = hopperBlock.getRelative(BlockFace.DOWN);
+        Inventory belowInv = getContainerInventory(below);
+        if (belowInv != null) {
+            HashMap<Integer, ItemStack> left = belowInv.addItem(remaining);
+            syncContainer(below);
+            if (left.isEmpty()) {
+                return true;
+            }
+            remaining = left.values().iterator().next();
+        }
+        Inventory hopperInv = getContainerInventory(hopperBlock);
+        if (hopperInv != null) {
+            refund(hopperBlock, hopperInv, remaining);
+            syncContainer(hopperBlock);
+        }
+        return false;
     }
 
     static int countSimilar(Inventory inventory, ItemStack prototype) {

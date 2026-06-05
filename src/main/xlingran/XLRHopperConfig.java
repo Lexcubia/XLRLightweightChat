@@ -42,6 +42,7 @@ public final class XLRHopperConfig {
 
     private boolean autoCraftEnabled = true;
     private boolean autoSmeltEnabled = true;
+    private int craftTick = 20;
     private int smeltTick = 100;
     private boolean destroyUnmatchedEnabled = true;
     private boolean filterEnchanEnabled = true;
@@ -95,6 +96,7 @@ public final class XLRHopperConfig {
 
         autoCraftEnabled = cfg.getBoolean("Gui.auto-craft-enable", true);
         autoSmeltEnabled = cfg.getBoolean("Gui.auto-smelt-enable", true);
+        craftTick = cfg.getInt("Gui.craft-tick", 20);
         smeltTick = cfg.getInt("Gui.smelt-tick", 100);
         destroyUnmatchedEnabled = cfg.getBoolean("Gui.destroy-unmatched-items", true);
         filterEnchanEnabled = cfg.getBoolean("Gui.filter-enchan", true);
@@ -210,6 +212,10 @@ public final class XLRHopperConfig {
 
     public boolean isAutoSmeltEnabled() {
         return autoSmeltEnabled;
+    }
+
+    public int getCraftTick() {
+        return craftTick;
     }
 
     public int getSmeltTick() {

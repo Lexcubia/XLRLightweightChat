@@ -42,7 +42,7 @@ public final class HopperTickService implements Listener {
         this.laneRegistry = laneRegistry;
         this.reservation = new HopperReservation();
         this.smeltService = new HopperAutoSmeltService(pluginConfig);
-        this.craftService = new HopperAutoCraftService();
+        this.craftService = new HopperAutoCraftService(pluginConfig);
         this.updateConfig = updateConfig;
         this.pluginConfig = pluginConfig;
         Bukkit.getScheduler().runTaskTimer(plugin, this::tickAll, HOPPER_TICK_PERIOD, HOPPER_TICK_PERIOD);
@@ -75,6 +75,7 @@ public final class HopperTickService implements Listener {
     public void onLaneRemoved(Location loc) {
         laneRegistry.unregisterLane(loc);
         smeltService.clear(loc);
+        craftService.clear(loc);
         reservation.clear(loc);
         HopperTransferGate.getInstance().clear(loc);
     }
@@ -88,7 +89,7 @@ public final class HopperTickService implements Listener {
         }
         HopperLane lane = laneRegistry.registerLane(block, keys, templateManager, updateConfig);
         if (lane != null) {
-            HopperWorkEvaluator.evaluateAndQueue(block, laneRegistry, keys, smeltService);
+            HopperWorkEvaluator.evaluateAndQueue(block, laneRegistry, keys, smeltService, craftService);
         }
     }
 
@@ -112,11 +113,12 @@ public final class HopperTickService implements Listener {
         }
         Location loc = block.getLocation();
         Set<Integer> reserved = new HashSet<>(smeltService.getActiveReservedSlots(loc));
+        reserved.addAll(craftService.getActiveReservedSlots(loc));
         if (lane.isAutoSmelt() && pluginConfig.isAutoSmeltEnabled()) {
             reserved.addAll(smeltService.tryStartSmelt(block, template, keys));
         }
         if (lane.isAutoCraft() && pluginConfig.isAutoCraftEnabled()) {
-            reserved.addAll(craftService.tryCraft(block, template, keys));
+            reserved.addAll(craftService.tryStartCraft(block, template, keys));
         }
         if (reserved.isEmpty()) {
             reservation.clear(loc);
@@ -158,7 +160,8 @@ public final class HopperTickService implements Listener {
             HopperLevelResolver.applyLevelToLane(lane, block, keys, updateConfig);
             lane.incrementTicksSinceLastStep();
             if (lane.ticksSinceLastStep() < lane.transferTick()) {
-                boolean keepWaiting = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService);
+                boolean keepWaiting = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService,
+                        craftService);
                 laneRegistry.removeLaneFromQueueAfterTick(lane, keepWaiting);
                 continue;
             }
@@ -169,7 +172,7 @@ public final class HopperTickService implements Listener {
                 reserved.addAll(smeltService.tick(block, template, keys));
             }
             if (lane.isAutoCraft() && pluginConfig.isAutoCraftEnabled()) {
-                reserved.addAll(craftService.tryCraft(block, template, keys));
+                reserved.addAll(craftService.tick(block, template, keys));
             }
             reservation.setReserved(loc, reserved);
 
@@ -183,7 +186,7 @@ public final class HopperTickService implements Listener {
                 }
             }
 
-            boolean keep = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService);
+            boolean keep = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService, craftService);
             laneRegistry.removeLaneFromQueueAfterTick(lane, keep);
         }
     }

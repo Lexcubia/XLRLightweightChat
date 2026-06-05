@@ -1,5 +1,6 @@
 package xlingran;
 
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.Container;
@@ -15,13 +16,45 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 自动合成：按模板配置的结果物品匹配无序配方，在漏斗内扣料并生成 1 个产物。
+ * 自动合成：每漏斗单 job，craft-tick 后产出 1 个并下入方箱子；每 8 tick 推进 8。
  */
 public final class HopperAutoCraftService {
 
-    private static final int MAX_CRAFTS_PER_CALL = 4;
+    public static final int TICK_STEP = 8;
+
+    private final XLRHopperConfig pluginConfig;
+    private final Map<String, CraftJob> jobs = new ConcurrentHashMap<>();
+
+    public HopperAutoCraftService(XLRHopperConfig pluginConfig) {
+        this.pluginConfig = pluginConfig;
+    }
+
+    private int craftDurationTicks() {
+        return pluginConfig != null ? pluginConfig.getCraftTick() : 20;
+    }
+
+    public Set<Integer> tick(Block hopperBlock, HopperTemplate template, HopperKeys keys) {
+        return processCraft(hopperBlock, template, keys, true);
+    }
+
+    public Set<Integer> tryStartCraft(Block hopperBlock, HopperTemplate template, HopperKeys keys) {
+        return processCraft(hopperBlock, template, keys, false);
+    }
+
+    public Set<Integer> getActiveReservedSlots(Location loc) {
+        Set<Integer> reserved = new HashSet<>();
+        if (loc == null || loc.getWorld() == null) {
+            return reserved;
+        }
+        CraftJob job = jobs.get(laneKey(loc));
+        if (job != null) {
+            reserved.addAll(job.reservedSlots);
+        }
+        return reserved;
+    }
 
     public boolean shouldHoldOutbound(Block hopperBlock, HopperTemplate template, HopperKeys keys, ItemStack moving) {
         if (hopperBlock == null || template == null || moving == null || moving.getType().isAir()) {
@@ -38,6 +71,10 @@ public final class HopperAutoCraftService {
         if (!(hopperBlock.getState() instanceof Container container)) {
             return false;
         }
+        Location loc = hopperBlock.getLocation();
+        if (hasJob(loc)) {
+            return isMovingRecipeIngredient(hopperBlock, template, keys, moving);
+        }
         Inventory inv = container.getInventory();
         CraftPlan plan = peekBestPlan(inv, hopperBlock, template, keys);
         if (plan == null || !isMovingRecipeIngredient(hopperBlock, template, keys, moving)) {
@@ -52,46 +89,88 @@ public final class HopperAutoCraftService {
         return hasInsufficientMaterials(inv, hopperBlock, template, keys, plan.needed());
     }
 
-    public Set<Integer> tryCraft(Block hopperBlock, HopperTemplate template, HopperKeys keys) {
+    public void clear(Location loc) {
+        jobs.remove(laneKey(loc));
+    }
+
+    public boolean hasJob(Location loc) {
+        return loc != null && loc.getWorld() != null && jobs.containsKey(laneKey(loc));
+    }
+
+    private Set<Integer> processCraft(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                      boolean advanceTimer) {
         Set<Integer> reserved = new HashSet<>();
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER || template == null) {
             return reserved;
         }
+        if (pluginConfig != null && !pluginConfig.isAutoCraftEnabled()) {
+            jobs.remove(laneKey(hopperBlock.getLocation()));
+            return reserved;
+        }
         if (!template.isAutoCraftEnabled() || template.getAutoCraftTargets().isEmpty()) {
+            jobs.remove(laneKey(hopperBlock.getLocation()));
             return reserved;
         }
         if (!(hopperBlock.getState() instanceof Container container)) {
             return reserved;
         }
+        Location loc = hopperBlock.getLocation();
+        String key = laneKey(loc);
         Inventory inv = container.getInventory();
 
-        for (int attempt = 0; attempt < MAX_CRAFTS_PER_CALL; attempt++) {
-            Set<Integer> result = tryCraftOnce(inv, hopperBlock, template, keys);
-            if (result == null) {
-                return reserved;
+        CraftJob job = jobs.get(key);
+        if (job != null) {
+            reserved.addAll(job.reservedSlots);
+            if (advanceTimer) {
+                job.ticksRemaining -= TICK_STEP;
+                if (job.ticksRemaining <= 0) {
+                    ItemStack output = job.outputStack.clone();
+                    output.setAmount(1);
+                    HopperContainerUtil.deliverDownstream(hopperBlock, output);
+                    jobs.remove(key);
+                    HopperContainerUtil.syncContainer(hopperBlock);
+                }
             }
-            if (!result.isEmpty()) {
-                return result;
+            return reserved;
+        }
+
+        CraftMatch match = findCraftMatch(inv, hopperBlock, template, keys);
+        if (match != null) {
+            if (consumeSlots(inv, match.plan.slotsToConsume())) {
+                ItemStack result = match.result.clone();
+                result.setAmount(1);
+                Set<Integer> slots = uniqueSlots(match.plan.slotsToConsume());
+                jobs.put(key, new CraftJob(result, craftDurationTicks(), slots));
+                reserved.addAll(slots);
+                HopperContainerUtil.syncContainer(hopperBlock);
             }
-            reserved = Set.of();
+            return reserved;
+        }
+
+        CraftPlan partial = peekBestPlan(inv, hopperBlock, template, keys);
+        if (partial != null && !partial.canCraftNow() && !partial.reservedSlots().isEmpty()) {
+            return new HashSet<>(partial.reservedSlots());
         }
         return reserved;
     }
 
-    private Set<Integer> tryCraftOnce(Inventory inv, Block hopperBlock, HopperTemplate template, HopperKeys keys) {
+    private static Set<Integer> uniqueSlots(List<Integer> slots) {
+        return new HashSet<>(slots);
+    }
+
+    private static CraftMatch findCraftMatch(Inventory inv, Block hopperBlock, HopperTemplate template,
+                                             HopperKeys keys) {
         for (ItemStack target : template.getAutoCraftTargets()) {
             for (ShapelessRecipe recipe : HopperRecipeUtil.findShapelessRecipes(target)) {
-                Set<Integer> r = applyPlan(inv, hopperBlock,
-                        planShapeless(inv, hopperBlock, template, keys, recipe), recipe.getResult());
-                if (r != null) {
-                    return r;
+                CraftPlan plan = planShapeless(inv, hopperBlock, template, keys, recipe);
+                if (plan != null && plan.canCraftNow()) {
+                    return new CraftMatch(plan, recipe.getResult());
                 }
             }
             for (ShapedRecipe recipe : HopperRecipeUtil.findShapedRecipes(target)) {
-                Set<Integer> r = applyPlan(inv, hopperBlock,
-                        planShaped(inv, hopperBlock, template, keys, recipe), recipe.getResult());
-                if (r != null) {
-                    return r;
+                CraftPlan plan = planShaped(inv, hopperBlock, template, keys, recipe);
+                if (plan != null && plan.canCraftNow()) {
+                    return new CraftMatch(plan, recipe.getResult());
                 }
             }
         }
@@ -178,28 +257,6 @@ public final class HopperAutoCraftService {
             }
         }
         return false;
-    }
-
-    private Set<Integer> applyPlan(Inventory inv, Block hopperBlock, CraftPlan plan, ItemStack result) {
-        if (plan == null) {
-            return null;
-        }
-        if (plan.canCraftNow()) {
-            if (consumeSlots(inv, plan.slotsToConsume())) {
-                if (result != null) {
-                    ItemStack one = result.clone();
-                    one.setAmount(1);
-                    HopperContainerUtil.refund(hopperBlock, inv, one);
-                }
-                HopperContainerUtil.syncContainer(hopperBlock);
-                return Set.of();
-            }
-            return null;
-        }
-        if (!plan.reservedSlots().isEmpty()) {
-            return new HashSet<>(plan.reservedSlots());
-        }
-        return null;
     }
 
     private static CraftPlan planShaped(Inventory inv, Block hopperBlock, HopperTemplate template,
@@ -301,7 +358,26 @@ public final class HopperAutoCraftService {
         return true;
     }
 
+    private static String laneKey(Location loc) {
+        return loc.getWorld().getUID() + ":" + loc.getBlockX() + ":" + loc.getBlockY() + ":" + loc.getBlockZ();
+    }
+
     private record CraftPlan(List<Integer> slotsToConsume, Set<Integer> reservedSlots, boolean canCraftNow,
                              Map<RecipeChoice, Integer> needed) {
+    }
+
+    private record CraftMatch(CraftPlan plan, ItemStack result) {
+    }
+
+    private static final class CraftJob {
+        private final ItemStack outputStack;
+        private final Set<Integer> reservedSlots;
+        private int ticksRemaining;
+
+        private CraftJob(ItemStack outputStack, int ticksRemaining, Set<Integer> reservedSlots) {
+            this.outputStack = outputStack;
+            this.ticksRemaining = ticksRemaining;
+            this.reservedSlots = reservedSlots;
+        }
     }
 }

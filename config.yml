@@ -59,6 +59,8 @@ Hologram:
 Gui:
     # 是否启用自动合成功能
     auto-craft-enable: true
+    # 合成时间
+    craft-tick: 20
     # 是否启用自动熔炼功能
     auto-smelt-enable: true
     # 熔炼时间

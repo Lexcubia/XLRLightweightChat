@@ -41,6 +41,7 @@ public final class HopperOverlayDisplayService {
 
     private static final double ITEM_ROW_SPACING = 0.38;
     private static final double ITEM_ROW_HEIGHT = 0.28;
+    private static final double ITEM_TEXT_GAP = 0.18;
 
     private final Shan plugin;
     private final HopperKeys keys;
@@ -144,9 +145,8 @@ public final class HopperOverlayDisplayService {
         if (hologram == null) {
             return;
         }
-        if (created) {
-            hologram.setAlwaysFacePlayer(false);
-        } else if (locationChanged(hologram, holoLoc)) {
+        hologram.setAlwaysFacePlayer(true);
+        if (!created && locationChanged(hologram, holoLoc)) {
             hologram.setLocation(holoLoc);
         }
         if (!hologram.isEnabled()) {
@@ -287,7 +287,7 @@ public final class HopperOverlayDisplayService {
             return;
         }
         if (index == 0) {
-            line.setHeight(ITEM_ROW_HEIGHT);
+            line.setHeight(ITEM_ROW_HEIGHT + ITEM_TEXT_GAP);
         } else {
             line.setHeight(0);
         }
@@ -295,7 +295,6 @@ public final class HopperOverlayDisplayService {
         line.setOffsetX(centerOffset);
         line.setOffsetY(index > 0 ? index * ITEM_ROW_HEIGHT : 0);
         line.setOffsetZ(0);
-        line.setFacing(0f);
         line.update();
     }
 
@@ -307,7 +306,6 @@ public final class HopperOverlayDisplayService {
         line.setOffsetX(0);
         line.setOffsetY(0);
         line.setOffsetZ(0);
-        line.setFacing(0f);
         line.update();
     }
 

@@ -7,6 +7,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.Container;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import xlingran.HopperAutoCraftService;
 import xlingran.HopperAutoSmeltService;
 import xlingran.HopperContainerUtil;
 import xlingran.HopperKeys;
@@ -24,7 +25,8 @@ public final class HopperWorkEvaluator {
     }
 
     public static void evaluateAndQueue(Block block, HopperLaneRegistry registry, HopperKeys keys,
-                                      HopperAutoSmeltService smeltService) {
+                                      HopperAutoSmeltService smeltService,
+                                      HopperAutoCraftService craftService) {
         if (block == null || block.getType() != Material.HOPPER) {
             return;
         }
@@ -41,7 +43,7 @@ public final class HopperWorkEvaluator {
             return;
         }
         String key = HopperLane.laneKey(block.getLocation());
-        if (!pendingWork(block, lane, keys, smeltService, config)) {
+        if (!pendingWork(block, lane, keys, smeltService, craftService, config)) {
             applySleep(lane, config);
             registry.removeFromWorkQueue(key);
             return;
@@ -56,14 +58,16 @@ public final class HopperWorkEvaluator {
     }
 
     public static void markPending(Block block, HopperLaneRegistry registry, HopperKeys keys,
-                                   HopperAutoSmeltService smeltService) {
+                                   HopperAutoSmeltService smeltService,
+                                   HopperAutoCraftService craftService) {
         registry.invalidateTargetSpace(block.getLocation());
-        evaluateAndQueue(block, registry, keys, smeltService);
+        evaluateAndQueue(block, registry, keys, smeltService, craftService);
     }
 
     public static boolean shouldRemainInQueue(Block block, HopperLane lane, HopperKeys keys,
-                                              HopperAutoSmeltService smeltService) {
-        return pendingWork(block, lane, keys, smeltService, config());
+                                              HopperAutoSmeltService smeltService,
+                                              HopperAutoCraftService craftService) {
+        return pendingWork(block, lane, keys, smeltService, craftService, config());
     }
 
     private static void applySleep(HopperLane lane, XLRHopperConfig config) {
@@ -83,8 +87,12 @@ public final class HopperWorkEvaluator {
     }
 
     private static boolean pendingWork(Block block, HopperLane lane, HopperKeys keys,
-                                       HopperAutoSmeltService smeltService, XLRHopperConfig config) {
+                                       HopperAutoSmeltService smeltService,
+                                       HopperAutoCraftService craftService, XLRHopperConfig config) {
         if (registryHasSmelt(smeltService, block.getLocation())) {
+            return true;
+        }
+        if (registryHasCraft(craftService, block.getLocation())) {
             return true;
         }
         if (!(block.getState() instanceof Container container)) {
@@ -156,6 +164,10 @@ public final class HopperWorkEvaluator {
 
     private static boolean registryHasSmelt(HopperAutoSmeltService smeltService, Location loc) {
         return smeltService != null && smeltService.hasJob(loc);
+    }
+
+    private static boolean registryHasCraft(HopperAutoCraftService craftService, Location loc) {
+        return craftService != null && craftService.hasJob(loc);
     }
 
     private static XLRHopperConfig config() {

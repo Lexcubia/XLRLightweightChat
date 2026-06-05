@@ -208,24 +208,27 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - **标题**：`Auto-Crafting.name`
 - **行数**：`Auto-Crafting.rows`
 - 规则同「过滤的物品」：可自由存取；关闭时按 `FilterItemMatcher.sameRule` 去重并退回重复项
-- 样板为**合成结果**（如工作台）；插件在漏斗 5 格内匹配 `CraftingRecipe` 后扣除原料并产出 1 个结果
+- 样板为**合成结果**（如工作台）；插件在漏斗 5 格内匹配 `CraftingRecipe` 后扣除原料
+- **合成时间**：`config.yml` → `Gui.craft-tick`（默认 **20 tick**）；每漏斗同时仅 **1 个合成 job**；每 **8 tick** 推进 8；计时结束后产出 1 个
 - 未凑齐配方的原料槽位由 `HopperReservation` 预留，不参与反向 push/pull
-- **入料即时合成**：物品进入漏斗（`InventoryMoveItem` / `InventoryPickupItem`）后，开启自动合成的 lane **跳过 4 tick 防抖**，同一 tick 执行 `runEvaluate` + `HopperAutoCraftService.tryCraft`
-- **出站门控**：`HopperListener`（`HIGH`）在漏斗向下游输出前调用 `shouldHoldOutbound`；**凑料中**（原料总量不足一次合成）或**即将合成**时拦截原料；**产物**（匹配样板）与非配方物品正常放行
-- **单槽多扣**：同一漏斗槽位可扣减多个配方单位（如 1 格 64 木板合成工作台，不要求占满 4 格）；原木（`Log`）不匹配工作台配方，不会触发合成
-- **目标流程**：玩家投入可合成原料 → 凑齐前 hold 在漏斗 → 足够后 `tryCraft`（同 tick 最多 4 次）→ 产物下传
+- **入料**：`tryStartCraft` 仅在原料足够时**启动 job 并扣料**；**不**在入料同一 tick 即时完成产出（推进由 8 tick `workQueue` 的 `tick` 负责）
+- **产物下传**：job 完成时 `HopperContainerUtil.deliverDownstream` **优先放入漏斗正下方容器**；无容器或已满时回退填入漏斗
+- **出站门控**：`shouldHoldOutbound` 在凑料中、即将启动 job、或 job 进行中拦截配方原料；**产物**与非配方物品正常放行
+- **单槽多扣**：同一漏斗槽位可扣减多个配方单位（如 1 格 64 木板，不要求占满 4 格）；原木不匹配工作台配方
+- **目标流程**：投入原料 → hold 凑料 → `tryStartCraft` 扣料开 job → `craft-tick` 后产物入**下方箱子**
 
 ### 4.8 自动熔炼（行数可配）
 
 - **标题**：`Auto-Furnace.name`
 - **行数**：`Auto-Furnace.rows`
 - 规则同「过滤的物品」
-- 样板为**熔炼产出**（如烤马铃薯）；由 `FurnaceRecipe` / `CookingRecipe` 反查输入
-- 每漏斗同时仅 1 个熔炼 job；**100 tick（5 秒）** 后产出 1 个放回漏斗；熔炼中输入预留
-- **入料即时熔炼**：与 §4.7 对称，开启自动熔炼的 lane 入料后同一 tick 执行 `tryStartSmelt`
-- **出站门控**：`shouldHoldOutbound` 在 job 进行中或待熔炼输入匹配时拦截；**产物**（匹配样板，如铁锭）正常放行
-- **多输入源反查**：`findAllSmeltMappings` 覆盖同一产物的全部 `CookingRecipe`（铁锭 ← 铁矿石 / 深板岩铁矿石 / 原铁等）
-- **目标流程**：投入可熔炼原料 → hold 至 `tryStartSmelt` → `smelt-tick` 后产出 → 产物下传
+- 样板为**熔炼产出**（如烤马铃薯）；由 `CookingRecipe` 反查输入
+- 每漏斗同时仅 1 个熔炼 job；`config.yml` → `Gui.smelt-tick`（默认 **100 tick**）后产出 1 个
+- **入料即时熔炼**：入料后同一 tick 执行 `tryStartSmelt`（仅启动，不推进计时）
+- **产物下传**：job 完成时 `deliverDownstream` 优先放入**下方箱子**（与 §4.7 对称）
+- **出站门控**：job 进行中或待熔炼输入匹配时拦截；产物样板正常放行
+- **多输入源反查**：`findAllSmeltMappings` 覆盖铁锭 ← 铁矿石 / 深板岩铁矿石 / 原铁等
+- **目标流程**：投入原料 → `tryStartSmelt` → `smelt-tick` 后产物入**下方箱子**
 
 ### 4.4 过滤附魔属性（6 行 × 9 列）
 
@@ -250,9 +253,9 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - **依赖**：服务端须安装 [DecentHolograms](https://github.com/DecentSoftware-eu/DecentHolograms)（≥ 2.0.12，`plugin.yml` `softdepend`）；未安装时 XLRHopper 仍可加载，悬浮不可用。
 - 实现：`display.HopperOverlayDisplayService` + `display.HopperOverlayListener`；**不**进入 `HopperTickService`（属 P0 事件驱动，与 8 tick `workQueue` 排水无关）。
 - **布局（自上而下）**：
-  - **最顶层物品带**：漏斗 5 格内非空气物品，按 `Material` 去重，最多 5 个小图标；`DHAPI.setHologramLine(hologram, i, ItemStack)`；首物品行 `ITEM_ROW_HEIGHT`（约 0.28）预留顶带；多图标 `setOffsetX` 横排 + `offsetY` 回拉同排
-  - **其下文本带**：`config.yml` → `Hologram.hologram-lines` 五行；各行 `setHeight(Hologram.line-height)`，`offsetY=0`，紧随物品带下方自然堆叠
-- 全息：`DHAPI.createHologram` **非持久化**（`xlrhopper_{world}_{x}_{y}_{z}`）；`setAlwaysFacePlayer(false)`；每次 `syncLines` 后 `realignLines()`
+  - **最顶层物品带**：漏斗 5 格内非空气物品，按 `Material` 去重，最多 5 个小图标；首物品行 `ITEM_ROW_HEIGHT + ITEM_TEXT_GAP`（约 0.28 + 0.18）预留顶带并与首行文字拉开间距；多图标 `setOffsetX` 横排 + `offsetY` 回拉同排
+  - **其下文本带**：`config.yml` → `Hologram.hologram-lines` 五行；各行 `setHeight(Hologram.line-height)`，`offsetY=0`
+- 全息：`DHAPI.createHologram` **非持久化**；`setAlwaysFacePlayer(true)` 随玩家视角；每次 `syncLines` 后 `realignLines()`
 - 增量刷新：`DHAPI.setHologramLine` 按行更新；内容签名基于**材质集合**（不含数量）；签名未变时跳过重建
 - 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用 **4 tick 防抖**；内容签名未变则跳过重建。
 - `DecentHologramsReloadEvent` 后恢复已开启 `hover-display` 的全息。

@@ -7,7 +7,6 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -35,6 +34,11 @@ public final class GuiConfig {
     private YamlConfiguration config;
     private Map<String, String> enchantNames = Collections.emptyMap();
 
+    private String diskToggleOn;
+    private String diskToggleOff;
+    private String diskFilterModeOn;
+    private String diskFilterModeOff;
+
     public GuiConfig(JavaPlugin plugin) {
         this.plugin = plugin;
         this.logger = plugin.getLogger();
@@ -45,14 +49,10 @@ public final class GuiConfig {
         if (!file.exists()) {
             plugin.saveResource("Gui.yml", false);
         }
-        try (InputStreamReader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)) {
-            config = YamlConfiguration.loadConfiguration(reader);
-        } catch (Exception e) {
-            logger.warning("[XLRHopper] Gui.yml 读取失败，回退默认加载: " + e.getMessage());
-            config = YamlConfiguration.loadConfiguration(file);
-        }
-        logToggleFromDisk(file);
-        mergeDefaults();
+        YamlConfiguration loaded = YamlConfiguration.loadConfiguration(file);
+        captureDiskTokens(loaded, file);
+        mergeDefaults(loaded);
+        config = loaded;
         enchantNames = loadEnchantNames();
         logLoadedTokens(file);
     }
@@ -61,31 +61,73 @@ public final class GuiConfig {
         load();
     }
 
-    private void logToggleFromDisk(File file) {
-        ConfigurationSection toggle = config.getConfigurationSection("toggle");
-        ConfigurationSection filtermode = config.getConfigurationSection("filtermode");
-        if (toggle == null) {
-            logger.warning("[XLRHopper] Gui.yml 缺少根节点 toggle（须与 TemplateSet 同级顶格）: " + file.getAbsolutePath());
+    private void captureDiskTokens(YamlConfiguration loaded, File file) {
+        diskToggleOn = readDiskToken(loaded, "toggle.on");
+        diskToggleOff = readDiskToken(loaded, "toggle.off");
+        diskFilterModeOn = readDiskToken(loaded, "filtermode.on");
+        diskFilterModeOff = readDiskToken(loaded, "filtermode.off");
+
+        if (diskToggleOn == null) {
+            diskToggleOn = findMisnestedToken(loaded, "toggle.on");
         }
-        if (filtermode == null) {
+        if (diskToggleOff == null) {
+            diskToggleOff = findMisnestedToken(loaded, "toggle.off");
+        }
+        if (diskFilterModeOn == null) {
+            diskFilterModeOn = findMisnestedToken(loaded, "filtermode.on");
+        }
+        if (diskFilterModeOff == null) {
+            diskFilterModeOff = findMisnestedToken(loaded, "filtermode.off");
+        }
+
+        ConfigurationSection toggle = loaded.getConfigurationSection("toggle");
+        ConfigurationSection filtermode = loaded.getConfigurationSection("filtermode");
+        if (toggle == null && diskToggleOn == null) {
+            logger.warning("[XLRHopper] Gui.yml 缺少根节点 toggle（须与 TemplateSet 同级顶格）: "
+                    + file.getAbsolutePath());
+        }
+        if (filtermode == null && diskFilterModeOn == null) {
             logger.warning("[XLRHopper] Gui.yml 缺少根节点 filtermode: " + file.getAbsolutePath());
         }
     }
 
-    private void logLoadedTokens(File file) {
-        logger.info("[XLRHopper] Gui.yml: " + file.getAbsolutePath()
-                + " | toggle.on=" + config.getString("toggle.on")
-                + " (isSet=" + config.isSet("toggle.on") + ")"
-                + " | filtermode.on=" + config.getString("filtermode.on")
-                + " (isSet=" + config.isSet("filtermode.on") + ")");
+    private static String readDiskToken(YamlConfiguration loaded, String path) {
+        String raw = loaded.getString(path);
+        if (raw == null || raw.isEmpty()) {
+            return null;
+        }
+        return raw;
     }
 
-    private void mergeDefaults() {
+    private String findMisnestedToken(YamlConfiguration loaded, String suffix) {
+        for (String key : loaded.getKeys(true)) {
+            if (!key.endsWith(suffix) || key.equals(suffix)) {
+                continue;
+            }
+            String raw = loaded.getString(key);
+            if (raw != null && !raw.isEmpty()) {
+                logger.warning("[XLRHopper] Gui.yml 发现 " + suffix + " 位于非根路径 " + key
+                        + "，请移到根节点与 TemplateSet 同级");
+                return raw;
+            }
+        }
+        return null;
+    }
+
+    private void logLoadedTokens(File file) {
+        logger.info("[XLRHopper] Gui.yml: " + file.getAbsolutePath()
+                + " | disk: toggle.on=" + diskToggleOn
+                + " | merged: toggle.on=" + config.getString("toggle.on")
+                + " (isSet=" + config.isSet("toggle.on") + ")"
+                + " | filtermode.on=" + resolveToken("filtermode.on", diskFilterModeOn, null));
+    }
+
+    private void mergeDefaults(YamlConfiguration target) {
         try (InputStream in = plugin.getResource("Gui.yml")) {
             if (in != null) {
                 YamlConfiguration defaults = YamlConfiguration.loadConfiguration(
                         new InputStreamReader(in, StandardCharsets.UTF_8));
-                config.setDefaults(defaults);
+                target.setDefaults(defaults);
             }
         } catch (Exception e) {
             logger.warning("[XLRHopper] 无法合并 jar 内 Gui.yml 默认值: " + e.getMessage());
@@ -121,22 +163,33 @@ public final class GuiConfig {
 
     public String toggle(boolean on) {
         String path = on ? "toggle.on" : "toggle.off";
-        String raw = config.getString(path);
-        if (raw == null || raw.isEmpty()) {
-            logger.warning("[XLRHopper] Gui.yml 缺少 " + path + "，使用内置回退");
-            raw = on ? "&a启" : "&c关";
-        }
-        return color(raw);
+        String disk = on ? diskToggleOn : diskToggleOff;
+        String builtin = on ? "&a启" : "&c关";
+        return color(resolveToken(path, disk, builtin));
     }
 
     public String filterMode(boolean whitelist) {
         String path = whitelist ? "filtermode.on" : "filtermode.off";
+        String disk = whitelist ? diskFilterModeOn : diskFilterModeOff;
+        String builtin = whitelist ? "&a1名单模式" : "&c2名单模式";
+        return color(resolveToken(path, disk, builtin));
+    }
+
+    private String resolveToken(String path, String diskValue, String builtinFallback) {
+        if (diskValue != null && !diskValue.isEmpty()) {
+            return diskValue;
+        }
         String raw = config.getString(path);
         if (raw == null || raw.isEmpty()) {
-            logger.warning("[XLRHopper] Gui.yml 缺少 " + path + "，使用内置回退");
-            raw = whitelist ? "&a1名单模式" : "&c2名单模式";
+            var defaults = config.getDefaults();
+            if (defaults != null) {
+                raw = defaults.getString(path);
+            }
         }
-        return color(raw);
+        if (raw == null || raw.isEmpty()) {
+            return builtinFallback;
+        }
+        return raw;
     }
 
     public String getEnchantDisplayName(Enchantment enchant) {

@@ -15,6 +15,7 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+import xlingran.HopperAutoCraftService;
 import xlingran.HopperAutoSmeltService;
 import xlingran.HopperChunkScanUtil;
 import xlingran.HopperKeys;
@@ -60,10 +61,11 @@ public final class HopperLaneListener implements Listener {
         HopperTemplateManager tm = tickService.getTemplateManager();
         HopperLaneRegistry registry = tickService.getLaneRegistry();
         HopperAutoSmeltService smelt = tickService.getSmeltService();
+        HopperAutoCraftService craft = tickService.getCraftService();
         for (Block block : hoppers) {
             HopperLane lane = registry.registerLane(block, keys, tm, tickService.getUpdateConfig());
             if (lane != null) {
-                HopperWorkEvaluator.evaluateAndQueue(block, registry, keys, smelt);
+                HopperWorkEvaluator.evaluateAndQueue(block, registry, keys, smelt, craft);
             }
         }
     }
@@ -189,7 +191,7 @@ public final class HopperLaneListener implements Listener {
                 tickService.getTemplateManager(), tickService.getUpdateConfig());
         if (lane != null) {
             HopperWorkEvaluator.markPending(hopperBlock, tickService.getLaneRegistry(), tickService.getKeys(),
-                    tickService.getSmeltService());
+                    tickService.getSmeltService(), tickService.getCraftService());
         }
     }
 

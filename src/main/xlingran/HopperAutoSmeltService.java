@@ -148,7 +148,7 @@ public final class HopperAutoSmeltService {
                 if (job.ticksRemaining <= 0) {
                     ItemStack output = job.outputStack.clone();
                     output.setAmount(1);
-                    HopperContainerUtil.refund(hopperBlock, inv, output);
+                    HopperContainerUtil.deliverDownstream(hopperBlock, output);
                     jobs.remove(key);
                     HopperContainerUtil.syncContainer(hopperBlock);
                 }
