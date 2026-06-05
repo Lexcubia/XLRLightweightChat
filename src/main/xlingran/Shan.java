@@ -204,11 +204,27 @@ public class Shan extends JavaPlugin {
     }
 
     public void reload(CommandSender sender) {
+        Bukkit.getScheduler().runTask(this, () -> {
+            reloadConfig();
+            pluginConfig.reload();
+            guiConfig.reload();
+            messageConfig.reload();
+            updateConfig.reload();
+            gui.refreshAfterConfigReload();
+            HopperTransferGate.getInstance().clearAll();
+            if (sender != null) {
+                int status = updateConfig.levelIds().size();
+                for (String line : pluginConfig.getReloadLines()) {
+                    sender.sendMessage(TextPlaceholders.apply(line, Map.of("status", String.valueOf(status))));
+                }
+            }
+        });
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
                 templateRepository.loadInto(templateManager);
+                asyncReindexLoadedChunks();
             } catch (Exception e) {
-                getLogger().severe("[XLRHopper] reload 失败: " + e.getMessage());
+                getLogger().severe("[XLRHopper] 模板数据库 reload 失败: " + e.getMessage());
                 Bukkit.getScheduler().runTask(this, () -> {
                     if (sender != null) {
                         if (sender instanceof org.bukkit.entity.Player) {
@@ -218,24 +234,7 @@ public class Shan extends JavaPlugin {
                         }
                     }
                 });
-                return;
             }
-            Bukkit.getScheduler().runTask(this, () -> {
-                reloadConfig();
-                pluginConfig.reload();
-                guiConfig.reload();
-                gui.refreshAfterConfigReload();
-                messageConfig.reload();
-                updateConfig.reload();
-                HopperTransferGate.getInstance().clearAll();
-                asyncReindexLoadedChunks();
-                if (sender != null) {
-                    int status = updateConfig.levelIds().size();
-                    for (String line : pluginConfig.getReloadLines()) {
-                        sender.sendMessage(TextPlaceholders.apply(line, Map.of("status", String.valueOf(status))));
-                    }
-                }
-            });
         });
     }
 

@@ -138,26 +138,25 @@ HopperSetting:
 
 # 自动合成Gui
 Auto-Crafting:
-    # 最少1行，最大6行
     rows: 6
     name: "&6自动合成"
-# 过滤的物品Gui
-Filter-Item:
-    rows: 6
-    name: "&6过滤的物品"
 # 自动熔炼Gui
 Auto-Furnace:
     rows: 6
     name: "&6自动熔炼"
+# 过滤的物品Gui
+Filter-Item:
+    rows: 6
+    name: "&6过滤的物品"
 
-# 开和关变量
+# 开和关变量（替换 Lore 中 %toggle%）
 toggle:
-    on: "&a开"
+    on: "&a启"
     off: "&c关"
-# 白名单和黑名单切换变量
+# 白名单和黑名单切换变量（替换 Lore 中 %filtermode%）
 filtermode:
-    on: "&a白名单模式"
-    off: "&c黑名单模式"
+    on: "&a1名单模式"
+    off: "&c2名单模式"
 
 # 附魔名称对照表
 enchant-names:

@@ -11,8 +11,10 @@ import org.bukkit.inventory.ShapedRecipe;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 final class HopperRecipeUtil {
 
@@ -20,11 +22,18 @@ final class HopperRecipeUtil {
     }
 
     static SmeltMapping findSmeltMapping(ItemStack outputPrototype) {
+        List<SmeltMapping> mappings = findAllSmeltMappings(outputPrototype);
+        return mappings.isEmpty() ? null : mappings.get(0);
+    }
+
+    static List<SmeltMapping> findAllSmeltMappings(ItemStack outputPrototype) {
+        List<SmeltMapping> list = new ArrayList<>();
         if (outputPrototype == null || outputPrototype.getType().isAir()) {
-            return null;
+            return list;
         }
         ItemStack probe = outputPrototype.clone();
         probe.setAmount(1);
+        Set<String> seenInputs = new LinkedHashSet<>();
         for (Recipe recipe : Bukkit.getRecipesFor(probe)) {
             if (!(recipe instanceof CookingRecipe<?> cooking)) {
                 continue;
@@ -40,9 +49,17 @@ final class HopperRecipeUtil {
             if (inputChoice == null) {
                 continue;
             }
-            return new SmeltMapping(inputChoice, result.clone());
+            String key = inputChoiceKey(inputChoice);
+            if (!seenInputs.add(key)) {
+                continue;
+            }
+            list.add(new SmeltMapping(inputChoice, result.clone()));
         }
-        return null;
+        return list;
+    }
+
+    private static String inputChoiceKey(RecipeChoice choice) {
+        return choice.toString();
     }
 
     static boolean matchesPrototype(ItemStack stack, ItemStack prototype) {

@@ -96,6 +96,7 @@ public class Gui implements Listener {
             if (holder == null) {
                 continue;
             }
+            player.closeInventory();
             switch (holder.getType()) {
                 case TEMPLATE_LIST -> openTemplateList(player);
                 case TEMPLATE_SETTINGS -> {

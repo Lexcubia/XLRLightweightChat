@@ -9,7 +9,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.RecipeChoice;
 
 import java.util.HashSet;
-import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -70,21 +70,57 @@ public final class HopperAutoSmeltService {
                 return false;
             }
         }
+        if (!template.allows(moving, hopperBlock, keys)) {
+            return false;
+        }
+        Location loc = hopperBlock.getLocation();
+        if (hasJob(loc)) {
+            return matchesAnySmeltInput(template, moving);
+        }
+        if (!(hopperBlock.getState() instanceof Container container)) {
+            return false;
+        }
+        return canStartSmeltWithItem(container.getInventory(), hopperBlock, template, keys, moving);
+    }
+
+    private boolean matchesAnySmeltInput(HopperTemplate template, ItemStack stack) {
         for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
-            HopperRecipeUtil.SmeltMapping mapping = HopperRecipeUtil.findSmeltMapping(outputProto);
-            if (mapping == null) {
-                continue;
+            for (HopperRecipeUtil.SmeltMapping mapping : HopperRecipeUtil.findAllSmeltMappings(outputProto)) {
+                if (HopperRecipeUtil.matchesChoice(mapping.inputChoice(), stack)) {
+                    return true;
+                }
             }
-            if (HopperRecipeUtil.matchesChoice(mapping.inputChoice(), moving)
-                    && template.allows(moving, hopperBlock, keys)) {
-                return true;
+        }
+        return false;
+    }
+
+    private boolean canStartSmeltWithItem(Inventory inv, Block hopperBlock, HopperTemplate template,
+                                          HopperKeys keys, ItemStack moving) {
+        for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
+            for (HopperRecipeUtil.SmeltMapping mapping : HopperRecipeUtil.findAllSmeltMappings(outputProto)) {
+                if (!HopperRecipeUtil.matchesChoice(mapping.inputChoice(), moving)) {
+                    continue;
+                }
+                for (int i = 0; i < inv.getSize(); i++) {
+                    ItemStack slot = inv.getItem(i);
+                    if (slot == null || slot.getType().isAir()) {
+                        continue;
+                    }
+                    if (!HopperRecipeUtil.matchesChoice(mapping.inputChoice(), slot)) {
+                        continue;
+                    }
+                    if (!template.allows(slot, hopperBlock, keys)) {
+                        continue;
+                    }
+                    return true;
+                }
             }
         }
         return false;
     }
 
     private Set<Integer> processSmelt(Block hopperBlock, HopperTemplate template, HopperKeys keys,
-                                        boolean advanceTimer) {
+                                      boolean advanceTimer) {
         Set<Integer> reserved = new HashSet<>();
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER || template == null) {
             return reserved;
@@ -121,36 +157,35 @@ public final class HopperAutoSmeltService {
         }
 
         for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
-            HopperRecipeUtil.SmeltMapping mapping = HopperRecipeUtil.findSmeltMapping(outputProto);
-            if (mapping == null) {
-                continue;
-            }
-            RecipeChoice inputChoice = mapping.inputChoice();
-            for (int i = 0; i < inv.getSize(); i++) {
-                ItemStack slot = inv.getItem(i);
-                if (slot == null || slot.getType().isAir()) {
-                    continue;
+            List<HopperRecipeUtil.SmeltMapping> mappings = HopperRecipeUtil.findAllSmeltMappings(outputProto);
+            for (HopperRecipeUtil.SmeltMapping mapping : mappings) {
+                RecipeChoice inputChoice = mapping.inputChoice();
+                for (int i = 0; i < inv.getSize(); i++) {
+                    ItemStack slot = inv.getItem(i);
+                    if (slot == null || slot.getType().isAir()) {
+                        continue;
+                    }
+                    if (!HopperRecipeUtil.matchesChoice(inputChoice, slot)) {
+                        continue;
+                    }
+                    if (!template.allows(slot, hopperBlock, keys)) {
+                        continue;
+                    }
+                    int newAmount = slot.getAmount() - 1;
+                    if (newAmount <= 0) {
+                        inv.setItem(i, null);
+                    } else {
+                        ItemStack updated = slot.clone();
+                        updated.setAmount(newAmount);
+                        inv.setItem(i, updated);
+                    }
+                    ItemStack result = mapping.resultStack().clone();
+                    result.setAmount(1);
+                    jobs.put(key, new SmeltJob(i, result, smeltDurationTicks()));
+                    reserved.add(i);
+                    HopperContainerUtil.syncContainer(hopperBlock);
+                    return reserved;
                 }
-                if (!HopperRecipeUtil.matchesChoice(inputChoice, slot)) {
-                    continue;
-                }
-                if (!template.allows(slot, hopperBlock, keys)) {
-                    continue;
-                }
-                int newAmount = slot.getAmount() - 1;
-                if (newAmount <= 0) {
-                    inv.setItem(i, null);
-                } else {
-                    ItemStack updated = slot.clone();
-                    updated.setAmount(newAmount);
-                    inv.setItem(i, updated);
-                }
-                ItemStack result = mapping.resultStack().clone();
-                result.setAmount(1);
-                jobs.put(key, new SmeltJob(i, result, smeltDurationTicks()));
-                reserved.add(i);
-                HopperContainerUtil.syncContainer(hopperBlock);
-                return reserved;
             }
         }
         return reserved;

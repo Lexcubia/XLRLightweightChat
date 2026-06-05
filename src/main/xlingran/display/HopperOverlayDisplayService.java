@@ -40,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class HopperOverlayDisplayService {
 
     private static final double ITEM_ROW_SPACING = 0.38;
+    private static final double ITEM_ROW_HEIGHT = 0.28;
 
     private final Shan plugin;
     private final HopperKeys keys;
@@ -234,7 +235,6 @@ public final class HopperOverlayDisplayService {
         int textCount = filteredText.size();
         int targetTotal = itemCount + textCount;
         double lineHeight = pluginConfig.getHologramLineHeight();
-        double textGap = lineHeight + 0.05;
 
         for (int i = 0; i < itemCount; i++) {
             ItemStack display = singleDisplayStack(items.get(i));
@@ -263,7 +263,7 @@ public final class HopperOverlayDisplayService {
             }
             page = DHAPI.getHologramPage(hologram, 0);
             if (page != null && lineIndex < page.size()) {
-                applyTextLineLayout(DHAPI.getHologramLine(page, lineIndex), t, itemCount, lineHeight, textGap);
+                applyTextLineLayout(DHAPI.getHologramLine(page, lineIndex), lineHeight);
             }
         }
 
@@ -286,29 +286,28 @@ public final class HopperOverlayDisplayService {
         if (line == null || itemCount <= 0) {
             return;
         }
-        line.setHeight(0);
+        if (index == 0) {
+            line.setHeight(ITEM_ROW_HEIGHT);
+        } else {
+            line.setHeight(0);
+        }
         double centerOffset = (index - (itemCount - 1) / 2.0) * ITEM_ROW_SPACING;
         line.setOffsetX(centerOffset);
-        line.setOffsetY(0);
+        line.setOffsetY(index > 0 ? index * ITEM_ROW_HEIGHT : 0);
         line.setOffsetZ(0);
         line.setFacing(0f);
         line.update();
     }
 
-    private static void applyTextLineLayout(HologramLine line, int textIndex, int itemCount,
-                                            double lineHeight, double textGap) {
+    private static void applyTextLineLayout(HologramLine line, double lineHeight) {
         if (line == null) {
             return;
         }
         line.setHeight(lineHeight);
         line.setOffsetX(0);
+        line.setOffsetY(0);
         line.setOffsetZ(0);
         line.setFacing(0f);
-        if (textIndex == 0 && itemCount > 0) {
-            line.setOffsetY(textGap);
-        } else {
-            line.setOffsetY(0);
-        }
         line.update();
     }
 

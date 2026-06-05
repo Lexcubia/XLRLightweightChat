@@ -21,6 +21,8 @@ import java.util.Set;
  */
 public final class HopperAutoCraftService {
 
+    private static final int MAX_CRAFTS_PER_CALL = 4;
+
     public boolean shouldHoldOutbound(Block hopperBlock, HopperTemplate template, HopperKeys keys, ItemStack moving) {
         if (hopperBlock == null || template == null || moving == null || moving.getType().isAir()) {
             return false;
@@ -33,37 +35,21 @@ public final class HopperAutoCraftService {
                 return false;
             }
         }
-        for (ItemStack target : template.getAutoCraftTargets()) {
-            for (ShapelessRecipe recipe : HopperRecipeUtil.findShapelessRecipes(target)) {
-                if (matchesRecipeIngredient(hopperBlock, template, keys, moving, recipe.getChoiceList())) {
-                    return true;
-                }
-            }
-            for (ShapedRecipe recipe : HopperRecipeUtil.findShapedRecipes(target)) {
-                Map<RecipeChoice, Integer> needed = HopperRecipeUtil.shapedIngredientCounts(recipe);
-                for (RecipeChoice choice : needed.keySet()) {
-                    if (HopperRecipeUtil.matchesChoice(choice, moving)
-                            && template.allows(moving, hopperBlock, keys)) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    private static boolean matchesRecipeIngredient(Block hopperBlock, HopperTemplate template, HopperKeys keys,
-                                                   ItemStack moving, List<RecipeChoice> choices) {
-        if (choices == null) {
+        if (!(hopperBlock.getState() instanceof Container container)) {
             return false;
         }
-        for (RecipeChoice choice : choices) {
-            if (HopperRecipeUtil.matchesChoice(choice, moving)
-                    && template.allows(moving, hopperBlock, keys)) {
-                return true;
-            }
+        Inventory inv = container.getInventory();
+        CraftPlan plan = peekBestPlan(inv, hopperBlock, template, keys);
+        if (plan == null || !isMovingRecipeIngredient(hopperBlock, template, keys, moving)) {
+            return false;
         }
-        return false;
+        if (plan.canCraftNow()) {
+            return true;
+        }
+        if (plan.needed() == null || plan.needed().isEmpty()) {
+            return false;
+        }
+        return hasInsufficientMaterials(inv, hopperBlock, template, keys, plan.needed());
     }
 
     public Set<Integer> tryCraft(Block hopperBlock, HopperTemplate template, HopperKeys keys) {
@@ -79,23 +65,119 @@ public final class HopperAutoCraftService {
         }
         Inventory inv = container.getInventory();
 
+        for (int attempt = 0; attempt < MAX_CRAFTS_PER_CALL; attempt++) {
+            Set<Integer> result = tryCraftOnce(inv, hopperBlock, template, keys);
+            if (result == null) {
+                return reserved;
+            }
+            if (!result.isEmpty()) {
+                return result;
+            }
+            reserved = Set.of();
+        }
+        return reserved;
+    }
+
+    private Set<Integer> tryCraftOnce(Inventory inv, Block hopperBlock, HopperTemplate template, HopperKeys keys) {
         for (ItemStack target : template.getAutoCraftTargets()) {
             for (ShapelessRecipe recipe : HopperRecipeUtil.findShapelessRecipes(target)) {
-                Set<Integer> r = applyPlan(inv, hopperBlock, planShapeless(inv, hopperBlock, template, keys, recipe),
-                        recipe.getResult());
+                Set<Integer> r = applyPlan(inv, hopperBlock,
+                        planShapeless(inv, hopperBlock, template, keys, recipe), recipe.getResult());
                 if (r != null) {
                     return r;
                 }
             }
             for (ShapedRecipe recipe : HopperRecipeUtil.findShapedRecipes(target)) {
-                Set<Integer> r = applyPlan(inv, hopperBlock, planShaped(inv, hopperBlock, template, keys, recipe),
-                        recipe.getResult());
+                Set<Integer> r = applyPlan(inv, hopperBlock,
+                        planShaped(inv, hopperBlock, template, keys, recipe), recipe.getResult());
                 if (r != null) {
                     return r;
                 }
             }
         }
-        return reserved;
+        return null;
+    }
+
+    private static CraftPlan peekBestPlan(Inventory inv, Block hopperBlock, HopperTemplate template, HopperKeys keys) {
+        if (inv == null || template == null) {
+            return null;
+        }
+        for (ItemStack target : template.getAutoCraftTargets()) {
+            for (ShapelessRecipe recipe : HopperRecipeUtil.findShapelessRecipes(target)) {
+                CraftPlan plan = planShapeless(inv, hopperBlock, template, keys, recipe);
+                if (plan != null) {
+                    return plan;
+                }
+            }
+            for (ShapedRecipe recipe : HopperRecipeUtil.findShapedRecipes(target)) {
+                CraftPlan plan = planShaped(inv, hopperBlock, template, keys, recipe);
+                if (plan != null) {
+                    return plan;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean isMovingRecipeIngredient(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                                    ItemStack moving) {
+        if (!template.allows(moving, hopperBlock, keys)) {
+            return false;
+        }
+        for (ItemStack target : template.getAutoCraftTargets()) {
+            for (ShapelessRecipe recipe : HopperRecipeUtil.findShapelessRecipes(target)) {
+                if (matchesRecipeIngredient(hopperBlock, template, keys, moving, recipe.getChoiceList())) {
+                    return true;
+                }
+            }
+            for (ShapedRecipe recipe : HopperRecipeUtil.findShapedRecipes(target)) {
+                Map<RecipeChoice, Integer> needed = HopperRecipeUtil.shapedIngredientCounts(recipe);
+                for (RecipeChoice choice : needed.keySet()) {
+                    if (HopperRecipeUtil.matchesChoice(choice, moving)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasInsufficientMaterials(Inventory inv, Block hopperBlock, HopperTemplate template,
+                                                      HopperKeys keys, Map<RecipeChoice, Integer> needed) {
+        for (Map.Entry<RecipeChoice, Integer> entry : needed.entrySet()) {
+            if (countMatchingInInventory(inv, hopperBlock, template, keys, entry.getKey()) < entry.getValue()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int countMatchingInInventory(Inventory inv, Block hopperBlock, HopperTemplate template,
+                                                HopperKeys keys, RecipeChoice choice) {
+        int total = 0;
+        for (ItemStack stack : inv.getContents()) {
+            if (stack == null || stack.getType().isAir()) {
+                continue;
+            }
+            if (HopperRecipeUtil.matchesChoice(choice, stack) && template.allows(stack, hopperBlock, keys)) {
+                total += stack.getAmount();
+            }
+        }
+        return total;
+    }
+
+    private static boolean matchesRecipeIngredient(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                                   ItemStack moving, List<RecipeChoice> choices) {
+        if (choices == null) {
+            return false;
+        }
+        for (RecipeChoice choice : choices) {
+            if (HopperRecipeUtil.matchesChoice(choice, moving)
+                    && template.allows(moving, hopperBlock, keys)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Set<Integer> applyPlan(Inventory inv, Block hopperBlock, CraftPlan plan, ItemStack result) {
@@ -132,25 +214,25 @@ public final class HopperAutoCraftService {
     private static CraftPlan planChoiceCounts(Inventory inv, Block hopperBlock, HopperTemplate template,
                                               HopperKeys keys, Map<RecipeChoice, Integer> needed) {
         List<Integer> consume = new ArrayList<>();
-        List<Integer> used = new ArrayList<>();
+        Map<Integer, Integer> slotUsage = new HashMap<>();
         for (Map.Entry<RecipeChoice, Integer> entry : needed.entrySet()) {
             RecipeChoice choice = entry.getKey();
             int count = entry.getValue();
             for (int n = 0; n < count; n++) {
-                Integer slot = findSlotForChoice(inv, hopperBlock, template, keys, choice, used);
+                Integer slot = findSlotForChoice(inv, hopperBlock, template, keys, choice, slotUsage);
                 if (slot == null) {
                     Set<Integer> partial = collectPartial(inv, hopperBlock, template, keys, needed);
-                    return partial.isEmpty() ? null : new CraftPlan(List.of(), partial, false);
+                    return partial.isEmpty() ? null : new CraftPlan(List.of(), partial, false, needed);
                 }
-                used.add(slot);
+                slotUsage.merge(slot, 1, Integer::sum);
                 consume.add(slot);
             }
         }
-        return new CraftPlan(consume, Set.of(), true);
+        return new CraftPlan(consume, Set.of(), true, needed);
     }
 
     private static Set<Integer> collectPartial(Inventory inv, Block hopperBlock, HopperTemplate template,
-                                                 HopperKeys keys, Map<RecipeChoice, Integer> needed) {
+                                               HopperKeys keys, Map<RecipeChoice, Integer> needed) {
         Set<Integer> partial = new HashSet<>();
         for (RecipeChoice choice : needed.keySet()) {
             for (int i = 0; i < inv.getSize(); i++) {
@@ -180,13 +262,14 @@ public final class HopperAutoCraftService {
     }
 
     private static Integer findSlotForChoice(Inventory inv, Block hopperBlock, HopperTemplate template,
-                                             HopperKeys keys, RecipeChoice choice, List<Integer> used) {
+                                             HopperKeys keys, RecipeChoice choice, Map<Integer, Integer> slotUsage) {
         for (int i = 0; i < inv.getSize(); i++) {
-            if (used.contains(i)) {
-                continue;
-            }
             ItemStack slot = inv.getItem(i);
             if (slot == null || slot.getType().isAir()) {
+                continue;
+            }
+            int used = slotUsage.getOrDefault(i, 0);
+            if (used >= slot.getAmount()) {
                 continue;
             }
             if (!HopperRecipeUtil.matchesChoice(choice, slot)) {
@@ -218,6 +301,7 @@ public final class HopperAutoCraftService {
         return true;
     }
 
-    private record CraftPlan(List<Integer> slotsToConsume, Set<Integer> reservedSlots, boolean canCraftNow) {
+    private record CraftPlan(List<Integer> slotsToConsume, Set<Integer> reservedSlots, boolean canCraftNow,
+                             Map<RecipeChoice, Integer> needed) {
     }
 }
