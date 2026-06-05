@@ -97,9 +97,6 @@ public class Shan extends JavaPlugin {
             getLogger().warning("[XLRHopper] config.yml Version=" + configVersion
                     + " 与 plugin.yml 版本 " + pluginVersion + " 不一致");
         }
-        saveResource("Gui.yml", false);
-        saveResource("Message.yml", false);
-        saveResource("Update.yml", false);
 
         templateManager = new HopperTemplateManager();
         playerGuiSession = new PlayerGuiSession();

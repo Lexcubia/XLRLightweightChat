@@ -62,7 +62,6 @@ public final class GuiConfig {
         applyDefaults(loaded, jarDefaults);
         config = loaded;
         enchantNames = loadEnchantNames();
-        logLoadedTokens(file);
     }
 
     public void reload() {
@@ -121,14 +120,6 @@ public final class GuiConfig {
 
     private static boolean isPresent(String raw) {
         return raw != null && !raw.isEmpty();
-    }
-
-    private void logLoadedTokens(File file) {
-        logger.info("[XLRHopper] Gui.yml: " + file.getAbsolutePath()
-                + " | disk: toggleon=" + diskToggleOn
-                + " | merged: toggleon=" + readFlatToken(config, KEY_TOGGLE_ON)
-                + " | jar: toggleon=" + readFlatToken(jarDefaults, KEY_TOGGLE_ON)
-                + " | filtermodeon=" + resolveFlatToken(KEY_FILTERMODE_ON, diskFilterModeOn, "&a3名单模式"));
     }
 
     private Map<String, String> loadEnchantNames() {
