@@ -119,26 +119,6 @@ public final class GuiConfig {
         return isPresent(raw) ? raw : null;
     }
 
-    private static String readLegacyToken(YamlConfiguration cfg, String section, String child) {
-        ConfigurationSection sec = cfg.getConfigurationSection(section);
-        if (sec == null) {
-            return null;
-        }
-        String raw = sec.getString(child);
-        if (isPresent(raw)) {
-            return raw;
-        }
-        for (String k : sec.getKeys(false)) {
-            if (k.replace("\"", "").equalsIgnoreCase(child)) {
-                raw = sec.getString(k);
-                if (isPresent(raw)) {
-                    return raw;
-                }
-            }
-        }
-        return null;
-    }
-
     private static boolean isPresent(String raw) {
         return raw != null && !raw.isEmpty();
     }
@@ -181,27 +161,18 @@ public final class GuiConfig {
     public String toggle(boolean on) {
         String key = on ? KEY_TOGGLE_ON : KEY_TOGGLE_OFF;
         String disk = on ? diskToggleOn : diskToggleOff;
-        String legacySection = "toggle";
-        String legacyChild = on ? "on" : "off";
         String builtin = on ? "&a开启" : "&c关闭";
-        return color(resolveFlatToken(key, disk, legacySection, legacyChild, builtin));
+        return color(resolveFlatToken(key, disk, builtin));
     }
 
     public String filterMode(boolean whitelist) {
         String key = whitelist ? KEY_FILTERMODE_ON : KEY_FILTERMODE_OFF;
         String disk = whitelist ? diskFilterModeOn : diskFilterModeOff;
-        String legacySection = "filtermode";
-        String legacyChild = whitelist ? "on" : "off";
-        String builtin = whitelist ? "&a1名单模式" : "&c2名单模式";
-        return color(resolveFlatToken(key, disk, legacySection, legacyChild, builtin));
+        String builtin = whitelist ? "&a3名单模式" : "&c4名单模式";
+        return color(resolveFlatToken(key, disk, builtin));
     }
 
     private String resolveFlatToken(String flatKey, String diskValue, String builtinFallback) {
-        return resolveFlatToken(flatKey, diskValue, null, null, builtinFallback);
-    }
-
-    private String resolveFlatToken(String flatKey, String diskValue, String legacySection,
-                                    String legacyChild, String builtinFallback) {
         if (isPresent(diskValue)) {
             return diskValue;
         }
@@ -209,21 +180,9 @@ public final class GuiConfig {
         if (isPresent(raw)) {
             return raw;
         }
-        if (legacySection != null && legacyChild != null) {
-            raw = readLegacyToken(config, legacySection, legacyChild);
-            if (isPresent(raw)) {
-                return raw;
-            }
-        }
         raw = readFlatToken(jarDefaults, flatKey);
         if (isPresent(raw)) {
             return raw;
-        }
-        if (legacySection != null && legacyChild != null) {
-            raw = readLegacyToken(jarDefaults, legacySection, legacyChild);
-            if (isPresent(raw)) {
-                return raw;
-            }
         }
         return builtinFallback;
     }
