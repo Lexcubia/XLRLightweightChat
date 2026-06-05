@@ -165,8 +165,8 @@ public class Shan extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(gui, this);
         getServer().getPluginManager().registerEvents(
-                new HopperListener(this, templateManager, hopperKeys, hopperLaneListener, messageConfig, updateConfig,
-                        pluginConfig),
+                new HopperListener(this, templateManager, hopperKeys, hopperLaneListener, hopperTickService,
+                        messageConfig, updateConfig, pluginConfig),
                 this);
         getServer().getPluginManager().registerEvents(hopperLaneListener, this);
         getServer().getPluginManager().registerEvents(

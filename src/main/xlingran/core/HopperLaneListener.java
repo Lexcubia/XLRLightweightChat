@@ -108,7 +108,7 @@ public final class HopperLaneListener implements Listener {
         Block dest = xlingran.HopperBlockUtil.resolveHopperBlock(event.getDestination());
         Block src = xlingran.HopperBlockUtil.resolveHopperBlock(event.getSource());
         if (dest != null) {
-            scheduleEvaluate(dest);
+            scheduleEvaluateImmediate(dest);
         }
         if (src != null) {
             scheduleEvaluate(src);
@@ -122,11 +122,19 @@ public final class HopperLaneListener implements Listener {
         }
         Block block = xlingran.HopperBlockUtil.resolveHopperBlock(event.getInventory());
         if (block != null) {
-            scheduleEvaluate(block);
+            scheduleEvaluateImmediate(block);
         }
     }
 
     public void scheduleEvaluate(Block hopperBlock) {
+        scheduleEvaluate(hopperBlock, false);
+    }
+
+    public void scheduleEvaluateImmediate(Block hopperBlock) {
+        scheduleEvaluate(hopperBlock, true);
+    }
+
+    private void scheduleEvaluate(Block hopperBlock, boolean immediate) {
         if (hopperBlock == null || hopperBlock.getType() != org.bukkit.Material.HOPPER) {
             return;
         }
@@ -140,6 +148,14 @@ public final class HopperLaneListener implements Listener {
         if (key.isEmpty()) {
             return;
         }
+        if (immediate || hasAutomationLane(hopperBlock)) {
+            BukkitTask pending = debouncedEvaluate.remove(key);
+            if (pending != null) {
+                pending.cancel();
+            }
+            Bukkit.getScheduler().runTask(plugin, () -> runEvaluateAndAutomate(hopperBlock));
+            return;
+        }
         BukkitTask pending = debouncedEvaluate.remove(key);
         if (pending != null) {
             pending.cancel();
@@ -149,6 +165,20 @@ public final class HopperLaneListener implements Listener {
             runEvaluate(hopperBlock);
         }, EVALUATE_DEBOUNCE_TICKS);
         debouncedEvaluate.put(key, task);
+    }
+
+    private boolean hasAutomationLane(Block hopperBlock) {
+        HopperLane lane = tickService.getLaneRegistry().getLane(hopperBlock.getLocation());
+        if (lane == null) {
+            lane = tickService.getLaneRegistry().registerLane(hopperBlock, tickService.getKeys(),
+                    tickService.getTemplateManager(), tickService.getUpdateConfig());
+        }
+        return lane != null && (lane.isAutoCraft() || lane.isAutoSmelt());
+    }
+
+    private void runEvaluateAndAutomate(Block hopperBlock) {
+        runEvaluate(hopperBlock);
+        tickService.runAutomationImmediate(hopperBlock);
     }
 
     private void runEvaluate(Block hopperBlock) {

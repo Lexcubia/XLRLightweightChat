@@ -92,6 +92,43 @@ public final class HopperTickService implements Listener {
         }
     }
 
+    /**
+     * 入料后主线程即时尝试合成/熔炼，并刷新预留槽位（不等待 transferTick 冷却）。
+     */
+    public void runAutomationImmediate(Block block) {
+        if (block == null || block.getType() != Material.HOPPER || !pluginConfig.isPluginWorld(block)) {
+            return;
+        }
+        HopperLane lane = laneRegistry.getLane(block.getLocation());
+        if (lane == null || !lane.hasSnapshot()) {
+            lane = laneRegistry.registerLane(block, keys, templateManager, updateConfig);
+        }
+        if (lane == null || !lane.hasSnapshot()) {
+            return;
+        }
+        HopperTemplate template = lane.template();
+        if (template == null) {
+            return;
+        }
+        Location loc = block.getLocation();
+        Set<Integer> reserved = new HashSet<>(smeltService.getActiveReservedSlots(loc));
+        if (lane.isAutoSmelt() && pluginConfig.isAutoSmeltEnabled()) {
+            reserved.addAll(smeltService.tryStartSmelt(block, template, keys));
+        }
+        if (lane.isAutoCraft() && pluginConfig.isAutoCraftEnabled()) {
+            reserved.addAll(craftService.tryCraft(block, template, keys));
+        }
+        if (reserved.isEmpty()) {
+            reservation.clear(loc);
+        } else {
+            reservation.setReserved(loc, reserved);
+        }
+    }
+
+    public HopperAutoCraftService getCraftService() {
+        return craftService;
+    }
+
     private void tickAll() {
         int maxPerTick = pluginConfig.getPerTickMaxProcess();
         List<HopperLane> lanes = laneRegistry.workQueueSnapshot(maxPerTick);

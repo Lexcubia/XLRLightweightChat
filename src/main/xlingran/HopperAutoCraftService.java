@@ -21,6 +21,51 @@ import java.util.Set;
  */
 public final class HopperAutoCraftService {
 
+    public boolean shouldHoldOutbound(Block hopperBlock, HopperTemplate template, HopperKeys keys, ItemStack moving) {
+        if (hopperBlock == null || template == null || moving == null || moving.getType().isAir()) {
+            return false;
+        }
+        if (!template.isAutoCraftEnabled() || template.getAutoCraftTargets().isEmpty()) {
+            return false;
+        }
+        for (ItemStack target : template.getAutoCraftTargets()) {
+            if (HopperRecipeUtil.matchesPrototype(moving, target)) {
+                return false;
+            }
+        }
+        for (ItemStack target : template.getAutoCraftTargets()) {
+            for (ShapelessRecipe recipe : HopperRecipeUtil.findShapelessRecipes(target)) {
+                if (matchesRecipeIngredient(hopperBlock, template, keys, moving, recipe.getChoiceList())) {
+                    return true;
+                }
+            }
+            for (ShapedRecipe recipe : HopperRecipeUtil.findShapedRecipes(target)) {
+                Map<RecipeChoice, Integer> needed = HopperRecipeUtil.shapedIngredientCounts(recipe);
+                for (RecipeChoice choice : needed.keySet()) {
+                    if (HopperRecipeUtil.matchesChoice(choice, moving)
+                            && template.allows(moving, hopperBlock, keys)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean matchesRecipeIngredient(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                                   ItemStack moving, List<RecipeChoice> choices) {
+        if (choices == null) {
+            return false;
+        }
+        for (RecipeChoice choice : choices) {
+            if (HopperRecipeUtil.matchesChoice(choice, moving)
+                    && template.allows(moving, hopperBlock, keys)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public Set<Integer> tryCraft(Block hopperBlock, HopperTemplate template, HopperKeys keys) {
         Set<Integer> reserved = new HashSet<>();
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER || template == null) {

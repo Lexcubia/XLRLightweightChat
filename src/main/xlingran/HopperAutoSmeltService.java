@@ -36,6 +36,55 @@ public final class HopperAutoSmeltService {
      * @return 本 tick 预留的漏斗槽位
      */
     public Set<Integer> tick(Block hopperBlock, HopperTemplate template, HopperKeys keys) {
+        return processSmelt(hopperBlock, template, keys, true);
+    }
+
+    /**
+     * 入料后即时尝试启动熔炼，不推进已有 job 的计时。
+     */
+    public Set<Integer> tryStartSmelt(Block hopperBlock, HopperTemplate template, HopperKeys keys) {
+        return processSmelt(hopperBlock, template, keys, false);
+    }
+
+    public Set<Integer> getActiveReservedSlots(Location loc) {
+        Set<Integer> reserved = new HashSet<>();
+        if (loc == null || loc.getWorld() == null) {
+            return reserved;
+        }
+        SmeltJob job = jobs.get(laneKey(loc));
+        if (job != null) {
+            reserved.add(job.sourceSlot);
+        }
+        return reserved;
+    }
+
+    public boolean shouldHoldOutbound(Block hopperBlock, HopperTemplate template, HopperKeys keys, ItemStack moving) {
+        if (hopperBlock == null || template == null || moving == null || moving.getType().isAir()) {
+            return false;
+        }
+        if (!template.isAutoSmeltEnabled() || template.getAutoSmeltOutputs().isEmpty()) {
+            return false;
+        }
+        for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
+            if (HopperRecipeUtil.matchesPrototype(moving, outputProto)) {
+                return false;
+            }
+        }
+        for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
+            HopperRecipeUtil.SmeltMapping mapping = HopperRecipeUtil.findSmeltMapping(outputProto);
+            if (mapping == null) {
+                continue;
+            }
+            if (HopperRecipeUtil.matchesChoice(mapping.inputChoice(), moving)
+                    && template.allows(moving, hopperBlock, keys)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Set<Integer> processSmelt(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                        boolean advanceTimer) {
         Set<Integer> reserved = new HashSet<>();
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER || template == null) {
             return reserved;
@@ -57,19 +106,17 @@ public final class HopperAutoSmeltService {
 
         SmeltJob job = jobs.get(key);
         if (job != null) {
-            job.ticksRemaining -= TICK_STEP;
             reserved.add(job.sourceSlot);
-            if (job.ticksRemaining <= 0) {
-                ItemStack output = job.outputStack.clone();
-                output.setAmount(1);
-                HopperContainerUtil.refund(hopperBlock, inv, output);
-                jobs.remove(key);
-                HopperContainerUtil.syncContainer(hopperBlock);
+            if (advanceTimer) {
+                job.ticksRemaining -= TICK_STEP;
+                if (job.ticksRemaining <= 0) {
+                    ItemStack output = job.outputStack.clone();
+                    output.setAmount(1);
+                    HopperContainerUtil.refund(hopperBlock, inv, output);
+                    jobs.remove(key);
+                    HopperContainerUtil.syncContainer(hopperBlock);
+                }
             }
-            return reserved;
-        }
-
-        if (jobs.containsKey(key)) {
             return reserved;
         }
 

@@ -4,7 +4,6 @@ import eu.decentsoftware.holograms.api.DHAPI;
 import eu.decentsoftware.holograms.api.holograms.Hologram;
 import eu.decentsoftware.holograms.api.holograms.HologramLine;
 import eu.decentsoftware.holograms.api.holograms.HologramPage;
-import eu.decentsoftware.holograms.api.utils.items.HologramItem;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
@@ -28,8 +27,10 @@ import xlingran.gui.TextPlaceholders;
 import xlingran.gui.UpdateConfig;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -119,7 +120,7 @@ public final class HopperOverlayDisplayService {
             return;
         }
 
-        List<ItemStack> items = collectHopperItems(block);
+        List<ItemStack> items = collectTransferDisplayItems(block);
         List<String> textLines = buildOverlayLines(block, template, config);
         String signature = contentSignature(textLines, items);
         String locKey = locationKey(block.getLocation());
@@ -232,14 +233,15 @@ public final class HopperOverlayDisplayService {
         int itemCount = items.size();
         int textCount = filteredText.size();
         int targetTotal = itemCount + textCount;
-        int previousTotal = page.size();
+        double lineHeight = pluginConfig.getHologramLineHeight();
+        double textGap = lineHeight + 0.05;
 
         for (int i = 0; i < itemCount; i++) {
-            String itemLine = toSmallHeadLineContent(items.get(i));
+            ItemStack display = singleDisplayStack(items.get(i));
             if (i < page.size()) {
-                DHAPI.setHologramLine(hologram, i, itemLine);
+                DHAPI.setHologramLine(hologram, i, display);
             } else {
-                DHAPI.addHologramLine(hologram, itemLine);
+                DHAPI.addHologramLine(hologram, display);
             }
             page = DHAPI.getHologramPage(hologram, 0);
             if (page != null && i < page.size()) {
@@ -259,6 +261,10 @@ public final class HopperOverlayDisplayService {
             } else {
                 DHAPI.addHologramLine(hologram, line);
             }
+            page = DHAPI.getHologramPage(hologram, 0);
+            if (page != null && lineIndex < page.size()) {
+                applyTextLineLayout(DHAPI.getHologramLine(page, lineIndex), t, itemCount, lineHeight, textGap);
+            }
         }
 
         page = DHAPI.getHologramPage(hologram, 0);
@@ -273,9 +279,7 @@ public final class HopperOverlayDisplayService {
             }
         }
 
-        if (previousTotal != targetTotal) {
-            hologram.realignLines();
-        }
+        hologram.realignLines();
     }
 
     private static void applyItemLineLayout(HologramLine line, int index, int itemCount) {
@@ -291,17 +295,21 @@ public final class HopperOverlayDisplayService {
         line.update();
     }
 
-    private static String toSmallHeadLineContent(ItemStack stack) {
-        ItemStack one = singleDisplayStack(stack);
-        HologramItem item = HologramItem.fromItemStack(one);
-        String content = item.getContent();
-        if (content != null && content.startsWith("#ICON:")) {
-            return "#SMALLHEAD:" + content.substring(6);
+    private static void applyTextLineLayout(HologramLine line, int textIndex, int itemCount,
+                                            double lineHeight, double textGap) {
+        if (line == null) {
+            return;
         }
-        if (content != null && !content.isBlank()) {
-            return content.replaceFirst("#ICON:", "#SMALLHEAD:");
+        line.setHeight(lineHeight);
+        line.setOffsetX(0);
+        line.setOffsetZ(0);
+        line.setFacing(0f);
+        if (textIndex == 0 && itemCount > 0) {
+            line.setOffsetY(textGap);
+        } else {
+            line.setOffsetY(0);
         }
-        return "#SMALLHEAD: " + one.getType().name();
+        line.update();
     }
 
     private static List<String> filterTextLines(List<String> textLines) {
@@ -362,16 +370,20 @@ public final class HopperOverlayDisplayService {
         return sb.toString();
     }
 
-    private List<ItemStack> collectHopperItems(Block block) {
+    private List<ItemStack> collectTransferDisplayItems(Block block) {
         List<ItemStack> out = new ArrayList<>();
+        Set<Material> seen = new HashSet<>();
         Inventory inv = HopperContainerUtil.getContainerInventory(block);
         if (inv == null) {
             return out;
         }
         for (int i = 0; i < inv.getSize(); i++) {
             ItemStack stack = inv.getItem(i);
-            if (stack != null && !stack.getType().isAir()) {
-                out.add(stack);
+            if (stack == null || stack.getType().isAir()) {
+                continue;
+            }
+            if (seen.add(stack.getType())) {
+                out.add(singleDisplayStack(stack));
             }
         }
         return out;

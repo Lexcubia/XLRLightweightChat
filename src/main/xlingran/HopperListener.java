@@ -23,7 +23,9 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+import xlingran.core.HopperLane;
 import xlingran.core.HopperLaneListener;
+import xlingran.core.HopperLaneRegistry;
 import xlingran.gui.HopperLevelDef;
 import xlingran.gui.MessageConfig;
 import xlingran.gui.UpdateConfig;
@@ -36,17 +38,20 @@ public class HopperListener implements Listener {
     private final HopperTemplateManager templateManager;
     private final HopperKeys keys;
     private final HopperLaneListener laneListener;
+    private final HopperTickService tickService;
     private final MessageConfig messageConfig;
     private final UpdateConfig updateConfig;
     private final XLRHopperConfig pluginConfig;
 
     public HopperListener(JavaPlugin plugin, HopperTemplateManager templateManager, HopperKeys keys,
-                          HopperLaneListener laneListener, MessageConfig messageConfig, UpdateConfig updateConfig,
+                          HopperLaneListener laneListener, HopperTickService tickService,
+                          MessageConfig messageConfig, UpdateConfig updateConfig,
                           XLRHopperConfig pluginConfig) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.keys = keys;
         this.laneListener = laneListener;
+        this.tickService = tickService;
         this.messageConfig = messageConfig;
         this.updateConfig = updateConfig;
         this.pluginConfig = pluginConfig;
@@ -155,6 +160,24 @@ public class HopperListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onInventoryMoveHoldOutbound(InventoryMoveItemEvent event) {
+        if (event.getSource().getType() != InventoryType.HOPPER) {
+            return;
+        }
+        Block hopperBlock = HopperBlockUtil.resolveHopperBlock(event.getSource());
+        if (!isActiveHopper(hopperBlock)) {
+            return;
+        }
+        ItemStack moving = event.getItem();
+        if (moving == null || moving.getType().isAir()) {
+            return;
+        }
+        if (shouldHoldHopperOutbound(hopperBlock, moving)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInventoryMoveGate(InventoryMoveItemEvent event) {
         ItemStack moving = event.getItem();
         if (moving == null || moving.getType().isAir() || updateConfig == null) {
@@ -238,6 +261,25 @@ public class HopperListener implements Listener {
         }
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onHopperInventoryClickAfter(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player)) {
+            return;
+        }
+        InventoryView view = event.getView();
+        if (view.getTopInventory().getType() != InventoryType.HOPPER) {
+            return;
+        }
+        Block hopperBlock = HopperBlockUtil.resolveHopperBlock(view.getTopInventory());
+        if (!isActiveHopper(hopperBlock)) {
+            return;
+        }
+        ItemStack incoming = extractItemEnteringHopper(event);
+        if (incoming != null && !incoming.getType().isAir()) {
+            laneListener.scheduleEvaluateImmediate(hopperBlock);
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInventoryDrag(InventoryDragEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) {
@@ -269,6 +311,21 @@ public class HopperListener implements Listener {
         }
         if (rejectIfFiltered(player, hopperBlock, dragged)) {
             event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onInventoryDragAfter(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player)) {
+            return;
+        }
+        InventoryView view = event.getView();
+        if (view.getTopInventory().getType() != InventoryType.HOPPER) {
+            return;
+        }
+        Block hopperBlock = HopperBlockUtil.resolveHopperBlock(view.getTopInventory());
+        if (isActiveHopper(hopperBlock)) {
+            laneListener.scheduleEvaluateImmediate(hopperBlock);
         }
     }
 
@@ -316,6 +373,24 @@ public class HopperListener implements Listener {
 
     private HopperTemplate resolveTemplate(Block block) {
         return HopperTemplateResolver.resolve(block, keys, templateManager);
+    }
+
+    private boolean shouldHoldHopperOutbound(Block hopperBlock, ItemStack moving) {
+        HopperTemplate template = resolveTemplate(hopperBlock);
+        if (template == null) {
+            return false;
+        }
+        HopperLaneRegistry registry = tickService.getLaneRegistry();
+        HopperLane lane = registry.getLane(hopperBlock.getLocation());
+        if (lane == null) {
+            lane = registry.registerLane(hopperBlock, keys, templateManager, updateConfig);
+        }
+        if (lane != null && lane.isAutoCraft() && pluginConfig.isAutoCraftEnabled()
+                && tickService.getCraftService().shouldHoldOutbound(hopperBlock, template, keys, moving)) {
+            return true;
+        }
+        return lane != null && lane.isAutoSmelt() && pluginConfig.isAutoSmeltEnabled()
+                && tickService.getSmeltService().shouldHoldOutbound(hopperBlock, template, keys, moving);
     }
 
     private ItemStack extractItemEnteringHopper(InventoryClickEvent event) {

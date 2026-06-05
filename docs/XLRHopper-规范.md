@@ -205,6 +205,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - 规则同「过滤的物品」：可自由存取；关闭时按 `FilterItemMatcher.sameRule` 去重并退回重复项
 - 样板为**合成结果**（如工作台）；插件在漏斗 5 格内匹配 `CraftingRecipe` 后扣除原料并产出 1 个结果
 - 未凑齐配方的原料槽位由 `HopperReservation` 预留，不参与反向 push/pull
+- **入料即时合成**：物品进入漏斗（`InventoryMoveItem` / `InventoryPickupItem`）后，开启自动合成的 lane **跳过 4 tick 防抖**，同一 tick 执行 `runEvaluate` + `HopperAutoCraftService.tryCraft`
+- **出站门控**：`HopperListener`（`HIGH`）在漏斗向下游输出前调用 `shouldHoldOutbound`；匹配配方原料且非产物样板的物品 **取消** `InventoryMoveItemEvent`，避免原版先于合成把原料整组送入箱子；**产物**（匹配样板）正常放行
 
 ### 4.8 自动熔炼（行数可配）
 
@@ -213,6 +215,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - 规则同「过滤的物品」
 - 样板为**熔炼产出**（如烤马铃薯）；由 `FurnaceRecipe` / `CookingRecipe` 反查输入
 - 每漏斗同时仅 1 个熔炼 job；**100 tick（5 秒）** 后产出 1 个放回漏斗；熔炼中输入预留
+- **入料即时熔炼**：与 §4.7 对称，开启自动熔炼的 lane 入料后同一 tick 执行 `tryStartSmelt`
+- **出站门控**：`shouldHoldOutbound` 在 job 进行中或物品为熔炼输入时拦截向下游输出；**产物**（匹配样板，如铁锭）正常放行
 
 ### 4.4 过滤附魔属性（6 行 × 9 列）
 
@@ -236,8 +240,11 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 - **依赖**：服务端须安装 [DecentHolograms](https://github.com/DecentSoftware-eu/DecentHolograms)（≥ 2.0.12，`plugin.yml` `softdepend`）；未安装时 XLRHopper 仍可加载，悬浮不可用。
 - 实现：`display.HopperOverlayDisplayService` + `display.HopperOverlayListener`；**不**进入 `HopperTickService`（属 P0 事件驱动，与 8 tick `workQueue` 排水无关）。
-- 全息：`DHAPI.createHologram` **非持久化**（`xlrhopper_{world}_{x}_{y}_{z}`）；物品行 **`#SMALLHEAD`**（`HologramItem.fromItemStack` 序列化，`setOffsetX` 横向并排、`setHeight(0)`、`setFacing(0)`）+ 五行文本（漏斗等级 `Update.yml` `name`、模板名、白/黑名单、附魔数、耐久）；`setAlwaysFacePlayer(false)`。
-- 增量刷新：`DHAPI.setHologramLine` 按行更新；内容签名**不含物品数量**；行数不变时跳过 `realignLines` / `setLocation`。
+- **布局（自上而下）**：
+  - **最顶层物品带**：漏斗 5 格内非空气物品，按 `Material` 去重（保留槽位从左到右首次出现顺序），最多 5 个小图标；`DHAPI.setHologramLine(hologram, i, ItemStack)`（**非**字符串 `#SMALLHEAD`）；`setOffsetX` 横向并排、`setHeight(0)`、`setFacing(0)`
+  - **其下文本带**：`config.yml` → `Hologram.hologram-lines` 五行（漏斗等级 `Update.yml` `name`、模板名、白/黑名单、附魔数、耐久）；各行 `setHeight(Hologram.line-height)`；首行文本在物品带下方偏移 `line-height + 0.05`，避免与物品行重叠
+- 全息：`DHAPI.createHologram` **非持久化**（`xlrhopper_{world}_{x}_{y}_{z}`）；`setAlwaysFacePlayer(false)`；每次 `syncLines` 后 `realignLines()`
+- 增量刷新：`DHAPI.setHologramLine` 按行更新；内容签名基于**材质集合**（不含数量）；签名未变时跳过重建
 - 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用 **4 tick 防抖**；内容签名未变则跳过重建。
 - `DecentHologramsReloadEvent` 后恢复已开启 `hover-display` 的全息。
 - 文案硬编码于 Java；**不读** `Gui.yml` 悬浮行配置；`Message.yml` 悬浮相关：`overlay-feature-disabled`（未安装 DH 时开启悬浮）、`overlay-dh-missing`（保留键，运行时未使用）。
@@ -302,6 +309,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 - `ChunkLoad`、`BlockPlace`、批量套模板、库存移动、邻居变化等：登记 `HopperLane`、构建 **`FilterSnapshot`**（一次 resolve）、更新自动化标志、`workQueue.offer/remove`
 - **禁止**在 8 tick 内做登记、resolve、全服盲扫、`syncHopper`
+- **自动合成 / 自动熔炼 lane 入料即时处理**：物品**进入**漏斗时 `scheduleEvaluateImmediate`（跳过 4 tick 防抖）→ `runEvaluate` + `HopperTickService.runAutomationImmediate`（`tryCraft` / `tryStartSmelt`）
+- **出站门控**（`HopperListener`，`InventoryMoveItemEvent` `HIGH`）：漏斗作为 `source` 向下游输出时，`HopperAutoCraftService.shouldHoldOutbound` / `HopperAutoSmeltService.shouldHoldOutbound` 拦截配方原料与熔炼输入；产物样板匹配的物品放行
 
 **阶段 B（每 8 tick，`HopperTickService.tickAll`）**
 
@@ -311,7 +320,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
   3. `HopperTransferReverse.transferStep`（仅 `reverse-suction`）
 - 无剩余工作或目标满缓存则 **出队**；否则保留待下周期
 
-合成在传输前执行；熔炼/合成预留槽位不参与反向搬运。
+合成在传输前执行；熔炼/合成预留槽位不参与反向搬运。入料即时路径与 8 tick 管线互补，确保原版漏斗向下输出不会早于自动化消耗原料。
 
 ### 6.3.2 自动销毁（auto-destroy）
 
