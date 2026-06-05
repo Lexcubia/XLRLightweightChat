@@ -149,14 +149,12 @@ Filter-Item:
     rows: 6
     name: "&6过滤的物品"
 
-# 开和关变量（替换 Lore 中 %toggle%）；键名须加引号，避免 YAML 将 on/off 解析为布尔值
-toggle:
-    "on": "&a启"
-    "off": "&c关"
+# 开和关变量（替换 Lore 中 %toggle%）
+toggleon: "&a开启"
+toggleoff: "&c关闭"
 # 白名单和黑名单切换变量（替换 Lore 中 %filtermode%）
-filtermode:
-    "on": "&a1名单模式"
-    "off": "&c2名单模式"
+filtermodeon: "&a3名单模式"
+filtermodeoff: "&c4名单模式"
 
 # 附魔名称对照表
 enchant-names:

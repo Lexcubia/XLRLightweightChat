@@ -30,6 +30,11 @@ public final class GuiConfig {
     public static final int ROWS_HOPPER_SETTING = 3;
     public static final int MAX_STORAGE_ROWS = 6;
 
+    private static final String KEY_TOGGLE_ON = "toggleon";
+    private static final String KEY_TOGGLE_OFF = "toggleoff";
+    private static final String KEY_FILTERMODE_ON = "filtermodeon";
+    private static final String KEY_FILTERMODE_OFF = "filtermodeoff";
+
     private final JavaPlugin plugin;
     private final Logger logger;
     private YamlConfiguration config;
@@ -94,102 +99,44 @@ public final class GuiConfig {
     }
 
     private void captureDiskTokens(YamlConfiguration loaded, File file) {
-        diskToggleOn = readTokenFromSection(loaded, "toggle", "on");
-        diskToggleOff = readTokenFromSection(loaded, "toggle", "off");
-        diskFilterModeOn = readTokenFromSection(loaded, "filtermode", "on");
-        diskFilterModeOff = readTokenFromSection(loaded, "filtermode", "off");
+        diskToggleOn = readFlatToken(loaded, KEY_TOGGLE_ON);
+        diskToggleOff = readFlatToken(loaded, KEY_TOGGLE_OFF);
+        diskFilterModeOn = readFlatToken(loaded, KEY_FILTERMODE_ON);
+        diskFilterModeOff = readFlatToken(loaded, KEY_FILTERMODE_OFF);
 
-        if (diskToggleOn == null) {
-            diskToggleOn = findMisnestedToken(loaded, "toggle", "on");
-        }
-        if (diskToggleOff == null) {
-            diskToggleOff = findMisnestedToken(loaded, "toggle", "off");
-        }
-        if (diskFilterModeOn == null) {
-            diskFilterModeOn = findMisnestedToken(loaded, "filtermode", "on");
-        }
-        if (diskFilterModeOff == null) {
-            diskFilterModeOff = findMisnestedToken(loaded, "filtermode", "off");
-        }
-
-        diagnoseSection(loaded, file, "toggle", diskToggleOn);
-        diagnoseSection(loaded, file, "filtermode", diskFilterModeOn);
-    }
-
-    private void diagnoseSection(YamlConfiguration loaded, File file, String sectionName, String diskValue) {
-        Object node = loaded.get(sectionName);
-        if (node == null && diskValue == null) {
-            logger.warning("[XLRHopper] Gui.yml 缺少根节点 " + sectionName + "（须与 TemplateSet 同级顶格）: "
+        if (!isPresent(diskToggleOn) && !isPresent(diskToggleOff)
+                && !isPresent(diskFilterModeOn) && !isPresent(diskFilterModeOff)) {
+            logger.warning("[XLRHopper] Gui.yml 缺少 toggleon/toggleoff/filtermodeon/filtermodeoff（根节点顶格）: "
                     + file.getAbsolutePath());
-            return;
-        }
-        if (node instanceof String) {
-            logger.warning("[XLRHopper] Gui.yml 节点 " + sectionName + " 被解析为字符串「" + node
-                    + "」而非节；请改为:\n" + sectionName + ":\n    \"on\": \"&a启\"");
-            return;
-        }
-        if (diskValue == null) {
-            ConfigurationSection section = loaded.getConfigurationSection(sectionName);
-            if (section != null) {
-                logger.warning("[XLRHopper] Gui.yml 存在 " + sectionName + " 节但读不到 on/off，子键="
-                        + section.getKeys(false) + "；建议对 on/off 加引号: \"on\": \"&a启\"");
-            }
         }
     }
 
-    private String findMisnestedToken(YamlConfiguration loaded, String sectionName, String childKey) {
-        String suffix = sectionName + "." + childKey;
-        for (String key : loaded.getKeys(true)) {
-            if (!key.endsWith(suffix) || key.equals(suffix)) {
-                continue;
-            }
-            String raw = readTokenFromSection(loaded, key.substring(0, key.length() - childKey.length() - 1),
-                    childKey);
-            if (raw == null) {
-                raw = loaded.getString(key);
-            }
-            if (isPresent(raw)) {
-                logger.warning("[XLRHopper] Gui.yml 发现 " + suffix + " 位于非根路径 " + key
-                        + "，请移到根节点与 TemplateSet 同级");
-                return raw;
-            }
-        }
-        return null;
-    }
-
-    private static String readTokenFromSection(YamlConfiguration cfg, String sectionName, String childKey) {
-        ConfigurationSection section = cfg.getConfigurationSection(sectionName);
-        if (section == null) {
+    private static String readFlatToken(YamlConfiguration cfg, String key) {
+        if (cfg == null) {
             return null;
         }
-        String raw = section.getString(childKey);
+        String raw = cfg.getString(key);
+        return isPresent(raw) ? raw : null;
+    }
+
+    private static String readLegacyToken(YamlConfiguration cfg, String section, String child) {
+        ConfigurationSection sec = cfg.getConfigurationSection(section);
+        if (sec == null) {
+            return null;
+        }
+        String raw = sec.getString(child);
         if (isPresent(raw)) {
             return raw;
         }
-        for (String key : section.getKeys(false)) {
-            if (!normalizeKey(key).equalsIgnoreCase(childKey)) {
-                continue;
-            }
-            raw = section.getString(key);
-            if (isPresent(raw)) {
-                return raw;
-            }
-            Object val = section.get(key);
-            if (val != null && !(val instanceof ConfigurationSection)) {
-                String text = val.toString();
-                if (isPresent(text)) {
-                    return text;
+        for (String k : sec.getKeys(false)) {
+            if (k.replace("\"", "").equalsIgnoreCase(child)) {
+                raw = sec.getString(k);
+                if (isPresent(raw)) {
+                    return raw;
                 }
             }
         }
         return null;
-    }
-
-    private static String normalizeKey(String key) {
-        if (key == null) {
-            return "";
-        }
-        return key.replace("\"", "").trim();
     }
 
     private static boolean isPresent(String raw) {
@@ -197,12 +144,11 @@ public final class GuiConfig {
     }
 
     private void logLoadedTokens(File file) {
-        String jarOn = readTokenFromSection(jarDefaults, "toggle", "on");
         logger.info("[XLRHopper] Gui.yml: " + file.getAbsolutePath()
-                + " | disk: toggle.on=" + diskToggleOn
-                + " | merged: toggle.on=" + readTokenFromSection(config, "toggle", "on")
-                + " | jar: toggle.on=" + jarOn
-                + " | filtermode.on=" + resolveToken("filtermode", "on", diskFilterModeOn, "&a1名单模式"));
+                + " | disk: toggleon=" + diskToggleOn
+                + " | merged: toggleon=" + readFlatToken(config, KEY_TOGGLE_ON)
+                + " | jar: toggleon=" + readFlatToken(jarDefaults, KEY_TOGGLE_ON)
+                + " | filtermodeon=" + resolveFlatToken(KEY_FILTERMODE_ON, diskFilterModeOn, "&a3名单模式"));
     }
 
     private Map<String, String> loadEnchantNames() {
@@ -233,30 +179,51 @@ public final class GuiConfig {
     }
 
     public String toggle(boolean on) {
-        String child = on ? "on" : "off";
+        String key = on ? KEY_TOGGLE_ON : KEY_TOGGLE_OFF;
         String disk = on ? diskToggleOn : diskToggleOff;
-        String builtin = on ? "&a启" : "&c关";
-        return color(resolveToken("toggle", child, disk, builtin));
+        String legacySection = "toggle";
+        String legacyChild = on ? "on" : "off";
+        String builtin = on ? "&a开启" : "&c关闭";
+        return color(resolveFlatToken(key, disk, legacySection, legacyChild, builtin));
     }
 
     public String filterMode(boolean whitelist) {
-        String child = whitelist ? "on" : "off";
+        String key = whitelist ? KEY_FILTERMODE_ON : KEY_FILTERMODE_OFF;
         String disk = whitelist ? diskFilterModeOn : diskFilterModeOff;
+        String legacySection = "filtermode";
+        String legacyChild = whitelist ? "on" : "off";
         String builtin = whitelist ? "&a1名单模式" : "&c2名单模式";
-        return color(resolveToken("filtermode", child, disk, builtin));
+        return color(resolveFlatToken(key, disk, legacySection, legacyChild, builtin));
     }
 
-    private String resolveToken(String sectionName, String childKey, String diskValue, String builtinFallback) {
+    private String resolveFlatToken(String flatKey, String diskValue, String builtinFallback) {
+        return resolveFlatToken(flatKey, diskValue, null, null, builtinFallback);
+    }
+
+    private String resolveFlatToken(String flatKey, String diskValue, String legacySection,
+                                    String legacyChild, String builtinFallback) {
         if (isPresent(diskValue)) {
             return diskValue;
         }
-        String raw = readTokenFromSection(config, sectionName, childKey);
+        String raw = readFlatToken(config, flatKey);
         if (isPresent(raw)) {
             return raw;
         }
-        raw = readTokenFromSection(jarDefaults, sectionName, childKey);
+        if (legacySection != null && legacyChild != null) {
+            raw = readLegacyToken(config, legacySection, legacyChild);
+            if (isPresent(raw)) {
+                return raw;
+            }
+        }
+        raw = readFlatToken(jarDefaults, flatKey);
         if (isPresent(raw)) {
             return raw;
+        }
+        if (legacySection != null && legacyChild != null) {
+            raw = readLegacyToken(jarDefaults, legacySection, legacyChild);
+            if (isPresent(raw)) {
+                return raw;
+            }
         }
         return builtinFallback;
     }

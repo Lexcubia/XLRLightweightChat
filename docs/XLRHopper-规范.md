@@ -50,11 +50,12 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 - 由 JAR 内预置文件 **`saveResource("Gui.yml", false)`** 释放；**不**用代码生成 YAML；已存在文件不会被覆盖。
 - 占位符：`%Template%`、`%modename%`、`%toggle%`、`%filtermode%`、`%Durability%`、`%Enchant%` 等。
-- **`toggle` / `filtermode`（根节点，与 `TemplateSet` 同级顶格）**：
-  - `%toggle%` ← `toggle.on`（开启）/ `toggle.off`（关闭），如 Lore `&a当前状态: %toggle%` → `当前状态: 启`
-  - `%filtermode%` ← `filtermode.on` / `filtermode.off`
-  - 须修改服务端 **`plugins/XLRHopper/Gui.yml`**（非 jar 内文件）；`GuiConfig.toggle()` 每次打开 GUI 时从 `config` 实时读取（与 `TemplateSet` 一致）
-  - `/xlrhopper reload` 与重启均会重载；控制台打印 `toggle.on=... (isSet=...)`
+- **开关文案（根节点顶格，与 `TemplateSet` 同级）**：
+  - `%toggle%` ← `toggleon`（开启）/ `toggleoff`（关闭），如 `toggleon: "&a开启"`
+  - `%filtermode%` ← `filtermodeon` / `filtermodeoff`
+  - 须修改服务端 **`plugins/XLRHopper/Gui.yml`**（非 jar 内文件）；`GuiConfig.toggle()` 每次打开 GUI 时实时读取
+  - `/xlrhopper reload` 与重启均会重载；控制台打印 `toggleon=...`
+  - 旧版 `toggle.on` / `filtermode.on` 嵌套写法仍兼容，建议改用上述扁平键名
 - **仅** `Auto-Crafting`、`Filter-Item`、`Auto-Furnace` 可配置 **`rows`（≥1，建议 ≤6）**；其余界面行数在 `GuiConfig` 中硬编码（3/5/6 行等）。
 - 附魔显示名：key 为 **registry 小写**（如 `fire_protection`）；`EnchantNameTable` 委托 `GuiConfig` 查询。
 - 修改后执行 `/xlrhopper reload` 生效；已打开的模板列表/模板设置/漏斗设置/附魔过滤界面会**自动重绘**（`toggle` / `filtermode` 等 Lore 立即更新）。存储类界面（过滤物品、自动合成、自动熔炼）不自动刷新，以免丢失未保存编辑。
