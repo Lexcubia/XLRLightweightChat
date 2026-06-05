@@ -18,34 +18,56 @@ public final class HopperTransferReverse {
     private HopperTransferReverse() {
     }
 
-    /**
-     * @return 本 tick 成功搬运的物品件数（用于传输门控计数）
-     */
-    public static int transferStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
-                                   HopperReservation reservation, int maxItem) {
+    public record ReverseTransferResult(int moved, boolean pushTargetFull) {
+    }
+
+    private enum MoveResult {
+        SUCCESS,
+        TARGET_FULL,
+        FAILED
+    }
+
+    private enum PushAttempt {
+        MOVED,
+        TARGET_FULL,
+        NO_WORK
+    }
+
+    public static ReverseTransferResult transferStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                                     HopperReservation reservation, int maxItem) {
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER
                 || !HopperBlockConfig.isReverse(hopperBlock, keys) || template == null) {
-            return 0;
+            return new ReverseTransferResult(0, false);
         }
         if (!(hopperBlock.getState() instanceof Container hopperContainer)) {
-            return 0;
+            return new ReverseTransferResult(0, false);
         }
         Inventory hopperInv = hopperContainer.getInventory();
         Set<Integer> reserved = reservation.getReserved(hopperBlock.getLocation());
 
         int limit = Math.max(1, maxItem);
         int moved = 0;
+        PushAttempt lastPushAttempt = PushAttempt.NO_WORK;
         for (int i = 0; i < limit; i++) {
             Block aboveBlock = hopperBlock.getRelative(BlockFace.UP);
             Inventory aboveInv = HopperContainerUtil.getContainerInventory(aboveBlock);
-            if (aboveInv == null || !tryPushOne(hopperInv, hopperBlock, aboveInv, aboveBlock, template, keys, reserved)) {
+            if (aboveInv == null) {
+                lastPushAttempt = PushAttempt.NO_WORK;
+                break;
+            }
+            PushAttempt attempt = tryPushOne(hopperInv, hopperBlock, aboveInv, aboveBlock, template, keys, reserved);
+            lastPushAttempt = attempt;
+            if (attempt != PushAttempt.MOVED) {
                 break;
             }
             moved++;
         }
         if (moved > 0) {
             HopperContainerUtil.syncContainer(hopperBlock);
-            return moved;
+            return new ReverseTransferResult(moved, false);
+        }
+        if (lastPushAttempt == PushAttempt.TARGET_FULL) {
+            return new ReverseTransferResult(0, true);
         }
 
         for (int i = 0; i < limit; i++) {
@@ -59,11 +81,12 @@ public final class HopperTransferReverse {
         if (moved > 0) {
             HopperContainerUtil.syncContainer(hopperBlock);
         }
-        return moved;
+        return new ReverseTransferResult(moved, false);
     }
 
-    private static boolean tryPushOne(Inventory hopperInv, Block hopperBlock, Inventory to, Block toBlock,
-                                      HopperTemplate template, HopperKeys keys, Set<Integer> reserved) {
+    private static PushAttempt tryPushOne(Inventory hopperInv, Block hopperBlock, Inventory to, Block toBlock,
+                                          HopperTemplate template, HopperKeys keys, Set<Integer> reserved) {
+        boolean hasPushable = false;
         for (int i = 0; i < hopperInv.getSize(); i++) {
             if (reserved.contains(i)) {
                 continue;
@@ -72,13 +95,18 @@ public final class HopperTransferReverse {
             if (slot == null || slot.getType().isAir() || !template.allows(slot, hopperBlock, keys)) {
                 continue;
             }
-            if (moveOne(hopperInv, i, to, toBlock, hopperBlock)) {
+            hasPushable = true;
+            MoveResult result = moveOne(hopperInv, i, to, toBlock, hopperBlock);
+            if (result == MoveResult.SUCCESS) {
                 HopperContainerUtil.syncContainer(hopperBlock);
                 HopperContainerUtil.syncContainer(toBlock);
-                return true;
+                return PushAttempt.MOVED;
+            }
+            if (result == MoveResult.TARGET_FULL) {
+                return PushAttempt.TARGET_FULL;
             }
         }
-        return false;
+        return hasPushable ? PushAttempt.NO_WORK : PushAttempt.NO_WORK;
     }
 
     private static boolean tryPullOne(Inventory from, Block fromBlock, Inventory hopperInv, Block hopperBlock,
@@ -124,16 +152,16 @@ public final class HopperTransferReverse {
         return false;
     }
 
-    private static boolean moveOne(Inventory fromInv, int fromSlot, Inventory toInv, Block toBlock, Block fromBlock) {
+    private static MoveResult moveOne(Inventory fromInv, int fromSlot, Inventory toInv, Block toBlock, Block fromBlock) {
         ItemStack slot = fromInv.getItem(fromSlot);
         if (slot == null || slot.getType().isAir()) {
-            return false;
+            return MoveResult.FAILED;
         }
         ItemStack one = slot.clone();
         one.setAmount(1);
         HashMap<Integer, ItemStack> leftover = toInv.addItem(one);
         if (!leftover.isEmpty()) {
-            return false;
+            return MoveResult.TARGET_FULL;
         }
         int amountBefore = slot.getAmount();
         if (amountBefore <= 1) {
@@ -147,10 +175,10 @@ public final class HopperTransferReverse {
         int amountAfter = verify == null || verify.getType().isAir() ? 0 : verify.getAmount();
         int expectedAfter = amountBefore - 1;
         if ((verify == null || verify.getType().isAir()) && expectedAfter == 0) {
-            return true;
+            return MoveResult.SUCCESS;
         }
         if (verify != null && verify.isSimilar(one) && amountAfter == expectedAfter) {
-            return true;
+            return MoveResult.SUCCESS;
         }
         HopperContainerUtil.refund(toBlock, toInv, one);
         if (amountBefore <= 1) {
@@ -160,7 +188,7 @@ public final class HopperTransferReverse {
         }
         HopperContainerUtil.syncContainer(fromBlock);
         HopperContainerUtil.syncContainer(toBlock);
-        return false;
+        return MoveResult.FAILED;
     }
 
     private static boolean hasHopperSpace(Inventory hopperInv, Set<Integer> reserved) {

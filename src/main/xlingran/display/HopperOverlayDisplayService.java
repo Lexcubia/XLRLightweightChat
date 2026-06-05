@@ -146,6 +146,8 @@ public final class HopperOverlayDisplayService {
             return;
         }
         hologram.setAlwaysFacePlayer(true);
+        hologram.setDisplayRange((int) pluginConfig.getHologramDisplayRange());
+        hologram.setUpdateRange((int) pluginConfig.getHologramUpdateRange());
         if (!created && locationChanged(hologram, holoLoc)) {
             hologram.setLocation(holoLoc);
         }

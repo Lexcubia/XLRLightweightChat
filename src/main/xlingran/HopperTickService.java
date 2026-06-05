@@ -4,7 +4,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 import xlingran.core.HopperLane;
 import xlingran.core.HopperLaneRegistry;
@@ -19,7 +18,7 @@ import java.util.Set;
 /**
  * P1：仅 workQueue 排水 + 单步 feature（§0.2）。
  */
-public final class HopperTickService implements Listener {
+public final class HopperTickService {
 
     public static final long HOPPER_TICK_PERIOD = 8L;
 
@@ -177,8 +176,12 @@ public final class HopperTickService implements Listener {
             reservation.setReserved(loc, reserved);
 
             if (lane.isReverse() && pluginConfig.isReverseHopperEnabled()) {
-                int moved = HopperTransferReverse.transferStep(block, template, keys, reservation, lane.maxItem());
-                if (moved > 0) {
+                HopperTransferReverse.ReverseTransferResult reverseResult = HopperTransferReverse.transferStep(
+                        block, template, keys, reservation, lane.maxItem());
+                if (reverseResult.pushTargetFull()) {
+                    laneRegistry.markTargetFull(loc);
+                } else if (reverseResult.moved() > 0) {
+                    laneRegistry.invalidateTargetSpace(loc);
                     HopperLevelDef levelDef = HopperLevelResolver.resolveForBlock(block, keys, updateConfig);
                     if (levelDef != null) {
                         HopperTransferGate.getInstance().recordTransfer(block, levelDef, GameTickCounter.getInstance().currentTick());

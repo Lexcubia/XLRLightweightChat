@@ -1,6 +1,5 @@
 Messages:
     # reload
-    reload-success: "&a[XLRHopper] 配置已重载"
     reload-fail: "&c[XLRHopper] 重载失败"
     reload-no-permission: "&c[XLRHopper] 你没有权限执行此命令"
     reload-console-only-fail: "&c重载失败，请查看控制台"
@@ -31,7 +30,6 @@ Messages:
     no-template: "&c玩家当前漏斗没有模板"
     enchant-cleared: "&a已清除附魔过滤: &e%Enchant%"
     filter-deny: "&c该物品不符合当前漏斗模板过滤规则"
-    overlay-dh-missing: "&c悬浮显示需要安装 DecentHolograms 插件"
     overlay-feature-disabled: "&c该功能未启用"
 
     # 批量套用漏斗

@@ -56,13 +56,13 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
   - 须修改服务端 **`plugins/XLRHopper/Gui.yml`**（非 jar 内文件）；`GuiConfig.toggle()` 每次打开 GUI 时实时读取
   - `/xlrhopper reload` 与重启均会重载；控制台打印 `toggleon=...`
 - **仅** `Auto-Crafting`、`Filter-Item`、`Auto-Furnace` 可配置 **`rows`（≥1，建议 ≤6）**；其余界面行数在 `GuiConfig` 中硬编码（3/5/6 行等）。
-- 附魔显示名：key 为 **registry 小写**（如 `fire_protection`）；`EnchantNameTable` 委托 `GuiConfig` 查询。
+- 附魔显示名：key 为 **registry 小写**（如 `fire_protection`）；由 `Gui.yml` → `enchant-names` 配置，`GuiConfig.getEnchantDisplayName()` 读取；未配置时回退拼写英文 key。
 - 修改后执行 `/xlrhopper reload` 生效；已打开的模板列表/模板设置/漏斗设置/附魔过滤界面会**自动重绘**（`toggle` / `filtermode` 等 Lore 立即更新）。存储类界面（过滤物品、自动合成、自动熔炼）不自动刷新，以免丢失未保存编辑。
 - **`HopperSetting.FloatOverlay`**（绿宝石，默认 slot 14）：仅悬浮**开关**按钮的名称/Lore（`%toggle%`）；**无** 世界上空四行 Display 布局或文案配置。
 
 ### 3.2 Message.yml 要点
 
-- JAR 预置 **`saveResource("Message.yml", false)`**；根节点 `Messages`，key 如 `reload-success`、`no-template`、`enchant-prompt` 等。
+- JAR 预置 **`saveResource("Message.yml", false)`**；根节点 `Messages`，key 如 `no-template`、`enchant-prompt` 等；reload 成功文案见 `config.yml` → `Command.reload`。
 - 支持 `%Enchant%` 等占位符（如 `enchant-cleared`）。
 - `/xlrhopper reload` 与 `Gui.yml` 一并热重载。
 - **仅** `sendMessage` 类聊天提示；**不包含** 漏斗上方悬浮 Display 文案、`overlay-*` / `hover-*` 键；`MessageConfig` **不参与** 构建悬浮实体。
@@ -200,7 +200,6 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - **不适用** §4.0（可正常放入、拿出、堆叠）
 - 每条规则为 **样板 ItemStack**（数量 1）：样板上**已设置的**显示名、Lore、附魔、CustomModelData、**药水基础类型（PotionType）/自定义药水效果** 等才参与匹配；未设置药水类型时不会把所有药水视为同一种
 - **关闭时**：按样板规则去重，每种逻辑规则仅保留 1 个；多余物品退回背包；**清空 GUI 格子**（防止关闭界面时复制物品）
-- 旧版 `materials` 列表在加载时自动迁移为仅材质的样板
 - 无分页
 
 ### 4.7 自动合成（行数可配）
@@ -235,7 +234,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 ### 4.4 过滤附魔属性（6 行 × 9 列）
 
 - **标题**：`&6过滤附魔属性`
-- 未配置：普通 **书**（`BOOK`），显示名来自 `Gui.yml` 附魔表（[`EnchantNameTable`](src/main/xlingran/EnchantNameTable.java) 委托 `GuiConfig`）
+- 未配置：普通 **书**（`BOOK`），显示名来自 `Gui.yml` → `enchant-names`（`GuiConfig.getEnchantDisplayName()`）
 - 已配置：**附魔书**（`ENCHANTED_BOOK`，隐藏等级）+ Lore：`&a当前过滤: &e<附魔名> <等级>`
 - **左键** 某附魔书 → 关 GUI → 聊天输入最低等级（纯数字）→ 返回本 GUI
 - 已配置附魔：**右键** 清除该条过滤并刷新 GUI（保存 `shan.db`）
@@ -258,11 +257,11 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
   - **物品行**：行内包含 `%item1%`–`%item5%` 时，按占位符顺序映射漏斗槽位 0–4，同一横排固定 5 格位置展示物品图标（`offsetX = (slotIndex - 2) * ITEM_ROW_SPACING`）；空槽用空白行占位、不显示图标；首个物品行首格设 `ITEM_ROW_HEIGHT + ITEM_TEXT_GAP`（约 0.28 + 0.18）与下方文字拉开间距
   - **文本行**：无物品占位符的行，替换 `%hoppername%` / `%template%` / `%mode%` / `%enchan%` / `%durability%` 后渲染；各行 `setHeight(Hologram.line-height)`，`offsetY=0`
 - **物品占位符**：`%item1%`=slot0 … `%item5%`=slot4；默认首行为 `"%item1%%item2%%item3%%item4%%item5%"`
-- 全息：`DHAPI.createHologram` **非持久化**；`setAlwaysFacePlayer(true)` 随玩家视角；每次 `syncLines` 后 `realignLines()`
+- 全息：`DHAPI.createHologram` **非持久化**；`setAlwaysFacePlayer(true)` 随玩家视角；`setDisplayRange` / `setUpdateRange` 读取 `Hologram.display-range` / `update-range`（默认 48 格）；每次 `syncLines` 后 `realignLines()`
 - 增量刷新：`DHAPI.setHologramLine` 按行更新；内容签名基于**配置行顺序 + 各槽位材质**（不含数量）；签名未变时跳过重建
 - 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用 **4 tick 防抖**；内容签名未变则跳过重建。
 - `DecentHologramsReloadEvent` 后恢复已开启 `hover-display` 的全息。
-- 文案由 `config.yml` → `Hologram.hologram-lines` 配置；**不读** `Gui.yml` 悬浮行；`Message.yml` 悬浮相关：`overlay-feature-disabled`（未安装 DH 时开启悬浮）、`overlay-dh-missing`（保留键，运行时未使用）。
+- 文案由 `config.yml` → `Hologram.hologram-lines` 配置；**不读** `Gui.yml` 悬浮行；`Message.yml` → `overlay-feature-disabled`（未安装 DH 或功能未启用时提示）。
 - PDC：`hover-display`（开关）；套模板/初始化时 `hover-display=false`；卸载/关悬浮/破坏时 `hologram.destroy()`。
 - **刷新事件**（仅 `hover-display=true`）：`InventoryMoveItemEvent`、`InventoryPickupItemEvent`、漏斗 GUI 的 `InventoryClickEvent` / `InventoryDragEvent` / `InventoryCloseEvent`；`ChunkLoad` 恢复 `show`；破坏/爆炸/卸载 `hide`；`onDisable` → `hideAll`。
 
@@ -317,6 +316,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - 单漏斗 PDC `reverse-suction` 为 true 时，`HopperReverseHandler` **取消原版四向冲突移动**；并 **`scheduleEvaluate`** 由事件侧决定是否入队，**不在** handler 内 `syncHopper` 或全量登记
 - 每 **8 game tick**、每个**已在 workQueue 中**的 lane **最多 1 步**反向搬运（同上 push/pull 规则）
 - `HopperTransferReverse` 直接读写方块 `Container` 库存，扣减前后校验；写失败退回目标容器（满则 `dropItemNaturally`）
+- **目标满背压**：push 到上方容器时若目标已满且漏斗内仍有可推物品，`markTargetFull` 暂退出 workQueue；`InventoryMoveItem` 或成功搬运后 `invalidateTargetSpace` 恢复入队
 
 ### 6.3.1 事件驱动 + 8 tick 管线（1.3.0）
 

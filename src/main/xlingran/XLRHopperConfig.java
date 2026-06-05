@@ -134,10 +134,6 @@ public final class XLRHopperConfig {
         return checkUpdateEnabled;
     }
 
-    public List<String> getEnabledWorlds() {
-        return new ArrayList<>(enabledWorlds);
-    }
-
     public int getMaxQueueLimit() {
         return maxQueueLimit;
     }

@@ -89,9 +89,4 @@ public final class PlayerGuiSession {
         chatTemplate.remove(playerId);
         pendingEnchant.remove(playerId);
     }
-
-    public void clearAll(UUID playerId) {
-        clearInput(playerId);
-        editingTemplate.remove(playerId);
-    }
 }

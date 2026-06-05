@@ -46,14 +46,6 @@ public class HopperTemplateManager {
         return enabledTemplate.get(playerId);
     }
 
-    public HopperTemplate getEnabledTemplate(UUID playerId) {
-        String name = enabledTemplate.get(playerId);
-        if (name == null) {
-            return null;
-        }
-        return getTemplate(playerId, name);
-    }
-
     public void setEnabledTemplate(UUID playerId, String templateName) {
         if (templateName == null || templateName.isEmpty()) {
             enabledTemplate.remove(playerId);

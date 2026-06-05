@@ -236,29 +236,17 @@ public class Shan extends JavaPlugin {
     }
 
     private void asyncReindexLoadedChunks() {
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-            java.util.List<org.bukkit.Location> coords = new java.util.ArrayList<>();
+        Bukkit.getScheduler().runTask(this, () -> {
             for (org.bukkit.World world : Bukkit.getWorlds()) {
                 if (!pluginConfig.isPluginWorld(world)) {
                     continue;
                 }
                 for (Chunk chunk : world.getLoadedChunks()) {
-                    for (int x = 0; x < 16; x++) {
-                        for (int z = 0; z < 16; z++) {
-                            for (int y = world.getMinHeight(); y < world.getMaxHeight(); y++) {
-                                if (chunk.getBlock(x, y, z).getType() == org.bukkit.Material.HOPPER) {
-                                    coords.add(chunk.getBlock(x, y, z).getLocation());
-                                }
-                            }
-                        }
+                    for (org.bukkit.block.Block block : HopperChunkScanUtil.hoppersInChunk(chunk)) {
+                        hopperTickService.registerLoadedHopper(block);
                     }
                 }
             }
-            Bukkit.getScheduler().runTask(this, () -> {
-                for (org.bukkit.Location loc : coords) {
-                    hopperTickService.registerLoadedHopper(loc.getBlock());
-                }
-            });
         });
     }
 }

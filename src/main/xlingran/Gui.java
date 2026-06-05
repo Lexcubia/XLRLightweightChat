@@ -721,12 +721,10 @@ public class Gui implements Listener {
         processPrototypeStorageClose(player, inventory, templateName, false);
     }
 
-    private void processPrototypeStorageClose(Player player, Inventory inventory, String templateName,
-                                              boolean craftTargets) {
-        HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
-        if (template == null) {
-            return;
-        }
+    private record PrototypeDedupeResult(List<ItemStack> uniqueRules, List<ItemStack> toReturn) {
+    }
+
+    private static PrototypeDedupeResult dedupePrototypeSnapshot(Inventory inventory) {
         List<ItemStack> snapshot = new ArrayList<>();
         for (int i = 0; i < inventory.getSize(); i++) {
             ItemStack stack = inventory.getItem(i);
@@ -756,17 +754,13 @@ public class Gui implements Listener {
                 uniqueRules.add(proto);
             }
         }
+        return new PrototypeDedupeResult(uniqueRules, toReturn);
+    }
 
-        if (craftTargets) {
-            template.setAutoCraftTargets(uniqueRules);
-        } else {
-            template.setAutoSmeltOutputs(uniqueRules);
-        }
-
+    private void returnDuplicateItems(Player player, Inventory inventory, List<ItemStack> toReturn) {
         for (int i = 0; i < inventory.getSize(); i++) {
             inventory.setItem(i, null);
         }
-
         for (ItemStack stack : toReturn) {
             HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(stack);
             for (ItemStack drop : leftover.values()) {
@@ -775,53 +769,29 @@ public class Gui implements Listener {
         }
     }
 
+    private void processPrototypeStorageClose(Player player, Inventory inventory, String templateName,
+                                              boolean craftTargets) {
+        HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
+        if (template == null) {
+            return;
+        }
+        PrototypeDedupeResult result = dedupePrototypeSnapshot(inventory);
+        if (craftTargets) {
+            template.setAutoCraftTargets(result.uniqueRules());
+        } else {
+            template.setAutoSmeltOutputs(result.uniqueRules());
+        }
+        returnDuplicateItems(player, inventory, result.toReturn());
+    }
+
     private void processFilterItemsClose(Player player, Inventory inventory, String templateName) {
         HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
         if (template == null) {
             return;
         }
-        List<ItemStack> snapshot = new ArrayList<>();
-        for (int i = 0; i < inventory.getSize(); i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (stack == null || stack.getType().isAir()) {
-                continue;
-            }
-            snapshot.add(stack.clone());
-        }
-
-        List<ItemStack> uniqueRules = new ArrayList<>();
-        List<ItemStack> toReturn = new ArrayList<>();
-        for (ItemStack stack : snapshot) {
-            ItemStack proto = ItemStackUtil.clonePrototype(stack);
-            if (proto == null) {
-                continue;
-            }
-            boolean duplicate = false;
-            for (ItemStack existing : uniqueRules) {
-                if (FilterItemMatcher.sameRule(proto, existing)) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (duplicate) {
-                toReturn.add(stack.clone());
-            } else {
-                uniqueRules.add(proto);
-            }
-        }
-
-        template.setFilterPrototypes(uniqueRules);
-
-        for (int i = 0; i < inventory.getSize(); i++) {
-            inventory.setItem(i, null);
-        }
-
-        for (ItemStack stack : toReturn) {
-            HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(stack);
-            for (ItemStack drop : leftover.values()) {
-                player.getWorld().dropItemNaturally(player.getLocation(), drop);
-            }
-        }
+        PrototypeDedupeResult result = dedupePrototypeSnapshot(inventory);
+        template.setFilterPrototypes(result.uniqueRules());
+        returnDuplicateItems(player, inventory, result.toReturn());
     }
 
     private ItemStack createTemplateListItem(Player player, String templateName) {
@@ -852,7 +822,7 @@ public class Gui implements Listener {
     }
 
     private ItemStack createEnchantFilterBook(Enchantment enchant, Integer minLevel) {
-        String displayName = EnchantNameTable.getChineseName(enchant);
+        String displayName = guiConfig.getEnchantDisplayName(enchant);
         boolean configured = minLevel != null;
         GuiConfig.GuiButtonDef def = guiConfig.filterEnchantBook(configured);
         ItemStack book = new ItemStack(def.material());
@@ -876,8 +846,8 @@ public class Gui implements Listener {
         return book;
     }
 
-    private static String formatEnchantName(Enchantment enchant) {
-        return EnchantNameTable.getChineseName(enchant);
+    private String formatEnchantName(Enchantment enchant) {
+        return guiConfig.getEnchantDisplayName(enchant);
     }
 
     private List<Enchantment> listRegistryEnchantments() {

@@ -25,10 +25,6 @@ public final class HopperLane {
         return location.clone();
     }
 
-    public FilterSnapshot snapshot() {
-        return snapshot;
-    }
-
     public void setSnapshot(FilterSnapshot snapshot) {
         this.snapshot = snapshot;
     }

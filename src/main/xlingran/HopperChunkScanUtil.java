@@ -1,7 +1,6 @@
 package xlingran;
 
 import org.bukkit.Chunk;
-import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -26,14 +25,6 @@ public final class HopperChunkScanUtil {
             if (state != null && state.getType() == Material.HOPPER) {
                 out.add(state.getBlock());
             }
-        }
-        return out;
-    }
-
-    public static List<Location> hopperLocationsInChunk(Chunk chunk) {
-        List<Location> out = new ArrayList<>();
-        for (Block block : hoppersInChunk(chunk)) {
-            out.add(block.getLocation());
         }
         return out;
     }

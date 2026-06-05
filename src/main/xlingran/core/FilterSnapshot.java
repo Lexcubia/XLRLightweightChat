@@ -1,8 +1,5 @@
 package xlingran.core;
 
-import org.bukkit.block.Block;
-import org.bukkit.inventory.ItemStack;
-import xlingran.HopperKeys;
 import xlingran.HopperTemplate;
 
 /**
@@ -18,9 +15,5 @@ public final class FilterSnapshot {
 
     public HopperTemplate template() {
         return template;
-    }
-
-    public boolean allows(ItemStack stack, Block hopperBlock, HopperKeys keys) {
-        return template != null && template.allows(stack, hopperBlock, keys);
     }
 }
