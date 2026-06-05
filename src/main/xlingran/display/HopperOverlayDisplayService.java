@@ -1,22 +1,17 @@
 package xlingran.display;
 
+import eu.decentsoftware.holograms.api.DHAPI;
+import eu.decentsoftware.holograms.api.holograms.Hologram;
+import eu.decentsoftware.holograms.api.holograms.HologramPage;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.entity.Display;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.ItemDisplay;
-import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
-import org.bukkit.util.Transformation;
-import org.joml.AxisAngle4f;
-import org.joml.Vector3f;
 import xlingran.HopperBlockConfig;
 import xlingran.HopperContainerUtil;
 import xlingran.HopperKeys;
@@ -36,36 +31,36 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 漏斗上方悬浮信息：TextDisplay + ItemDisplay（文案与布局硬编码，不读 Message.yml）。
+ * 漏斗上方悬浮信息：DecentHolograms DHAPI（非持久化全息）。
  */
 public final class HopperOverlayDisplayService {
 
-    private static final float ITEM_ROW_Y = 1.55f;
-    private static final float LINE_START_Y = 1.28f;
-    private static final float LINE_SPACING = 0.22f;
-    private static final float ITEM_SPACING = 0.32f;
-    private static final float TEXT_DISPLAY_SCALE = 0.45f;
-    private static final float ITEM_DISPLAY_SCALE = 0.8f;
-    private static final float VIEW_RANGE = 32f;
+    private static final float HOLOGRAM_Y_OFFSET = 1.3f;
     private static final long REFRESH_DEBOUNCE_TICKS = 4L;
 
     private final Shan plugin;
     private final HopperKeys keys;
     private final HopperTemplateManager templateManager;
     private final UpdateConfig updateConfig;
-    private final Map<String, ActiveOverlay> activeByLocation = new ConcurrentHashMap<>();
+    private final boolean decentHologramsAvailable;
+    private final Map<String, String> signaturesByLocation = new ConcurrentHashMap<>();
     private final Map<String, BukkitTask> debouncedRefresh = new ConcurrentHashMap<>();
 
     public HopperOverlayDisplayService(Shan plugin, HopperKeys keys, HopperTemplateManager templateManager,
-                                       UpdateConfig updateConfig) {
+                                       UpdateConfig updateConfig, boolean decentHologramsAvailable) {
         this.plugin = plugin;
         this.keys = keys;
         this.templateManager = templateManager;
         this.updateConfig = updateConfig;
+        this.decentHologramsAvailable = decentHologramsAvailable;
+    }
+
+    public boolean isAvailable() {
+        return decentHologramsAvailable;
     }
 
     public void refreshDebounced(Block block) {
-        if (block == null || block.getType() != Material.HOPPER) {
+        if (!decentHologramsAvailable || block == null || block.getType() != Material.HOPPER) {
             return;
         }
         String locKey = locationKey(block.getLocation());
@@ -100,19 +95,12 @@ public final class HopperOverlayDisplayService {
         }
         cancelPendingRefresh(block);
         String locKey = locationKey(block.getLocation());
-        ActiveOverlay active = activeByLocation.remove(locKey);
-        if (active == null) {
-            return;
-        }
-        World world = block.getWorld();
-        if (world == null) {
-            return;
-        }
-        removeOverlayEntities(active, world);
+        signaturesByLocation.remove(locKey);
+        destroyHologram(hologramName(block.getLocation()));
     }
 
     public void refresh(Block block) {
-        if (block == null || block.getType() != Material.HOPPER) {
+        if (!decentHologramsAvailable || block == null || block.getType() != Material.HOPPER) {
             return;
         }
         HopperBlockConfig config = HopperBlockConfig.read(block, keys);
@@ -127,30 +115,41 @@ public final class HopperOverlayDisplayService {
         }
 
         List<ItemStack> items = collectHopperItems(block);
-        List<String> lines = buildOverlayLines(block, template, config);
-        String signature = contentSignature(lines, items);
+        List<String> textLines = buildOverlayLines(block, template, config);
+        String signature = contentSignature(textLines, items);
         String locKey = locationKey(block.getLocation());
-        ActiveOverlay active = activeByLocation.get(locKey);
-
-        if (active != null && signature.equals(active.signature) && entitiesAlive(active, block.getWorld())) {
-            return;
-        }
-        if (active != null && entitiesAlive(active, block.getWorld())) {
-            if (updateInPlace(block, active, lines, items)) {
-                active.signature = signature;
+        if (signature.equals(signaturesByLocation.get(locKey))) {
+            Hologram existing = DHAPI.getHologram(hologramName(block.getLocation()));
+            if (existing != null && existing.isEnabled()) {
                 return;
             }
         }
-        hide(block);
-        spawnOverlay(block, template, config, lines, items, signature);
+
+        Location holoLoc = hologramLocation(block);
+        String name = hologramName(block.getLocation());
+        Hologram hologram = DHAPI.getHologram(name);
+        if (hologram == null) {
+            DHAPI.createHologram(name, holoLoc, false, List.of(" "));
+            hologram = DHAPI.getHologram(name);
+        } else {
+            hologram.setLocation(holoLoc);
+            if (!hologram.isEnabled()) {
+                hologram.showAll();
+            }
+        }
+        if (hologram == null) {
+            return;
+        }
+        replaceLines(hologram, items, textLines);
+        signaturesByLocation.put(locKey, signature);
     }
 
     public void hideAllInChunk(Chunk chunk) {
         if (chunk == null) {
             return;
         }
-        for (String key : new ArrayList<>(activeByLocation.keySet())) {
-            Location loc = parseLocationKey(key);
+        for (String locKey : new ArrayList<>(signaturesByLocation.keySet())) {
+            Location loc = parseLocationKey(locKey);
             if (loc == null || loc.getWorld() == null) {
                 continue;
             }
@@ -161,10 +160,8 @@ public final class HopperOverlayDisplayService {
                 if (block.getType() == Material.HOPPER) {
                     hide(block);
                 } else {
-                    ActiveOverlay active = activeByLocation.remove(key);
-                    if (active != null) {
-                        removeOverlayEntities(active, loc.getWorld());
-                    }
+                    signaturesByLocation.remove(locKey);
+                    destroyHologram(hologramName(loc));
                 }
             }
         }
@@ -177,17 +174,13 @@ public final class HopperOverlayDisplayService {
             }
         }
         debouncedRefresh.clear();
-        for (String key : new ArrayList<>(activeByLocation.keySet())) {
-            Location loc = parseLocationKey(key);
-            if (loc != null && loc.getWorld() != null) {
-                ActiveOverlay active = activeByLocation.remove(key);
-                if (active != null) {
-                    removeOverlayEntities(active, loc.getWorld());
-                }
-            } else {
-                activeByLocation.remove(key);
+        for (String locKey : new ArrayList<>(signaturesByLocation.keySet())) {
+            Location loc = parseLocationKey(locKey);
+            if (loc != null) {
+                destroyHologram(hologramName(loc));
             }
         }
+        signaturesByLocation.clear();
     }
 
     public boolean isHoverEnabled(Block block) {
@@ -195,170 +188,45 @@ public final class HopperOverlayDisplayService {
                 && HopperBlockConfig.read(block, keys).isHoverDisplay();
     }
 
-    private boolean updateInPlace(Block block, ActiveOverlay active, List<String> lines, List<ItemStack> items) {
-        World world = block.getWorld();
-        if (world == null) {
-            return false;
-        }
-        Location center = block.getLocation().add(0.5, 0.0, 0.5);
-        String marker = locKey(block);
-
-        while (active.textDisplays.size() > lines.size()) {
-            UUID id = active.textDisplays.remove(active.textDisplays.size() - 1);
-            removeEntity(world, id);
-        }
-        while (active.textDisplays.size() < lines.size()) {
-            int i = active.textDisplays.size();
-            String line = lines.get(i);
-            if (line == null || line.isEmpty()) {
-                break;
-            }
-            float y = LINE_START_Y - i * LINE_SPACING;
-            TextDisplay display = spawnText(world, center.clone().add(0, y, 0), marker, line);
-            active.textDisplays.add(display.getUniqueId());
-        }
-        for (int i = 0; i < active.textDisplays.size() && i < lines.size(); i++) {
-            Entity entity = plugin.getServer().getEntity(active.textDisplays.get(i));
-            if (entity instanceof TextDisplay textDisplay) {
-                textDisplay.setText(lines.get(i));
+    private void replaceLines(Hologram hologram, List<ItemStack> items, List<String> textLines) {
+        HologramPage page = DHAPI.getHologramPage(hologram, 0);
+        if (page != null) {
+            while (page.size() > 0) {
+                DHAPI.removeHologramLine(hologram, 0);
+                page = DHAPI.getHologramPage(hologram, 0);
+                if (page == null) {
+                    break;
+                }
             }
         }
-
-        int itemCount = items.size();
-        while (active.itemDisplays.size() > itemCount) {
-            UUID id = active.itemDisplays.remove(active.itemDisplays.size() - 1);
-            removeEntity(world, id);
+        for (ItemStack stack : items) {
+            DHAPI.addHologramLine(hologram, singleDisplayStack(stack));
         }
-        float itemStartX = itemCount <= 1 ? 0f : -((itemCount - 1) * ITEM_SPACING) / 2f;
-        while (active.itemDisplays.size() < itemCount) {
-            int i = active.itemDisplays.size();
-            Location at = center.clone().add(itemStartX + i * ITEM_SPACING, ITEM_ROW_Y, 0);
-            ItemDisplay display = spawnItem(world, at, marker, items.get(i));
-            active.itemDisplays.add(display.getUniqueId());
-        }
-        for (int i = 0; i < active.itemDisplays.size() && i < itemCount; i++) {
-            Entity entity = plugin.getServer().getEntity(active.itemDisplays.get(i));
-            if (entity instanceof ItemDisplay itemDisplay) {
-                itemDisplay.setItemStack(singleDisplayStack(items.get(i)));
+        for (String line : textLines) {
+            if (line != null && !line.isEmpty()) {
+                DHAPI.addHologramLine(hologram, line);
             }
         }
-        return true;
+        hologram.realignLines();
     }
 
-    private void spawnOverlay(Block block, HopperTemplate template, HopperBlockConfig config,
-                              List<String> lines, List<ItemStack> items, String signature) {
-        World world = block.getWorld();
-        if (world == null) {
+    private void destroyHologram(String name) {
+        if (name == null || name.isEmpty()) {
             return;
         }
-        Location center = block.getLocation().add(0.5, 0.0, 0.5);
-        String marker = locKey(block);
-        ActiveOverlay active = new ActiveOverlay();
-        active.signature = signature;
-
-        int itemCount = items.size();
-        float itemStartX = itemCount <= 1 ? 0f : -((itemCount - 1) * ITEM_SPACING) / 2f;
-        for (int i = 0; i < itemCount; i++) {
-            Location at = center.clone().add(itemStartX + i * ITEM_SPACING, ITEM_ROW_Y, 0);
-            ItemDisplay display = spawnItem(world, at, marker, items.get(i));
-            active.itemDisplays.add(display.getUniqueId());
-        }
-
-        for (int i = 0; i < lines.size(); i++) {
-            String line = lines.get(i);
-            if (line == null || line.isEmpty()) {
-                continue;
-            }
-            float y = LINE_START_Y - i * LINE_SPACING;
-            TextDisplay display = spawnText(world, center.clone().add(0, y, 0), marker, line);
-            active.textDisplays.add(display.getUniqueId());
-        }
-
-        if (!active.itemDisplays.isEmpty() || !active.textDisplays.isEmpty()) {
-            activeByLocation.put(locationKey(block.getLocation()), active);
+        Hologram hologram = DHAPI.getHologram(name);
+        if (hologram != null) {
+            hologram.destroy();
         }
     }
 
-    private ItemDisplay spawnItem(World world, Location at, String marker, ItemStack stack) {
-        return world.spawn(at, ItemDisplay.class, entity -> {
-            configureItemDisplayEntity(entity, marker);
-            entity.setItemStack(singleDisplayStack(stack));
-            entity.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.GUI);
-        });
+    private static Location hologramLocation(Block block) {
+        return block.getLocation().add(0.5, HOLOGRAM_Y_OFFSET, 0.5);
     }
 
-    private TextDisplay spawnText(World world, Location at, String marker, String line) {
-        return world.spawn(at, TextDisplay.class, entity -> {
-            configureTextDisplayEntity(entity, marker);
-            entity.setText(line);
-            entity.setDefaultBackground(false);
-            entity.setSeeThrough(true);
-        });
-    }
-
-    private void configureItemDisplayEntity(ItemDisplay entity, String locKey) {
-        applyDisplayBase(entity, locKey, ITEM_DISPLAY_SCALE);
-    }
-
-    private void configureTextDisplayEntity(TextDisplay entity, String locKey) {
-        applyDisplayBase(entity, locKey, TEXT_DISPLAY_SCALE);
-    }
-
-    private void applyDisplayBase(Display entity, String locKey, float scale) {
-        entity.setPersistent(false);
-        entity.setInvulnerable(true);
-        entity.setSilent(true);
-        entity.setGravity(false);
-        entity.setBillboard(Display.Billboard.CENTER);
-        entity.setViewRange(VIEW_RANGE);
-        entity.setBrightness(new Display.Brightness(15, 15));
-        entity.setTransformation(new Transformation(
-                new Vector3f(0, 0, 0),
-                new AxisAngle4f(0, 0, 0, 1),
-                new Vector3f(scale, scale, scale),
-                new AxisAngle4f(0, 0, 0, 1)));
-        entity.getPersistentDataContainer().set(keys.overlayMarker, PersistentDataType.STRING, locKey);
-    }
-
-    private static boolean entitiesAlive(ActiveOverlay active, World world) {
-        if (active == null || world == null) {
-            return false;
-        }
-        for (UUID id : active.itemDisplays) {
-            if (!isAlive(world, id)) {
-                return false;
-            }
-        }
-        for (UUID id : active.textDisplays) {
-            if (!isAlive(world, id)) {
-                return false;
-            }
-        }
-        return !active.itemDisplays.isEmpty() || !active.textDisplays.isEmpty();
-    }
-
-    private static boolean isAlive(World world, UUID id) {
-        Entity entity = Bukkit.getServer().getEntity(id);
-        return entity != null && entity.isValid() && entity.getWorld().equals(world);
-    }
-
-    private static void removeEntity(World world, UUID id) {
-        Entity entity = Bukkit.getServer().getEntity(id);
-        if (entity != null) {
-            entity.remove();
-        }
-    }
-
-    private static void removeOverlayEntities(ActiveOverlay active, World world) {
-        if (active == null || world == null) {
-            return;
-        }
-        for (UUID id : active.itemDisplays) {
-            removeEntity(world, id);
-        }
-        for (UUID id : active.textDisplays) {
-            removeEntity(world, id);
-        }
+    private static String hologramName(Location loc) {
+        return "xlrhopper_" + loc.getWorld().getUID() + "_" + loc.getBlockX() + "_" + loc.getBlockY() + "_"
+                + loc.getBlockZ();
     }
 
     private static String contentSignature(List<String> lines, List<ItemStack> items) {
@@ -435,10 +303,6 @@ public final class HopperOverlayDisplayService {
         return loc.getWorld().getUID() + ":" + loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ();
     }
 
-    private static String locKey(Block block) {
-        return locationKey(block.getLocation());
-    }
-
     private static Location parseLocationKey(String key) {
         int colon = key.indexOf(':');
         if (colon < 0) {
@@ -450,7 +314,7 @@ public final class HopperOverlayDisplayService {
             if (parts.length != 3) {
                 return null;
             }
-            World world = Bukkit.getWorld(worldId);
+            org.bukkit.World world = Bukkit.getWorld(worldId);
             if (world == null) {
                 return null;
             }
@@ -461,11 +325,5 @@ public final class HopperOverlayDisplayService {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    private static final class ActiveOverlay {
-        final List<UUID> itemDisplays = new ArrayList<>();
-        final List<UUID> textDisplays = new ArrayList<>();
-        String signature = "";
     }
 }

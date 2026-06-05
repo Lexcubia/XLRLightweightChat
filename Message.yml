@@ -31,6 +31,7 @@ Messages:
     no-template: "&c玩家当前漏斗没有模板"
     enchant-cleared: "&a已清除附魔过滤: &e%Enchant%"
     filter-deny: "&c该物品不符合当前漏斗模板过滤规则"
+    overlay-dh-missing: "&c悬浮显示需要安装 DecentHolograms 插件"
 
     # 批量套用漏斗
     batch-wrong-block: "&c方块类型错误"

@@ -104,7 +104,12 @@ public class Shan extends JavaPlugin {
         laneRegistry = new HopperLaneRegistry();
         hopperTickService = new HopperTickService(this, templateManager, hopperKeys, laneRegistry, updateConfig);
         hopperLaneListener = new HopperLaneListener(this, hopperTickService);
-        overlayDisplayService = new HopperOverlayDisplayService(this, hopperKeys, templateManager, updateConfig);
+        boolean decentHologramsAvailable = getServer().getPluginManager().isPluginEnabled("DecentHolograms");
+        if (!decentHologramsAvailable) {
+            getLogger().warning("[XLRHopper] 未检测到 DecentHolograms，漏斗悬浮显示将不可用");
+        }
+        overlayDisplayService = new HopperOverlayDisplayService(this, hopperKeys, templateManager, updateConfig,
+                decentHologramsAvailable);
 
         gui = new Gui(this, templateManager, playerGuiSession, templateRepository, hopperKeys, guiConfig,
                 messageConfig, hopperTickService, hopperLaneListener, overlayDisplayService);
@@ -131,7 +136,7 @@ public class Shan extends JavaPlugin {
                 this);
         getServer().getPluginManager().registerEvents(hopperLaneListener, this);
         getServer().getPluginManager().registerEvents(
-                new HopperOverlayListener(this, overlayDisplayService, hopperKeys), this);
+                new HopperOverlayListener(this, overlayDisplayService), this);
         getServer().getPluginManager().registerEvents(
                 new HopperReverseHandler(hopperKeys, hopperTickService, hopperLaneListener), this);
         getServer().getPluginManager().registerEvents(

@@ -5,6 +5,9 @@ api-version: 1.21.1
 author: Shan
 description: 高级漏斗传输插件
 
+softdepend:
+  - DecentHolograms
+
 commands:
   xlrhopper:
     description: XLRHopper 漏斗模板

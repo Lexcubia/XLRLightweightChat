@@ -23,7 +23,6 @@ import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import xlingran.HopperChunkScanUtil;
-import xlingran.HopperKeys;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,12 +31,10 @@ public final class HopperOverlayListener implements Listener {
 
     private final JavaPlugin plugin;
     private final HopperOverlayDisplayService overlayService;
-    private final HopperKeys keys;
 
-    public HopperOverlayListener(JavaPlugin plugin, HopperOverlayDisplayService overlayService, HopperKeys keys) {
+    public HopperOverlayListener(JavaPlugin plugin, HopperOverlayDisplayService overlayService) {
         this.plugin = plugin;
         this.overlayService = overlayService;
-        this.keys = keys;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

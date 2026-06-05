@@ -498,6 +498,11 @@ public class Gui implements Listener {
             config = config.withReverseSuction(!config.isReverseSuction());
             changed = true;
         } else if (slot == slotHopperFloatOverlay) {
+            if (!config.isHoverDisplay() && !overlayService.isAvailable()) {
+                player.sendMessage(messageConfig.message("overlay-dh-missing"));
+                openHopperSettings(player, block);
+                return;
+            }
             config = config.withHoverDisplay(!config.isHoverDisplay());
             changed = true;
         }

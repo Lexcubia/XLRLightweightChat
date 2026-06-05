@@ -217,16 +217,17 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - **打开**：对已套用模板（PDC 含 `template` + `owner`）的漏斗 **Shift + 左键**（手持物品亦可）；无模板时提示（`Message.yml` → `no-template`），不打开 GUI
 - **`HopperSetting.Redstone`**（默认 slot 10）→ PDC `redstone-list-toggle`
 - **`HopperSetting.Reverse`**（默认 slot 12）→ PDC `reverse-suction`
-- **`HopperSetting.FloatOverlay`**（默认 slot 14，绿宝石）→ PDC `hover-display`（默认 **false**）；左/右键切换后**同一 tick、主线程**立即 `show` / `hide` 悬浮实体，再刷新本 GUI 的 `%toggle%`（不依赖关 GUI 或重进世界）
+- **`HopperSetting.FloatOverlay`**（默认 slot 14，绿宝石）→ PDC `hover-display`（默认 **false**）；左/右键切换后**同一 tick、主线程**立即 `show` / `hide` 全息，再刷新本 GUI 的 `%toggle%`（不依赖关 GUI 或重进世界）；未安装 DecentHolograms 时提示 `overlay-dh-missing`
 - **`HopperSetting.Filler`**：占位玻璃
 
-### 4.6 漏斗上方悬浮 Display（硬编码）
+### 4.6 漏斗上方悬浮全息（DecentHolograms DHAPI）
 
+- **依赖**：服务端须安装 [DecentHolograms](https://github.com/DecentSoftware-eu/DecentHolograms)（≥ 2.0.12，`plugin.yml` `softdepend`）；未安装时 XLRHopper 仍可加载，悬浮不可用。
 - 实现：`display.HopperOverlayDisplayService` + `display.HopperOverlayListener`；**不**进入 `HopperTickService`（属 P0 事件驱动，与 8 tick `workQueue` 排水无关）。
-- 实体：`ItemDisplay`（`ItemDisplayTransform.GUI`，独立 scale；漏斗 5 槽非空物品各 1 个、无数量）+ 五行 `TextDisplay`（漏斗等级 `Update.yml` 的 `name`、`%name%` 占位；模板名、白/黑名单模式、附魔过滤条数、最低耐久）。
-- 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用 **4 tick 防抖**；内容未变时跳过刷新，否则就地 `setText`/`setItemStack`，减少 Display 重建。
-- 文案与 Y 偏移均在 Java 常量中拼接；**不读** `Message.yml` / `Gui.yml` 悬浮行配置。
-- PDC：`hover-display`（开关）、`overlay-marker`（实体归属标记）；套模板/初始化时 `hover-display=false`。
+- 全息：`DHAPI.createHologram` **非持久化**（`xlrhopper_{world}_{x}_{y}_{z}`）；物品行（`ItemStack` 数量 1）+ 五行文本（漏斗等级 `Update.yml` `name`、模板名、白/黑名单、附魔数、耐久）。
+- 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用 **4 tick 防抖**；内容签名未变则跳过 `setHologramLine` 重建。
+- 文案硬编码于 Java；**不读** `Gui.yml` 悬浮行配置；`Message.yml` 仅 `overlay-dh-missing` 提示。
+- PDC：`hover-display`（开关）；套模板/初始化时 `hover-display=false`；卸载/关悬浮/破坏时 `hologram.destroy()`。
 - **刷新事件**（仅 `hover-display=true`）：`InventoryMoveItemEvent`、`InventoryPickupItemEvent`、漏斗 GUI 的 `InventoryClickEvent` / `InventoryDragEvent` / `InventoryCloseEvent`；`ChunkLoad` 恢复 `show`；破坏/爆炸/卸载 `hide`；`onDisable` → `hideAll`。
 
 ---
@@ -349,7 +350,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `FilterItem` / `FilterItemMatcher` 等 | 过滤维度 |
 | `HopperAutoCraftService` / `HopperAutoSmeltService` | 漏斗内合成与熔炼 |
 | `HopperCommand` | 指令（含 `reload`） |
-| `display.HopperOverlayDisplayService` | 悬浮 TextDisplay/ItemDisplay 生成与刷新（硬编码文案） |
+| `display.HopperOverlayDisplayService` | DecentHolograms 全息创建/刷新/删除（硬编码文案） |
 | `display.HopperOverlayListener` | 库存/区块/破坏事件驱动悬浮刷新与清理 |
 | `HopperSettingsListener` | Shift+左键打开漏斗设置 |
 

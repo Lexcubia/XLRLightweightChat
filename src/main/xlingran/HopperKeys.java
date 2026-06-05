@@ -10,7 +10,6 @@ public final class HopperKeys {
     public final NamespacedKey redstoneListToggle;
     public final NamespacedKey reverseSuction;
     public final NamespacedKey hoverDisplay;
-    public final NamespacedKey overlayMarker;
     public final NamespacedKey hopperLevel;
     public final NamespacedKey hopperLevelItem;
 
@@ -20,7 +19,6 @@ public final class HopperKeys {
         this.redstoneListToggle = new NamespacedKey(plugin, "redstone-list-toggle");
         this.reverseSuction = new NamespacedKey(plugin, "reverse-suction");
         this.hoverDisplay = new NamespacedKey(plugin, "hover-display");
-        this.overlayMarker = new NamespacedKey(plugin, "overlay-marker");
         this.hopperLevel = new NamespacedKey(plugin, "hopper-level");
         this.hopperLevelItem = new NamespacedKey(plugin, "hopper-level-item");
     }
