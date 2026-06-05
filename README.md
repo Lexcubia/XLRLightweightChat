@@ -25,7 +25,7 @@ mvn clean package
 
 | 文件 | 说明 |
 |------|------|
-| `config.yml` | 插件占位配置（可为空） |
+| `config.yml` | **主配置**（世界白名单、性能、全息、功能开关、help/reload 文案等） |
 | `Gui.yml` | **GUI 标题、按钮槽位/Lore、附魔中文表**（由 JAR 内预置文件复制，不覆盖已有文件） |
 | `Message.yml` | **聊天栏提示**（reload、批量模式、耐久/附魔输入等） |
 | `Update.yml` | **漏斗等级**（`default` + `levels`，传输 tick / 单次数量、展示名与 Lore） |
@@ -35,7 +35,8 @@ mvn clean package
 
 ## 配置与重载
 
-- 修改 `Gui.yml`、`Message.yml`、`Update.yml` 或外部工具编辑 `shan.db` 后，执行 **`/xlrhopper reload`**（权限 **`xlrhopper.admin`**，玩家与控制台均可），无需整服 `/reload`。
+- 修改 `config.yml`、`Gui.yml`、`Message.yml`、`Update.yml` 或外部工具编辑 `shan.db` 后，执行 **`/xlrhopper reload`**（权限 **`xlrhopper.admin`**，玩家与控制台均可），无需整服 `/reload`。
+- 查看帮助：**`/xlrhopper help`**（权限 **`xlrhopper.help`**，默认所有玩家拥有；文案来自 `config.yml` → `Command.help`）。
 - 给予等级漏斗：**`/xlrhopper give <玩家|%player%> <等级ID> [数量]`**（权限 **`xlrhopper.give`**，数量默认 1）。
 - 存储类界面（自动合成 / 过滤的物品 / 自动熔炼）可在 `Gui.yml` 中配置 **`rows`（≥1）**；其余界面行数在代码中固定。
 

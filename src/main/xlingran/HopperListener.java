@@ -4,13 +4,15 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockState;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -18,7 +20,6 @@ import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -37,15 +38,18 @@ public class HopperListener implements Listener {
     private final HopperLaneListener laneListener;
     private final MessageConfig messageConfig;
     private final UpdateConfig updateConfig;
+    private final XLRHopperConfig pluginConfig;
 
     public HopperListener(JavaPlugin plugin, HopperTemplateManager templateManager, HopperKeys keys,
-                          HopperLaneListener laneListener, MessageConfig messageConfig, UpdateConfig updateConfig) {
+                          HopperLaneListener laneListener, MessageConfig messageConfig, UpdateConfig updateConfig,
+                          XLRHopperConfig pluginConfig) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.keys = keys;
         this.laneListener = laneListener;
         this.messageConfig = messageConfig;
         this.updateConfig = updateConfig;
+        this.pluginConfig = pluginConfig;
     }
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
@@ -54,6 +58,9 @@ public class HopperListener implements Listener {
             return;
         }
         Block placed = event.getBlockPlaced();
+        if (!pluginConfig.isPluginWorld(placed)) {
+            return;
+        }
         String levelId = HopperLevelItems.readLevelFromItem(event.getItemInHand(), keys);
         if (levelId != null) {
             HopperLevelItems.applyLevelToBlock(placed, keys, levelId);
@@ -71,6 +78,50 @@ public class HopperListener implements Listener {
             return;
         }
         Bukkit.getScheduler().runTask(plugin, () -> applyHopperTemplate(placeLoc, player, enabledName));
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onBlockBreak(BlockBreakEvent event) {
+        Block block = event.getBlock();
+        if (block.getType() != Material.HOPPER || !pluginConfig.isPluginWorld(block)) {
+            return;
+        }
+        ItemStack drop = HopperLevelItems.createDropFromBlock(block, keys, updateConfig);
+        if (drop == null) {
+            return;
+        }
+        event.setDropItems(false);
+        block.getWorld().dropItemNaturally(block.getLocation().add(0.5, 0.5, 0.5), drop);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onBlockExplode(BlockExplodeEvent event) {
+        if (!pluginConfig.isExplosionHopperProtection()) {
+            return;
+        }
+        for (Block block : event.blockList()) {
+            dropLevelHopperIfNeeded(block);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onEntityExplode(EntityExplodeEvent event) {
+        if (!pluginConfig.isExplosionHopperProtection()) {
+            return;
+        }
+        for (Block block : event.blockList()) {
+            dropLevelHopperIfNeeded(block);
+        }
+    }
+
+    private void dropLevelHopperIfNeeded(Block block) {
+        if (block.getType() != Material.HOPPER || !pluginConfig.isPluginWorld(block)) {
+            return;
+        }
+        ItemStack drop = HopperLevelItems.createDropFromBlock(block, keys, updateConfig);
+        if (drop != null) {
+            block.getWorld().dropItemNaturally(block.getLocation().add(0.5, 0.5, 0.5), drop);
+        }
     }
 
     private boolean applyHopperTemplate(Location location, Player player, String enabledName) {
@@ -91,13 +142,13 @@ public class HopperListener implements Listener {
         ItemStack moving = event.getItem();
         if (dest.getType() == InventoryType.HOPPER) {
             Block hopperBlock = HopperBlockUtil.resolveHopperBlock(dest);
-            if (!shouldAllowTransfer(hopperBlock, moving)) {
+            if (!isActiveHopper(hopperBlock) || !shouldAllowTransfer(hopperBlock, moving)) {
                 event.setCancelled(true);
             }
         }
         if (src.getType() == InventoryType.HOPPER) {
             Block hopperBlock = HopperBlockUtil.resolveHopperBlock(src);
-            if (!shouldAllowTransfer(hopperBlock, moving)) {
+            if (!isActiveHopper(hopperBlock) || !shouldAllowTransfer(hopperBlock, moving)) {
                 event.setCancelled(true);
             }
         }
@@ -114,14 +165,16 @@ public class HopperListener implements Listener {
 
         if (event.getDestination().getType() == InventoryType.HOPPER) {
             Block hopperBlock = HopperBlockUtil.resolveHopperBlock(event.getDestination());
-            if (hopperBlock != null && !allowTieredTransfer(hopperBlock, moving, tick, gate)) {
+            if (hopperBlock != null && isActiveHopper(hopperBlock)
+                    && !allowTieredTransfer(hopperBlock, moving, tick, gate)) {
                 event.setCancelled(true);
                 return;
             }
         }
         if (event.getSource().getType() == InventoryType.HOPPER) {
             Block hopperBlock = HopperBlockUtil.resolveHopperBlock(event.getSource());
-            if (hopperBlock != null && !allowTieredTransfer(hopperBlock, moving, tick, gate)) {
+            if (hopperBlock != null && isActiveHopper(hopperBlock)
+                    && !allowTieredTransfer(hopperBlock, moving, tick, gate)) {
                 event.setCancelled(true);
             }
         }
@@ -134,11 +187,18 @@ public class HopperListener implements Listener {
             return;
         }
         Block hopperBlock = HopperBlockUtil.resolveHopperBlock(inventory);
+        if (!isActiveHopper(hopperBlock)) {
+            return;
+        }
         ItemStack stack = event.getItem().getItemStack();
         if (!shouldAllowTransfer(hopperBlock, stack)) {
             event.setCancelled(true);
             destroyIfAuto(hopperBlock, stack, event.getItem());
         }
+    }
+
+    private boolean isActiveHopper(Block hopperBlock) {
+        return hopperBlock != null && pluginConfig.isPluginWorld(hopperBlock);
     }
 
     private boolean allowTieredTransfer(Block hopperBlock, ItemStack moving, long tick, HopperTransferGate gate) {
@@ -166,6 +226,9 @@ public class HopperListener implements Listener {
             return;
         }
         Block hopperBlock = HopperBlockUtil.resolveHopperBlock(view.getTopInventory());
+        if (!isActiveHopper(hopperBlock)) {
+            return;
+        }
         ItemStack incoming = extractItemEnteringHopper(event);
         if (incoming == null || incoming.getType().isAir()) {
             return;
@@ -201,6 +264,9 @@ public class HopperListener implements Listener {
             return;
         }
         Block hopperBlock = HopperBlockUtil.resolveHopperBlock(top);
+        if (!isActiveHopper(hopperBlock)) {
+            return;
+        }
         if (rejectIfFiltered(player, hopperBlock, dragged)) {
             event.setCancelled(true);
         }
@@ -230,6 +296,9 @@ public class HopperListener implements Listener {
     }
 
     private void destroyIfAuto(Block hopperBlock, ItemStack stack, Item entity) {
+        if (!pluginConfig.isDestroyUnmatchedEnabled()) {
+            return;
+        }
         HopperTemplate template = resolveTemplate(hopperBlock);
         if (template == null || !template.isAutoDestroy()) {
             return;

@@ -7,13 +7,11 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 
 final class GuiClickGuard {
 
-    static final long COOLDOWN_MS = 200L;
-
     private GuiClickGuard() {
     }
 
-    static boolean shouldIgnoreClick(PlayerGuiSession session, Player player) {
-        return !session.tryClickCooldown(player.getUniqueId(), COOLDOWN_MS);
+    static boolean shouldIgnoreClick(PlayerGuiSession session, Player player, long cooldownMs) {
+        return !session.tryClickCooldown(player.getUniqueId(), cooldownMs);
     }
 
     static void blockItemManipulation(InventoryClickEvent event) {

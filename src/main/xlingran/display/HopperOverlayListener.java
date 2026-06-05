@@ -24,6 +24,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import eu.decentsoftware.holograms.event.DecentHologramsReloadEvent;
 import xlingran.HopperChunkScanUtil;
+import xlingran.XLRHopperConfig;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,10 +33,13 @@ public final class HopperOverlayListener implements Listener {
 
     private final JavaPlugin plugin;
     private final HopperOverlayDisplayService overlayService;
+    private final XLRHopperConfig pluginConfig;
 
-    public HopperOverlayListener(JavaPlugin plugin, HopperOverlayDisplayService overlayService) {
+    public HopperOverlayListener(JavaPlugin plugin, HopperOverlayDisplayService overlayService,
+                                 XLRHopperConfig pluginConfig) {
         this.plugin = plugin;
         this.overlayService = overlayService;
+        this.pluginConfig = pluginConfig;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -111,6 +115,9 @@ public final class HopperOverlayListener implements Listener {
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
         Chunk chunk = event.getChunk();
+        if (!pluginConfig.isPluginWorld(chunk.getWorld())) {
+            return;
+        }
         Bukkit.getScheduler().runTask(plugin, () -> restoreChunkOverlays(chunk));
     }
 

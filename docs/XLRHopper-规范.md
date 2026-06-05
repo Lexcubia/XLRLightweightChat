@@ -27,7 +27,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode` | 编辑已有模板，打开「模板设置」 |
 | `/xlrhopper mode` | `xlrhopper.mode` | 打开「漏斗模板」列表 GUI |
 | `/xlrhopper give <玩家\|%player%> <等级ID> [数量]` | `xlrhopper.give` | 给予指定等级的漏斗物品（数量缺省 1）；`%player%` 表示执行者本人（仅玩家执行时） |
-| `/xlrhopper reload` | `xlrhopper.admin` | 重载 `Gui.yml` + `Message.yml` + `Update.yml`、从 `shan.db` 重读模板、异步重登记已加载区块漏斗（玩家与控制台均可） |
+| `/xlrhopper help` | `xlrhopper.help`（**default: true**） | 输出 `config.yml` → `Command.help` 多行文案（玩家与控制台均可） |
+| `/xlrhopper reload` | `xlrhopper.admin` | 重载 `config.yml` + `Gui.yml` + `Message.yml` + `Update.yml`、从 `shan.db` 重读模板、异步重登记已加载区块漏斗（玩家与控制台均可）；成功提示读 `Command.reload`（`%status%` = 等级种数） |
 
 - 根命令 `xlrhopper` 在 `plugin.yml` 注册；子命令在代码内解析。已移除的 `box` / `create box` 子命令会提示新用法。
 - 各子命令在代码内分别校验权限。
@@ -39,7 +40,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 | 文件 | 路径 | 用途 |
 |------|------|------|
-| `config.yml` | `plugins/XLRHopper/config.yml` | 插件配置占位（可为空） |
+| `config.yml` | `plugins/XLRHopper/config.yml` | **主配置**：`World` 生效世界、`XLRHopper` 性能队列、`Hologram` 全息、`Gui` 可选功能开关、`Setting` 全局设置、`Command` help/reload 文案；由 `XLRHopperConfig` 读取，`/xlrhopper reload` 热重载 |
 | `Gui.yml` | `plugins/XLRHopper/Gui.yml` | GUI 标题、按钮材质/槽位/Lore、附魔中文表 |
 | `Message.yml` | `plugins/XLRHopper/Message.yml` | 聊天栏提示（`Messages.*`） |
 | `shan.db` | `plugins/XLRHopper/shan.db` | **模板业务数据**（SQLite） |
@@ -77,6 +78,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 **验收（漏斗链）**
 
 1. 必须用 **`/xlrhopper give %player% <等级> 1` 放置**（方块须有 `hopper-level` PDC）；仅改名/颜色的漏斗仍走 `default`。
+1. 等级漏斗在**启用世界**内挖掘后，掉落物须保留 `Update.yml` 对应等级的名称、Lore 及 `hopper-level-item` PDC，可再次放置并生效。
 2. 上方满箱、下方空箱对比：钻石（如 8/8）应明显快于铁（16/2）与普通放置漏斗（`default` 24/1）。
 3. 铁漏斗每次传输最多 **2** 个，且每 **16 tick** 可传输一次（对比铜 `max-item: 1`）。
 4. 任意等级漏斗 Q 丢 64：地面物品**直接全量**进漏斗（空间足够时 64 个全进），不因 `max-item` 截断或吞掉剩余。

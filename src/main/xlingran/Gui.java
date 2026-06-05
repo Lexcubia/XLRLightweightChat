@@ -46,6 +46,7 @@ public class Gui implements Listener {
     private final HopperKeys hopperKeys;
     private final GuiConfig guiConfig;
     private final MessageConfig messageConfig;
+    private final XLRHopperConfig pluginConfig;
     private final HopperTickService tickService;
     private final HopperLaneListener laneListener;
     private final HopperOverlayDisplayService overlayService;
@@ -64,8 +65,8 @@ public class Gui implements Listener {
 
     public Gui(Shan plugin, HopperTemplateManager templateManager, PlayerGuiSession sessions,
                TemplateRepository templateRepository, HopperKeys hopperKeys, GuiConfig guiConfig,
-               MessageConfig messageConfig, HopperTickService tickService, HopperLaneListener laneListener,
-               HopperOverlayDisplayService overlayService) {
+               MessageConfig messageConfig, XLRHopperConfig pluginConfig, HopperTickService tickService,
+               HopperLaneListener laneListener, HopperOverlayDisplayService overlayService) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.sessions = sessions;
@@ -73,6 +74,7 @@ public class Gui implements Listener {
         this.hopperKeys = hopperKeys;
         this.guiConfig = guiConfig;
         this.messageConfig = messageConfig;
+        this.pluginConfig = pluginConfig;
         this.tickService = tickService;
         this.laneListener = laneListener;
         this.overlayService = overlayService;
@@ -220,7 +222,7 @@ public class Gui implements Listener {
             return;
         }
         event.setCancelled(true);
-        if (GuiClickGuard.shouldIgnoreClick(sessions, player)) {
+        if (GuiClickGuard.shouldIgnoreClick(sessions, player, pluginConfig.getGuiClickCooldownMs())) {
             return;
         }
         if (event.getClickedInventory() != top) {
@@ -331,6 +333,12 @@ public class Gui implements Listener {
         }
 
         if (mode == PlayerGuiSession.InputMode.BATCH_APPLY) {
+            if (!pluginConfig.isBatchSetEnabled()) {
+                sessions.clearInput(player.getUniqueId());
+                player.sendMessage(messageConfig.message("overlay-feature-disabled"));
+                openTemplateSettings(player, templateName);
+                return;
+            }
             player.sendMessage(messageConfig.message("batch-mode-reminder"));
             return;
         }
@@ -342,6 +350,12 @@ public class Gui implements Listener {
         }
 
         if (mode == PlayerGuiSession.InputMode.DURABILITY) {
+            if (!pluginConfig.isFilterDurabilityEnabled()) {
+                sessions.clearInput(player.getUniqueId());
+                player.sendMessage(messageConfig.message("overlay-feature-disabled"));
+                openTemplateSettings(player, templateName);
+                return;
+            }
             Integer value = parsePositiveInt(message);
             if (value == null) {
                 player.sendMessage(messageConfig.message("durability-input-error"));
@@ -356,6 +370,12 @@ public class Gui implements Listener {
             return;
         }
         if (mode == PlayerGuiSession.InputMode.ENCHANT_LEVEL) {
+            if (!pluginConfig.isFilterEnchanEnabled()) {
+                sessions.clearInput(player.getUniqueId());
+                player.sendMessage(messageConfig.message("overlay-feature-disabled"));
+                openTemplateSettings(player, templateName);
+                return;
+            }
             Enchantment pending = sessions.getPendingEnchant(player.getUniqueId());
             if (pending == null) {
                 sessions.clearInput(player.getUniqueId());
@@ -420,6 +440,9 @@ public class Gui implements Listener {
         }
         if (slot == slotAutoDestroy) {
             if (click == ClickType.LEFT || click == ClickType.RIGHT) {
+                if (rejectDisabledFeature(player, pluginConfig.isDestroyUnmatchedEnabled())) {
+                    return;
+                }
                 template.toggleAutoDestroy();
                 saveData();
                 openTemplateSettings(player, templateName);
@@ -433,14 +456,23 @@ public class Gui implements Listener {
                 openTemplateSettings(player, templateName);
             }
         } else if (slot == slotFilterEnchant) {
+            if (rejectDisabledFeature(player, pluginConfig.isFilterEnchanEnabled())) {
+                return;
+            }
             openFilterEnchants(player, templateName);
         } else if (slot == slotFilterDurability) {
+            if (rejectDisabledFeature(player, pluginConfig.isFilterDurabilityEnabled())) {
+                return;
+            }
             player.closeInventory();
             sessions.clearInput(player.getUniqueId());
             sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.DURABILITY, templateName);
             player.sendMessage(messageConfig.message("durability-prompt"));
         } else if (slot == slotAutoCraft) {
             if (click == ClickType.LEFT || click == ClickType.RIGHT) {
+                if (rejectDisabledFeature(player, pluginConfig.isAutoCraftEnabled())) {
+                    return;
+                }
                 if (click == ClickType.LEFT) {
                     template.toggleAutoCraftEnabled();
                     saveData();
@@ -451,6 +483,9 @@ public class Gui implements Listener {
             }
         } else if (slot == slotAutoSmelt) {
             if (click == ClickType.LEFT || click == ClickType.RIGHT) {
+                if (rejectDisabledFeature(player, pluginConfig.isAutoSmeltEnabled())) {
+                    return;
+                }
                 if (click == ClickType.LEFT) {
                     template.toggleAutoSmeltEnabled();
                     saveData();
@@ -460,12 +495,23 @@ public class Gui implements Listener {
                 }
             }
         } else if (slot == slotBatch) {
+            if (rejectDisabledFeature(player, pluginConfig.isBatchSetEnabled())) {
+                return;
+            }
             player.closeInventory();
             sessions.clearInput(player.getUniqueId());
             sessions.setInputMode(player.getUniqueId(), PlayerGuiSession.InputMode.BATCH_APPLY, templateName);
             player.sendMessage(messageConfig.message("batch-enter"));
             player.sendMessage(messageConfig.message("batch-quit-hint"));
         }
+    }
+
+    private boolean rejectDisabledFeature(Player player, boolean enabled) {
+        if (enabled) {
+            return false;
+        }
+        player.sendMessage(messageConfig.message("overlay-feature-disabled"));
+        return true;
     }
 
     private void handleHopperSettingsClick(Player player, int slot, ClickType click, XlrGuiHolder holder) {
@@ -492,13 +538,19 @@ public class Gui implements Listener {
         HopperBlockConfig config = HopperBlockConfig.read(block, hopperKeys);
         boolean changed = false;
         if (slot == slotHopperRedstone) {
+            if (rejectDisabledFeature(player, pluginConfig.isRedstoneToggleEnabled())) {
+                return;
+            }
             config = config.withRedstoneListToggle(!config.isRedstoneListToggle());
             changed = true;
         } else if (slot == slotHopperReverse) {
+            if (rejectDisabledFeature(player, pluginConfig.isReverseHopperEnabled())) {
+                return;
+            }
             config = config.withReverseSuction(!config.isReverseSuction());
             changed = true;
         } else if (slot == slotHopperFloatOverlay) {
-            if (!config.isHoverDisplay() && !overlayService.isAvailable()) {
+            if (!pluginConfig.isHologramEnabled() || !overlayService.isAvailable()) {
                 player.sendMessage(messageConfig.message("overlay-feature-disabled"));
                 openHopperSettings(player, block);
                 return;
@@ -521,6 +573,9 @@ public class Gui implements Listener {
     }
 
     private void handleFilterEnchantsClick(Player player, int slot, ClickType click, XlrGuiHolder holder) {
+        if (rejectDisabledFeature(player, pluginConfig.isFilterEnchanEnabled())) {
+            return;
+        }
         if (slot < 0 || slot >= guiConfig.filterEnchantsSize()) {
             return;
         }

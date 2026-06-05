@@ -14,6 +14,8 @@ public final class HopperLane {
     private int transferTick = 24;
     private int maxItem = 1;
     private int ticksSinceLastStep;
+    private int sleepCooldownTicks;
+    private int idleTicks;
 
     public HopperLane(Location location) {
         this.location = location.clone();
@@ -103,6 +105,32 @@ public final class HopperLane {
 
     public void resetTicksSinceLastStep() {
         ticksSinceLastStep = 0;
+    }
+
+    public int sleepCooldownTicks() {
+        return sleepCooldownTicks;
+    }
+
+    public void setSleepCooldownTicks(int sleepCooldownTicks) {
+        this.sleepCooldownTicks = Math.max(0, sleepCooldownTicks);
+    }
+
+    public void decrementSleepCooldown(int delta) {
+        if (sleepCooldownTicks > 0) {
+            sleepCooldownTicks = Math.max(0, sleepCooldownTicks - delta);
+        }
+    }
+
+    public int idleTicks() {
+        return idleTicks;
+    }
+
+    public void addIdleTicks(int delta) {
+        idleTicks += delta;
+    }
+
+    public void resetIdleTicks() {
+        idleTicks = 0;
     }
 
     public static String laneKey(Location loc) {

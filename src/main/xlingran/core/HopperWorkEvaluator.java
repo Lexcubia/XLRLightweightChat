@@ -10,11 +10,15 @@ import org.bukkit.inventory.ItemStack;
 import xlingran.HopperAutoSmeltService;
 import xlingran.HopperContainerUtil;
 import xlingran.HopperKeys;
+import xlingran.Shan;
+import xlingran.XLRHopperConfig;
 
 /**
  * 事件侧入队判定（禁止在 8 tick 定时器内调用）。
  */
 public final class HopperWorkEvaluator {
+
+    private static final int TICK_STEP = 8;
 
     private HopperWorkEvaluator() {
     }
@@ -24,15 +28,26 @@ public final class HopperWorkEvaluator {
         if (block == null || block.getType() != Material.HOPPER) {
             return;
         }
+        XLRHopperConfig config = config();
+        if (config != null && !config.isPluginWorld(block)) {
+            return;
+        }
         HopperLane lane = registry.getLane(block.getLocation());
         if (lane == null || !lane.hasSnapshot() || !lane.hasAutomation()) {
             return;
         }
+        if (lane.sleepCooldownTicks() > 0) {
+            lane.decrementSleepCooldown(TICK_STEP);
+            return;
+        }
         String key = HopperLane.laneKey(block.getLocation());
-        if (!pendingWork(block, lane, keys, smeltService)) {
+        if (!pendingWork(block, lane, keys, smeltService, config)) {
+            applySleep(lane, config);
             registry.removeFromWorkQueue(key);
             return;
         }
+        lane.resetIdleTicks();
+        lane.setSleepCooldownTicks(0);
         if (!lane.isTargetHasSpace() && lane.isReverse()) {
             registry.removeFromWorkQueue(key);
             return;
@@ -48,11 +63,27 @@ public final class HopperWorkEvaluator {
 
     public static boolean shouldRemainInQueue(Block block, HopperLane lane, HopperKeys keys,
                                               HopperAutoSmeltService smeltService) {
-        return pendingWork(block, lane, keys, smeltService);
+        return pendingWork(block, lane, keys, smeltService, config());
+    }
+
+    private static void applySleep(HopperLane lane, XLRHopperConfig config) {
+        if (config == null) {
+            return;
+        }
+        lane.addIdleTicks(TICK_STEP);
+        int cooldown;
+        if (lane.idleTicks() >= config.getDeepSleepTick()) {
+            cooldown = config.getDeepSleepTick();
+        } else if (lane.idleTicks() >= config.getSleepTick()) {
+            cooldown = config.getSleepTick();
+        } else {
+            return;
+        }
+        lane.setSleepCooldownTicks(cooldown);
     }
 
     private static boolean pendingWork(Block block, HopperLane lane, HopperKeys keys,
-                                       HopperAutoSmeltService smeltService) {
+                                       HopperAutoSmeltService smeltService, XLRHopperConfig config) {
         if (registryHasSmelt(smeltService, block.getLocation())) {
             return true;
         }
@@ -62,6 +93,14 @@ public final class HopperWorkEvaluator {
         Inventory inv = container.getInventory();
         var template = lane.template();
         if (template == null) {
+            return false;
+        }
+        if (config != null && config.isSleepEmptyHopper() && isInventoryEmpty(inv)) {
+            if (!lane.isReverse()) {
+                return false;
+            }
+        }
+        if (config != null && config.isSleepFullContainer() && !lane.isReverse() && isDownstreamFull(block)) {
             return false;
         }
         if (lane.isAutoCraft() || lane.isReverse()) {
@@ -92,7 +131,35 @@ public final class HopperWorkEvaluator {
         return false;
     }
 
+    private static boolean isInventoryEmpty(Inventory inv) {
+        for (ItemStack stack : inv.getContents()) {
+            if (stack != null && !stack.getType().isAir()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isDownstreamFull(Block block) {
+        Block below = block.getRelative(BlockFace.DOWN);
+        Inventory belowInv = HopperContainerUtil.getContainerInventory(below);
+        if (belowInv == null) {
+            return false;
+        }
+        for (ItemStack stack : belowInv.getContents()) {
+            if (stack == null || stack.getType().isAir()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static boolean registryHasSmelt(HopperAutoSmeltService smeltService, Location loc) {
         return smeltService != null && smeltService.hasJob(loc);
+    }
+
+    private static XLRHopperConfig config() {
+        Shan plugin = Shan.getInstance();
+        return plugin != null ? plugin.getPluginConfig() : null;
     }
 }

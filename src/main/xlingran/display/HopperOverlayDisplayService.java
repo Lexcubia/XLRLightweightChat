@@ -22,6 +22,7 @@ import xlingran.HopperTemplate;
 import xlingran.HopperTemplateManager;
 import xlingran.HopperTemplateResolver;
 import xlingran.Shan;
+import xlingran.XLRHopperConfig;
 import xlingran.gui.HopperLevelDef;
 import xlingran.gui.TextPlaceholders;
 import xlingran.gui.UpdateConfig;
@@ -37,24 +38,25 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class HopperOverlayDisplayService {
 
-    private static final float HOLOGRAM_Y_OFFSET = 1.3f;
-    private static final long REFRESH_DEBOUNCE_TICKS = 4L;
     private static final double ITEM_ROW_SPACING = 0.38;
 
     private final Shan plugin;
     private final HopperKeys keys;
     private final HopperTemplateManager templateManager;
     private final UpdateConfig updateConfig;
+    private final XLRHopperConfig pluginConfig;
     private final boolean decentHologramsAvailable;
     private final Map<String, String> signaturesByLocation = new ConcurrentHashMap<>();
     private final Map<String, BukkitTask> debouncedRefresh = new ConcurrentHashMap<>();
 
     public HopperOverlayDisplayService(Shan plugin, HopperKeys keys, HopperTemplateManager templateManager,
-                                       UpdateConfig updateConfig, boolean decentHologramsAvailable) {
+                                       UpdateConfig updateConfig, XLRHopperConfig pluginConfig,
+                                       boolean decentHologramsAvailable) {
         this.plugin = plugin;
         this.keys = keys;
         this.templateManager = templateManager;
         this.updateConfig = updateConfig;
+        this.pluginConfig = pluginConfig;
         this.decentHologramsAvailable = decentHologramsAvailable;
     }
 
@@ -63,7 +65,7 @@ public final class HopperOverlayDisplayService {
     }
 
     public void refreshDebounced(Block block) {
-        if (!decentHologramsAvailable || block == null || block.getType() != Material.HOPPER) {
+        if (!canShowHologram(block)) {
             return;
         }
         String locKey = locationKey(block.getLocation());
@@ -74,7 +76,7 @@ public final class HopperOverlayDisplayService {
         BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             debouncedRefresh.remove(locKey);
             refresh(block);
-        }, REFRESH_DEBOUNCE_TICKS);
+        }, pluginConfig.getHologramRefreshDebounceTicks());
         debouncedRefresh.put(locKey, task);
     }
 
@@ -103,7 +105,7 @@ public final class HopperOverlayDisplayService {
     }
 
     public void refresh(Block block) {
-        if (!decentHologramsAvailable || block == null || block.getType() != Material.HOPPER) {
+        if (!canShowHologram(block)) {
             return;
         }
         HopperBlockConfig config = HopperBlockConfig.read(block, keys);
@@ -212,8 +214,13 @@ public final class HopperOverlayDisplayService {
     }
 
     public boolean isHoverEnabled(Block block) {
-        return block != null && block.getType() == Material.HOPPER
-                && HopperBlockConfig.read(block, keys).isHoverDisplay();
+        return canShowHologram(block) && HopperBlockConfig.read(block, keys).isHoverDisplay();
+    }
+
+    private boolean canShowHologram(Block block) {
+        return decentHologramsAvailable && pluginConfig.isHologramEnabled()
+                && pluginConfig.isPluginWorld(block)
+                && block != null && block.getType() == Material.HOPPER;
     }
 
     private void syncLines(Hologram hologram, List<ItemStack> items, List<String> textLines) {
@@ -331,8 +338,8 @@ public final class HopperOverlayDisplayService {
         }
     }
 
-    private static Location hologramLocation(Block block) {
-        return block.getLocation().add(0.5, HOLOGRAM_Y_OFFSET, 0.5);
+    private Location hologramLocation(Block block) {
+        return block.getLocation().add(0.5, pluginConfig.getHologramHeight(), 0.5);
     }
 
     private static String hologramName(Location loc) {
@@ -377,28 +384,28 @@ public final class HopperOverlayDisplayService {
     }
 
     private List<String> buildOverlayLines(Block block, HopperTemplate template, HopperBlockConfig config) {
-        List<String> lines = new ArrayList<>(5);
         HopperLevelDef levelDef = HopperLevelResolver.resolveForBlock(block, keys, updateConfig);
-        String levelName = levelDef != null ? levelDef.displayName() : "&7默认漏斗";
-        lines.add(TextPlaceholders.apply("&a漏斗等级: %name%", Map.of("name", levelName)));
-
+        String hopperName = levelDef != null ? levelDef.displayName() : "&7默认漏斗";
         String templateName = readTemplateName(block);
         if (templateName == null) {
             templateName = "?";
         }
-        lines.add(TextPlaceholders.color("&a当前使用模板: &e" + templateName));
-
         boolean whitelist = HopperBlockConfig.getEffectiveWhitelist(block, keys, template);
-        lines.add(TextPlaceholders.color("&7模式：" + (whitelist ? "白名单" : "黑名单")));
-
+        String mode = whitelist ? "白名单" : "黑名单";
         int enchantCount = template.getEnchantMinLevels().size();
-        lines.add(TextPlaceholders.color("&7过滤: " + enchantCount + " 种附魔"));
-
         Integer dur = template.getDurabilityThreshold();
-        if (dur != null) {
-            lines.add(TextPlaceholders.color("&7最低耐久度: &a" + dur));
-        } else {
-            lines.add(TextPlaceholders.color("&7最低耐久度: &7未设置"));
+        String durability = dur != null ? String.valueOf(dur) : "未设置";
+
+        Map<String, String> vars = Map.of(
+                "hoppername", hopperName,
+                "template", templateName,
+                "mode", mode,
+                "enchan", String.valueOf(enchantCount),
+                "durability", durability);
+
+        List<String> lines = new ArrayList<>();
+        for (String raw : pluginConfig.getHologramLines()) {
+            lines.add(TextPlaceholders.apply(raw, vars));
         }
         return lines;
     }

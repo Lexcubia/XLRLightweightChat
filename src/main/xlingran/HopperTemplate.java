@@ -148,8 +148,13 @@ public class HopperTemplate {
         }
         boolean effectiveWhitelist = HopperBlockConfig.getEffectiveWhitelist(hopperBlock, keys, this);
         boolean passItem = FilterItem.allows(stack, effectiveWhitelist, filterPrototypes);
-        boolean passDurability = FilterDurability.allows(stack, durabilityThreshold);
-        boolean passEnchant = FilterEnchant.allows(stack, enchantMinLevels);
+        XLRHopperConfig cfg = Shan.getInstance() != null ? Shan.getInstance().getPluginConfig() : null;
+        boolean passDurability = cfg == null || cfg.isFilterDurabilityEnabled()
+                ? FilterDurability.allows(stack, durabilityThreshold)
+                : true;
+        boolean passEnchant = cfg == null || cfg.isFilterEnchanEnabled()
+                ? FilterEnchant.allows(stack, enchantMinLevels)
+                : true;
         return passItem && passDurability && passEnchant;
     }
 }

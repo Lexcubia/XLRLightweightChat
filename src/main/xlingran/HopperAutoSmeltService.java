@@ -19,10 +19,18 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class HopperAutoSmeltService {
 
-    public static final int SMELT_DURATION_TICKS = 100;
     public static final int TICK_STEP = 8;
 
+    private final XLRHopperConfig pluginConfig;
     private final Map<String, SmeltJob> jobs = new ConcurrentHashMap<>();
+
+    public HopperAutoSmeltService(XLRHopperConfig pluginConfig) {
+        this.pluginConfig = pluginConfig;
+    }
+
+    private int smeltDurationTicks() {
+        return pluginConfig != null ? pluginConfig.getSmeltTick() : 100;
+    }
 
     /**
      * @return 本 tick 预留的漏斗槽位
@@ -30,6 +38,10 @@ public final class HopperAutoSmeltService {
     public Set<Integer> tick(Block hopperBlock, HopperTemplate template, HopperKeys keys) {
         Set<Integer> reserved = new HashSet<>();
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER || template == null) {
+            return reserved;
+        }
+        if (pluginConfig != null && !pluginConfig.isAutoSmeltEnabled()) {
+            jobs.remove(laneKey(hopperBlock.getLocation()));
             return reserved;
         }
         if (!template.isAutoSmeltEnabled() || template.getAutoSmeltOutputs().isEmpty()) {
@@ -88,7 +100,7 @@ public final class HopperAutoSmeltService {
                 }
                 ItemStack result = mapping.resultStack().clone();
                 result.setAmount(1);
-                jobs.put(key, new SmeltJob(i, result, SMELT_DURATION_TICKS));
+                jobs.put(key, new SmeltJob(i, result, smeltDurationTicks()));
                 reserved.add(i);
                 HopperContainerUtil.syncContainer(hopperBlock);
                 return reserved;

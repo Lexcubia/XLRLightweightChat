@@ -7,6 +7,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import xlingran.gui.TextPlaceholders;
 import xlingran.gui.UpdateConfig;
 
 import java.util.ArrayList;
@@ -41,6 +42,17 @@ public class HopperCommand implements CommandExecutor, TabCompleter {
 
         if (args.length >= 1 && args[0].equalsIgnoreCase("give")) {
             return handleGive(sender, args);
+        }
+
+        if (args.length >= 1 && args[0].equalsIgnoreCase("help")) {
+            if (!sender.hasPermission("xlrhopper.help")) {
+                sender.sendMessage(plugin.getMessageConfig().message("help-no-permission"));
+                return true;
+            }
+            for (String line : plugin.getPluginConfig().getHelpLines()) {
+                sender.sendMessage(TextPlaceholders.color(line));
+            }
+            return true;
         }
 
         if (!(sender instanceof Player player)) {
@@ -167,6 +179,9 @@ public class HopperCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
             List<String> options = new ArrayList<>();
+            if (sender.hasPermission("xlrhopper.help")) {
+                options.add("help");
+            }
             if (sender.hasPermission("xlrhopper.admin")) {
                 options.add("reload");
             }

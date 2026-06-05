@@ -46,7 +46,8 @@ Messages:
     no-permission-edit-mode: "&c你没有权限编辑模板"
     template-not-found: "&c模板不存在: &f%Template%"
     no-permission-mode: "&c你没有权限打开模板列表"
-    usage-command: "&c用法: /xlrhopper <mode|create mode <名称>|edit mode <名称>|give|reload>"
+    usage-command: "&c用法: /xlrhopper <help|mode|create mode <名称>|edit mode <名称>|give|reload>"
+    help-no-permission: "&c你没有权限查看帮助"
 
     # give 等级漏斗
     give-no-permission: "&c你没有权限给予等级漏斗"

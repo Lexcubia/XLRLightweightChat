@@ -82,7 +82,9 @@ public final class HopperBlockConfig {
             return true;
         }
         HopperBlockConfig config = read(hopperBlock, keys);
-        if (config.isRedstoneListToggle() && hopperBlock != null) {
+        Shan plugin = Shan.getInstance();
+        boolean redstoneToggleAllowed = plugin == null || plugin.getPluginConfig().isRedstoneToggleEnabled();
+        if (redstoneToggleAllowed && config.isRedstoneListToggle() && hopperBlock != null) {
             return hopperBlock.isBlockPowered();
         }
         return template.isWhitelist();

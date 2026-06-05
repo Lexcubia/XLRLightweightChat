@@ -11,9 +11,12 @@ softdepend:
 commands:
   xlrhopper:
     description: XLRHopper 漏斗模板
-    usage: /xlrhopper <mode|create mode <名称>|edit mode <名称>|give <玩家|%player%> <等级> [数量]|reload>
+    usage: /xlrhopper <help|mode|create mode <名称>|edit mode <名称>|give <玩家|%player%> <等级> [数量]|reload>
 
 permissions:
+  xlrhopper.help:
+    description: 查看 XLRHopper 帮助 (help)
+    default: true
   xlrhopper.admin:
     description: 重载插件配置（reload）
     default: op

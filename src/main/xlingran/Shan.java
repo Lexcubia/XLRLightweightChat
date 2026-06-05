@@ -12,9 +12,12 @@ import xlingran.display.HopperOverlayDisplayService;
 import xlingran.display.HopperOverlayListener;
 import xlingran.gui.GuiConfig;
 import xlingran.gui.MessageConfig;
+import xlingran.gui.TextPlaceholders;
 import xlingran.gui.UpdateConfig;
 import xlingran.storage.ShanDatabase;
 import xlingran.storage.TemplateRepository;
+
+import java.util.Map;
 
 public class Shan extends JavaPlugin {
 
@@ -33,6 +36,7 @@ public class Shan extends JavaPlugin {
     private HopperLaneListener hopperLaneListener;
     private HopperLaneRegistry laneRegistry;
     private HopperOverlayDisplayService overlayDisplayService;
+    private XLRHopperConfig pluginConfig;
 
     public static Shan getInstance() {
         return instance;
@@ -74,10 +78,25 @@ public class Shan extends JavaPlugin {
         return hopperLaneListener;
     }
 
+    public XLRHopperConfig getPluginConfig() {
+        return pluginConfig;
+    }
+
+    public HopperOverlayDisplayService getOverlayDisplayService() {
+        return overlayDisplayService;
+    }
+
     @Override
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
+        pluginConfig = new XLRHopperConfig(this);
+        String configVersion = pluginConfig.getConfigVersion();
+        String pluginVersion = getDescription().getVersion();
+        if (!configVersion.equals(pluginVersion)) {
+            getLogger().warning("[XLRHopper] config.yml Version=" + configVersion
+                    + " 与 plugin.yml 版本 " + pluginVersion + " 不一致");
+        }
         saveResource("Gui.yml", false);
         saveResource("Message.yml", false);
         saveResource("Update.yml", false);
@@ -101,10 +120,13 @@ public class Shan extends JavaPlugin {
 
         hopperKeys = new HopperKeys(this);
         GameTickCounter.getInstance().start(this);
-        laneRegistry = new HopperLaneRegistry();
-        hopperTickService = new HopperTickService(this, templateManager, hopperKeys, laneRegistry, updateConfig);
-        hopperLaneListener = new HopperLaneListener(this, hopperTickService);
-        VersionChecker.checkOnEnable(this);
+        laneRegistry = new HopperLaneRegistry(pluginConfig);
+        hopperTickService = new HopperTickService(this, templateManager, hopperKeys, laneRegistry, updateConfig,
+                pluginConfig);
+        hopperLaneListener = new HopperLaneListener(this, hopperTickService, pluginConfig);
+        if (pluginConfig.isCheckUpdateEnabled()) {
+            VersionChecker.checkOnEnable(this);
+        }
 
         boolean decentHologramsAvailable = getServer().getPluginManager().isPluginEnabled("DecentHolograms");
         if (decentHologramsAvailable) {
@@ -119,10 +141,10 @@ public class Shan extends JavaPlugin {
                             + ChatColor.RED + "已关闭全息显示功能");
         }
         overlayDisplayService = new HopperOverlayDisplayService(this, hopperKeys, templateManager, updateConfig,
-                decentHologramsAvailable);
+                pluginConfig, decentHologramsAvailable);
 
         gui = new Gui(this, templateManager, playerGuiSession, templateRepository, hopperKeys, guiConfig,
-                messageConfig, hopperTickService, hopperLaneListener, overlayDisplayService);
+                messageConfig, pluginConfig, hopperTickService, hopperLaneListener, overlayDisplayService);
 
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
@@ -143,15 +165,17 @@ public class Shan extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(gui, this);
         getServer().getPluginManager().registerEvents(
-                new HopperListener(this, templateManager, hopperKeys, hopperLaneListener, messageConfig, updateConfig),
+                new HopperListener(this, templateManager, hopperKeys, hopperLaneListener, messageConfig, updateConfig,
+                        pluginConfig),
                 this);
         getServer().getPluginManager().registerEvents(hopperLaneListener, this);
         getServer().getPluginManager().registerEvents(
-                new HopperOverlayListener(this, overlayDisplayService), this);
+                new HopperOverlayListener(this, overlayDisplayService, pluginConfig), this);
         getServer().getPluginManager().registerEvents(
                 new HopperReverseHandler(hopperKeys, hopperTickService, hopperLaneListener), this);
         getServer().getPluginManager().registerEvents(
-                new BatchModeListener(hopperKeys, playerGuiSession, hopperLaneListener, messageConfig), this);
+                new BatchModeListener(hopperKeys, playerGuiSession, hopperLaneListener, messageConfig, pluginConfig),
+                this);
         getServer().getPluginManager().registerEvents(
                 new HopperSettingsListener(gui, templateManager, hopperKeys, messageConfig), this);
 
@@ -197,13 +221,18 @@ public class Shan extends JavaPlugin {
                 return;
             }
             Bukkit.getScheduler().runTask(this, () -> {
+                reloadConfig();
+                pluginConfig.reload();
                 guiConfig.reload();
                 messageConfig.reload();
                 updateConfig.reload();
                 HopperTransferGate.getInstance().clearAll();
                 asyncReindexLoadedChunks();
                 if (sender != null) {
-                    sender.sendMessage(messageConfig.message("reload-success"));
+                    int status = updateConfig.levelIds().size();
+                    for (String line : pluginConfig.getReloadLines()) {
+                        sender.sendMessage(TextPlaceholders.apply(line, Map.of("status", String.valueOf(status))));
+                    }
                 }
             });
         });
@@ -213,6 +242,9 @@ public class Shan extends JavaPlugin {
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             java.util.List<org.bukkit.Location> coords = new java.util.ArrayList<>();
             for (org.bukkit.World world : Bukkit.getWorlds()) {
+                if (!pluginConfig.isPluginWorld(world)) {
+                    continue;
+                }
                 for (Chunk chunk : world.getLoadedChunks()) {
                     for (int x = 0; x < 16; x++) {
                         for (int z = 0; z < 16; z++) {

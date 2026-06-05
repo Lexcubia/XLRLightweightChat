@@ -49,6 +49,14 @@ public final class HopperLevelItems {
         return stack.getItemMeta().getPersistentDataContainer().get(keys.hopperLevelItem, PersistentDataType.STRING);
     }
 
+    public static ItemStack createDropFromBlock(Block block, HopperKeys keys, UpdateConfig config) {
+        String levelId = HopperLevelResolver.readLevelId(block, keys);
+        if (levelId == null) {
+            return null;
+        }
+        return createLevelHopper(config, keys, levelId, 1);
+    }
+
     public static boolean applyLevelToBlock(Block block, HopperKeys keys, String levelId) {
         if (block == null || block.getType() != Material.HOPPER || levelId == null || levelId.isEmpty()) {
             return false;

@@ -38,6 +38,10 @@ public class HopperSettingsListener implements Listener {
         if (block == null || block.getType() != Material.HOPPER) {
             return;
         }
+        Shan plugin = Shan.getInstance();
+        if (plugin != null && !plugin.getPluginConfig().isPluginWorld(block)) {
+            return;
+        }
         if (!HopperTemplateResolver.hasValidTemplate(block, keys, templateManager)) {
             player.sendMessage(messageConfig.message("no-template"));
             return;

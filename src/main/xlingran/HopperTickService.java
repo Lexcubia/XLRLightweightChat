@@ -22,7 +22,6 @@ import java.util.Set;
 public final class HopperTickService implements Listener {
 
     public static final long HOPPER_TICK_PERIOD = 8L;
-    private static final int MAX_PER_TICK = 256;
 
     private final JavaPlugin plugin;
     private final HopperTemplateManager templateManager;
@@ -32,17 +31,20 @@ public final class HopperTickService implements Listener {
     private final HopperAutoSmeltService smeltService;
     private final HopperAutoCraftService craftService;
     private final UpdateConfig updateConfig;
+    private final XLRHopperConfig pluginConfig;
 
     public HopperTickService(JavaPlugin plugin, HopperTemplateManager templateManager, HopperKeys keys,
-                             HopperLaneRegistry laneRegistry, UpdateConfig updateConfig) {
+                             HopperLaneRegistry laneRegistry, UpdateConfig updateConfig,
+                             XLRHopperConfig pluginConfig) {
         this.plugin = plugin;
         this.templateManager = templateManager;
         this.keys = keys;
         this.laneRegistry = laneRegistry;
         this.reservation = new HopperReservation();
-        this.smeltService = new HopperAutoSmeltService();
+        this.smeltService = new HopperAutoSmeltService(pluginConfig);
         this.craftService = new HopperAutoCraftService();
         this.updateConfig = updateConfig;
+        this.pluginConfig = pluginConfig;
         Bukkit.getScheduler().runTaskTimer(plugin, this::tickAll, HOPPER_TICK_PERIOD, HOPPER_TICK_PERIOD);
     }
 
@@ -81,6 +83,9 @@ public final class HopperTickService implements Listener {
      * 异步 reindex 完成后在主线程调用。
      */
     public void registerLoadedHopper(Block block) {
+        if (!pluginConfig.isPluginWorld(block)) {
+            return;
+        }
         HopperLane lane = laneRegistry.registerLane(block, keys, templateManager, updateConfig);
         if (lane != null) {
             HopperWorkEvaluator.evaluateAndQueue(block, laneRegistry, keys, smeltService);
@@ -88,15 +93,17 @@ public final class HopperTickService implements Listener {
     }
 
     private void tickAll() {
-        List<HopperLane> lanes = laneRegistry.workQueueSnapshot(MAX_PER_TICK);
+        int maxPerTick = pluginConfig.getPerTickMaxProcess();
+        List<HopperLane> lanes = laneRegistry.workQueueSnapshot(maxPerTick);
         int processed = 0;
         for (HopperLane lane : lanes) {
-            if (++processed > MAX_PER_TICK) {
+            if (++processed > maxPerTick) {
                 plugin.getLogger().warning("[XLRHopper] 漏斗工作队列积压，剩余延后处理");
                 break;
             }
             Location loc = lane.location();
-            if (loc.getWorld() == null || !loc.getWorld().isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) {
+            if (loc.getWorld() == null || !pluginConfig.isPluginWorld(loc.getWorld())
+                    || !loc.getWorld().isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) {
                 laneRegistry.removeFromWorkQueue(HopperLane.laneKey(loc));
                 continue;
             }
@@ -121,15 +128,15 @@ public final class HopperTickService implements Listener {
             lane.resetTicksSinceLastStep();
 
             Set<Integer> reserved = new HashSet<>();
-            if (lane.isAutoSmelt()) {
+            if (lane.isAutoSmelt() && pluginConfig.isAutoSmeltEnabled()) {
                 reserved.addAll(smeltService.tick(block, template, keys));
             }
-            if (lane.isAutoCraft()) {
+            if (lane.isAutoCraft() && pluginConfig.isAutoCraftEnabled()) {
                 reserved.addAll(craftService.tryCraft(block, template, keys));
             }
             reservation.setReserved(loc, reserved);
 
-            if (lane.isReverse()) {
+            if (lane.isReverse() && pluginConfig.isReverseHopperEnabled()) {
                 int moved = HopperTransferReverse.transferStep(block, template, keys, reservation, lane.maxItem());
                 if (moved > 0) {
                     HopperLevelDef levelDef = HopperLevelResolver.resolveForBlock(block, keys, updateConfig);

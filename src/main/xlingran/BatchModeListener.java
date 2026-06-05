@@ -19,13 +19,15 @@ public class BatchModeListener implements Listener {
     private final PlayerGuiSession sessions;
     private final HopperLaneListener laneListener;
     private final MessageConfig messageConfig;
+    private final XLRHopperConfig pluginConfig;
 
     public BatchModeListener(HopperKeys keys, PlayerGuiSession sessions, HopperLaneListener laneListener,
-                             MessageConfig messageConfig) {
+                             MessageConfig messageConfig, XLRHopperConfig pluginConfig) {
         this.keys = keys;
         this.sessions = sessions;
         this.laneListener = laneListener;
         this.messageConfig = messageConfig;
+        this.pluginConfig = pluginConfig;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -35,6 +37,9 @@ public class BatchModeListener implements Listener {
         }
         Player player = event.getPlayer();
         if (sessions.getInputMode(player.getUniqueId()) != PlayerGuiSession.InputMode.BATCH_APPLY) {
+            return;
+        }
+        if (!pluginConfig.isBatchSetEnabled()) {
             return;
         }
         Block block = event.getClickedBlock();
@@ -51,6 +56,9 @@ public class BatchModeListener implements Listener {
 
         if (block.getType() != Material.HOPPER) {
             player.sendMessage(messageConfig.message("batch-wrong-block"));
+            return;
+        }
+        if (!pluginConfig.isPluginWorld(block)) {
             return;
         }
 

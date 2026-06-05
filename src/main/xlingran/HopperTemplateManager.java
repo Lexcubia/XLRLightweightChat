@@ -33,6 +33,10 @@ public class HopperTemplateManager {
         if (map.containsKey(name)) {
             return false;
         }
+        Shan plugin = Shan.getInstance();
+        if (plugin != null && map.size() >= plugin.getPluginConfig().getMaxTemplateCount()) {
+            return false;
+        }
         map.put(name, new HopperTemplate());
         setEnabledTemplate(player.getUniqueId(), name);
         return true;

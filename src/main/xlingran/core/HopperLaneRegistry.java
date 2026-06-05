@@ -10,6 +10,7 @@ import xlingran.HopperTemplate;
 import xlingran.HopperTemplateManager;
 import xlingran.HopperLevelResolver;
 import xlingran.HopperTemplateResolver;
+import xlingran.XLRHopperConfig;
 import xlingran.gui.UpdateConfig;
 
 import java.util.ArrayList;
@@ -23,8 +24,13 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public final class HopperLaneRegistry {
 
+    private final XLRHopperConfig pluginConfig;
     private final Map<String, HopperLane> lanes = new ConcurrentHashMap<>();
     private final ConcurrentLinkedQueue<String> workQueue = new ConcurrentLinkedQueue<>();
+
+    public HopperLaneRegistry(XLRHopperConfig pluginConfig) {
+        this.pluginConfig = pluginConfig;
+    }
 
     public HopperLane getLane(Location loc) {
         return lanes.get(HopperLane.laneKey(loc));
@@ -33,6 +39,13 @@ public final class HopperLaneRegistry {
     public HopperLane registerLane(Block block, HopperKeys keys, HopperTemplateManager templateManager,
                                     UpdateConfig updateConfig) {
         if (block == null || block.getType() != Material.HOPPER) {
+            return null;
+        }
+        if (!pluginConfig.isPluginWorld(block)) {
+            unregisterLane(block.getLocation());
+            return null;
+        }
+        if (lanes.size() >= pluginConfig.getMaxQueueLimit()) {
             return null;
         }
         HopperTemplate template = HopperTemplateResolver.resolve(block, keys, templateManager);
@@ -45,9 +58,10 @@ public final class HopperLaneRegistry {
         HopperLane lane = lanes.computeIfAbsent(key, k -> new HopperLane(loc));
         lane.setSnapshot(new FilterSnapshot(template));
         HopperBlockConfig config = HopperBlockConfig.read(block, keys);
-        lane.setReverse(config.isReverseSuction());
-        lane.setAutoCraft(template.isAutoCraftEnabled());
-        lane.setAutoSmelt(template.isAutoSmeltEnabled());
+        boolean reverseAllowed = pluginConfig.isReverseHopperEnabled();
+        lane.setReverse(reverseAllowed && config.isReverseSuction());
+        lane.setAutoCraft(pluginConfig.isAutoCraftEnabled() && template.isAutoCraftEnabled());
+        lane.setAutoSmelt(pluginConfig.isAutoSmeltEnabled() && template.isAutoSmeltEnabled());
         HopperLevelResolver.applyLevelToLane(lane, block, keys, updateConfig);
         if (!lane.hasAutomation()) {
             removeFromWorkQueue(key);
@@ -67,6 +81,12 @@ public final class HopperLaneRegistry {
     public void offerWork(String laneKey) {
         if (laneKey == null || laneKey.isEmpty()) {
             return;
+        }
+        int maxSize = pluginConfig.getMaxQueueSize();
+        if (maxSize > 0 && workQueue.size() >= maxSize) {
+            if (!pluginConfig.isQueueOverflowRetry()) {
+                return;
+            }
         }
         if (!workQueue.contains(laneKey)) {
             workQueue.offer(laneKey);
