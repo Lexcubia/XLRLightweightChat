@@ -51,17 +51,17 @@ public class Gui implements Listener {
     private final HopperLaneListener laneListener;
     private final HopperOverlayDisplayService overlayService;
 
-    private final int slotAutoCraft;
-    private final int slotAutoDestroy;
-    private final int slotFilterItems;
-    private final int slotFilterMode;
-    private final int slotFilterEnchant;
-    private final int slotFilterDurability;
-    private final int slotAutoSmelt;
-    private final int slotBatch;
-    private final int slotHopperRedstone;
-    private final int slotHopperReverse;
-    private final int slotHopperFloatOverlay;
+    private int slotAutoCraft;
+    private int slotAutoDestroy;
+    private int slotFilterItems;
+    private int slotFilterMode;
+    private int slotFilterEnchant;
+    private int slotFilterDurability;
+    private int slotAutoSmelt;
+    private int slotBatch;
+    private int slotHopperRedstone;
+    private int slotHopperReverse;
+    private int slotHopperFloatOverlay;
 
     public Gui(Shan plugin, HopperTemplateManager templateManager, PlayerGuiSession sessions,
                TemplateRepository templateRepository, HopperKeys hopperKeys, GuiConfig guiConfig,
@@ -78,6 +78,58 @@ public class Gui implements Listener {
         this.tickService = tickService;
         this.laneListener = laneListener;
         this.overlayService = overlayService;
+        reloadLayoutFromConfig();
+    }
+
+    public void saveData() {
+        templateRepository.markDirty();
+    }
+
+    public void refreshAfterConfigReload() {
+        reloadLayoutFromConfig();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            InventoryView view = player.getOpenInventory();
+            if (view == null) {
+                continue;
+            }
+            XlrGuiHolder holder = XlrGuiHolder.from(view.getTopInventory());
+            if (holder == null) {
+                continue;
+            }
+            switch (holder.getType()) {
+                case TEMPLATE_LIST -> openTemplateList(player);
+                case TEMPLATE_SETTINGS -> {
+                    String templateName = resolveTemplateName(holder, player);
+                    if (templateName != null) {
+                        openTemplateSettings(player, templateName);
+                    }
+                }
+                case HOPPER_SETTINGS -> {
+                    if (!holder.hasHopperLocation()) {
+                        break;
+                    }
+                    World world = Bukkit.getWorld(holder.getHopperWorld());
+                    if (world == null) {
+                        break;
+                    }
+                    Block block = world.getBlockAt(holder.getHopperX(), holder.getHopperY(), holder.getHopperZ());
+                    if (block.getType() == Material.HOPPER) {
+                        openHopperSettings(player, block);
+                    }
+                }
+                case FILTER_ENCHANTS -> {
+                    String templateName = resolveTemplateName(holder, player);
+                    if (templateName != null) {
+                        openFilterEnchants(player, templateName);
+                    }
+                }
+                default -> {
+                }
+            }
+        }
+    }
+
+    private void reloadLayoutFromConfig() {
         slotAutoCraft = guiConfig.templateButtonSlot("AutoCrafting", 10);
         slotAutoDestroy = guiConfig.templateButtonSlot("Break", 12);
         slotFilterItems = guiConfig.templateButtonSlot("FilterItem", 14);
@@ -89,10 +141,6 @@ public class Gui implements Listener {
         slotHopperRedstone = guiConfig.hopperSettingSlot("Redstone", 10);
         slotHopperReverse = guiConfig.hopperSettingSlot("Reverse", 12);
         slotHopperFloatOverlay = guiConfig.hopperSettingSlot("FloatOverlay", 14);
-    }
-
-    public void saveData() {
-        templateRepository.markDirty();
     }
 
     public void openTemplateList(Player player) {

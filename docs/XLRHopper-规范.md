@@ -52,7 +52,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - 占位符：`%Template%`、`%modename%`、`%toggle%`、`%filtermode%`、`%Durability%`、`%Enchant%` 等；`toggle` / `filtermode` 在 YAML 根节点定义。
 - **仅** `Auto-Crafting`、`Filter-Item`、`Auto-Furnace` 可配置 **`rows`（≥1，建议 ≤6）**；其余界面行数在 `GuiConfig` 中硬编码（3/5/6 行等）。
 - 附魔显示名：key 为 **registry 小写**（如 `fire_protection`）；`EnchantNameTable` 委托 `GuiConfig` 查询。
-- 修改后执行 `/xlrhopper reload` 生效。
+- 修改后执行 `/xlrhopper reload` 生效；已打开的模板列表/模板设置/漏斗设置/附魔过滤界面会**自动重绘**（`toggle` / `filtermode` 等 Lore 立即更新）。存储类界面（过滤物品、自动合成、自动熔炼）不自动刷新，以免丢失未保存编辑。
 - **`HopperSetting.FloatOverlay`**（绿宝石，默认 slot 14）：仅悬浮**开关**按钮的名称/Lore（`%toggle%`）；**无** 世界上空四行 Display 布局或文案配置。
 
 ### 3.2 Message.yml 要点

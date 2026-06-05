@@ -224,6 +224,7 @@ public class Shan extends JavaPlugin {
                 reloadConfig();
                 pluginConfig.reload();
                 guiConfig.reload();
+                gui.refreshAfterConfigReload();
                 messageConfig.reload();
                 updateConfig.reload();
                 HopperTransferGate.getInstance().clearAll();
