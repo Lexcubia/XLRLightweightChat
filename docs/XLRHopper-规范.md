@@ -94,7 +94,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 ### 3.5 启动控制台与版本检查
 
-- **`VersionChecker`**（`onEnable` 仅一次）：异步 GET `https://plugin.xlingran.com/XLRHopperVersion.txt`（纯版本号）；`/xlrhopper reload` **不**重复检测。
+- **`VersionChecker`**（`onEnable` **仅一次**，完成后 `CONSUMED` 禁用、无运行时缓存）：CDN 鉴权 GET `https://plugin.xlingran.com/XLRHopperVersion.txt?sign=<md5>&t=<unix秒>`；`sign = md5(pkey + /XLRHopperVersion.txt + t)`；pkey XOR 混淆存于 JAR；`/xlrhopper reload` **不**重复检测。
 - 启动必定输出：绿色「当前版本: 」+ 青色 `plugin.yml` 版本。
 - 检测完成：一致 → 绿色「当前已是最新版: 」；不一致 → 绿色「有新版本: 」+ 青色远程版本 + 绿色「请及时更新」；失败 → 红色「插件更新检测失败」。
 - DecentHolograms：已安装 → 绿色「全息显示前置  DecentHolograms  加载成功」；未安装 → 红色「未找到全息显示前置  DecentHolograms  已关闭全息显示功能」。
