@@ -15,7 +15,6 @@ import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
-import org.bukkit.entity.Item;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
@@ -142,45 +141,12 @@ public class HopperListener implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onInventoryPickupGate(InventoryPickupItemEvent event) {
-        Inventory inventory = event.getInventory();
-        if (inventory.getType() != InventoryType.HOPPER || updateConfig == null) {
-            return;
-        }
-        Block hopperBlock = HopperBlockUtil.resolveHopperBlock(inventory);
-        if (hopperBlock == null) {
-            return;
-        }
-        Item entity = event.getItem();
-        if (!allowTieredPickup(hopperBlock, entity, GameTickCounter.getInstance().currentTick())) {
-            event.setCancelled(true);
-            destroyIfAuto(hopperBlock, entity.getItemStack(), entity);
-        }
-    }
-
     private boolean allowTieredTransfer(Block hopperBlock, ItemStack moving, long tick, HopperTransferGate gate) {
         HopperLevelDef def = HopperLevelResolver.resolveForBlock(hopperBlock, keys, updateConfig);
         if (def == null || !gate.tryAcquire(hopperBlock, def, tick)) {
             return false;
         }
         capTransferAmount(moving, def.maxItem());
-        return true;
-    }
-
-    private boolean allowTieredPickup(Block hopperBlock, Item entity, long tick) {
-        if (entity == null) {
-            return false;
-        }
-        ItemStack onGround = entity.getItemStack();
-        if (onGround == null || onGround.getType().isAir()) {
-            return false;
-        }
-        HopperLevelDef def = HopperLevelResolver.resolveForBlock(hopperBlock, keys, updateConfig);
-        if (def == null || !HopperTransferGate.getInstance().tryAcquire(hopperBlock, def, tick)) {
-            return false;
-        }
-        capTransferAmount(onGround, def.maxItem());
         return true;
     }
 

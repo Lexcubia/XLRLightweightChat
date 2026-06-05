@@ -8,7 +8,8 @@ import xlingran.gui.HopperLevelDef;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 漏斗等级传输门控：transfer-tick 为两次传输最小间隔；max-item 由事件侧限制单次数量。
+ * 漏斗等级容器间传输门控：transfer-tick 为传输间隔；max-item（传输速度）由 InventoryMoveItem 等容器间事件侧限制。
+ * 地面 InventoryPickupItemEvent 不走此门控。
  */
 public final class HopperTransferGate {
 

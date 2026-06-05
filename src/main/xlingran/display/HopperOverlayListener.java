@@ -22,6 +22,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+import eu.decentsoftware.holograms.event.DecentHologramsReloadEvent;
 import xlingran.HopperChunkScanUtil;
 
 import java.util.ArrayList;
@@ -111,6 +112,11 @@ public final class HopperOverlayListener implements Listener {
     public void onChunkLoad(ChunkLoadEvent event) {
         Chunk chunk = event.getChunk();
         Bukkit.getScheduler().runTask(plugin, () -> restoreChunkOverlays(chunk));
+    }
+
+    @EventHandler
+    public void onDecentHologramsReload(DecentHologramsReloadEvent event) {
+        Bukkit.getScheduler().runTask(plugin, overlayService::restoreAllAfterReload);
     }
 
     private void restoreChunkOverlays(Chunk chunk) {

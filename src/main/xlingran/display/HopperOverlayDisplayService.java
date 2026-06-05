@@ -2,6 +2,7 @@ package xlingran.display;
 
 import eu.decentsoftware.holograms.api.DHAPI;
 import eu.decentsoftware.holograms.api.holograms.Hologram;
+import eu.decentsoftware.holograms.api.holograms.HologramLine;
 import eu.decentsoftware.holograms.api.holograms.HologramPage;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -37,6 +38,7 @@ public final class HopperOverlayDisplayService {
 
     private static final float HOLOGRAM_Y_OFFSET = 1.3f;
     private static final long REFRESH_DEBOUNCE_TICKS = 4L;
+    private static final double ITEM_ROW_SPACING = 0.38;
 
     private final Shan plugin;
     private final HopperKeys keys;
@@ -128,20 +130,45 @@ public final class HopperOverlayDisplayService {
         Location holoLoc = hologramLocation(block);
         String name = hologramName(block.getLocation());
         Hologram hologram = DHAPI.getHologram(name);
+        boolean created = false;
         if (hologram == null) {
             DHAPI.createHologram(name, holoLoc, false, List.of(" "));
             hologram = DHAPI.getHologram(name);
-        } else {
-            hologram.setLocation(holoLoc);
-            if (!hologram.isEnabled()) {
-                hologram.showAll();
-            }
+            created = true;
         }
         if (hologram == null) {
             return;
         }
-        replaceLines(hologram, items, textLines);
+        if (created) {
+            hologram.setAlwaysFacePlayer(false);
+        } else if (locationChanged(hologram, holoLoc)) {
+            hologram.setLocation(holoLoc);
+        }
+        if (!hologram.isEnabled()) {
+            hologram.showAll();
+        }
+
+        syncLines(hologram, items, textLines);
         signaturesByLocation.put(locKey, signature);
+    }
+
+    public void restoreAllAfterReload() {
+        if (!decentHologramsAvailable) {
+            return;
+        }
+        for (String locKey : new ArrayList<>(signaturesByLocation.keySet())) {
+            Location loc = parseLocationKey(locKey);
+            if (loc == null) {
+                continue;
+            }
+            Block block = loc.getBlock();
+            if (block.getType() == Material.HOPPER && isHoverEnabled(block)) {
+                signaturesByLocation.remove(locKey);
+                refresh(block);
+            } else {
+                signaturesByLocation.remove(locKey);
+            }
+        }
     }
 
     public void hideAllInChunk(Chunk chunk) {
@@ -188,26 +215,94 @@ public final class HopperOverlayDisplayService {
                 && HopperBlockConfig.read(block, keys).isHoverDisplay();
     }
 
-    private void replaceLines(Hologram hologram, List<ItemStack> items, List<String> textLines) {
+    private void syncLines(Hologram hologram, List<ItemStack> items, List<String> textLines) {
         HologramPage page = DHAPI.getHologramPage(hologram, 0);
-        if (page != null) {
-            while (page.size() > 0) {
-                DHAPI.removeHologramLine(hologram, 0);
-                page = DHAPI.getHologramPage(hologram, 0);
-                if (page == null) {
-                    break;
-                }
+        if (page == null) {
+            return;
+        }
+        List<String> filteredText = filterTextLines(textLines);
+        int itemCount = items.size();
+        int textCount = filteredText.size();
+        int targetTotal = itemCount + textCount;
+        int previousTotal = page.size();
+
+        for (int i = 0; i < itemCount; i++) {
+            ItemStack display = singleDisplayStack(items.get(i));
+            if (i < page.size()) {
+                DHAPI.setHologramLine(hologram, i, display);
+            } else {
+                DHAPI.addHologramLine(hologram, display);
+            }
+            page = DHAPI.getHologramPage(hologram, 0);
+            if (page != null && i < page.size()) {
+                applyItemLineLayout(DHAPI.getHologramLine(page, i), i, itemCount);
             }
         }
-        for (ItemStack stack : items) {
-            DHAPI.addHologramLine(hologram, singleDisplayStack(stack));
-        }
-        for (String line : textLines) {
-            if (line != null && !line.isEmpty()) {
+
+        for (int t = 0; t < textCount; t++) {
+            int lineIndex = itemCount + t;
+            String line = filteredText.get(t);
+            page = DHAPI.getHologramPage(hologram, 0);
+            if (page == null) {
+                return;
+            }
+            if (lineIndex < page.size()) {
+                DHAPI.setHologramLine(hologram, lineIndex, line);
+            } else {
                 DHAPI.addHologramLine(hologram, line);
             }
         }
-        hologram.realignLines();
+
+        page = DHAPI.getHologramPage(hologram, 0);
+        if (page == null) {
+            return;
+        }
+        while (page.size() > targetTotal) {
+            DHAPI.removeHologramLine(hologram, page.size() - 1);
+            page = DHAPI.getHologramPage(hologram, 0);
+            if (page == null) {
+                return;
+            }
+        }
+
+        if (previousTotal != targetTotal) {
+            hologram.realignLines();
+        }
+    }
+
+    private static void applyItemLineLayout(HologramLine line, int index, int itemCount) {
+        if (line == null || itemCount <= 0) {
+            return;
+        }
+        line.setHeight(0);
+        double centerOffset = (index - (itemCount - 1) / 2.0) * ITEM_ROW_SPACING;
+        line.setOffsetX(centerOffset);
+        line.setOffsetY(0);
+        line.setOffsetZ(0);
+    }
+
+    private static List<String> filterTextLines(List<String> textLines) {
+        List<String> filtered = new ArrayList<>();
+        for (String line : textLines) {
+            if (line != null && !line.isEmpty()) {
+                filtered.add(line);
+            }
+        }
+        return filtered;
+    }
+
+    private static boolean locationChanged(Hologram hologram, Location target) {
+        Location current = hologram.getLocation();
+        if (current == null || target == null || current.getWorld() == null || target.getWorld() == null) {
+            return true;
+        }
+        return !current.getWorld().equals(target.getWorld())
+                || current.getBlockX() != target.getBlockX()
+                || current.getBlockY() != target.getBlockY()
+                || current.getBlockZ() != target.getBlockZ()
+                || Math.abs(current.getY() - target.getY()) > 0.01
+                || Math.abs(current.getX() - (target.getX())) > 0.01
+                || Math.abs(current.getZ() - (target.getZ())) > 0.01;
     }
 
     private void destroyHologram(String name) {
@@ -238,7 +333,7 @@ public final class HopperOverlayDisplayService {
             if (stack == null || stack.getType().isAir()) {
                 sb.append("air;");
             } else {
-                sb.append(stack.getType().name()).append(':').append(stack.getAmount()).append(';');
+                sb.append(stack.getType().name()).append(';');
             }
         }
         return sb.toString();

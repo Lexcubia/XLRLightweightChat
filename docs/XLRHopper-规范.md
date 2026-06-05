@@ -66,11 +66,12 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - JAR 预置 **`saveResource("Update.yml", false)`**；`UpdateConfig` 加载并校验：`transfer-tick` ≥ 8 且为 8 的倍数，`max-item` ≥ 1。
 - **`default`**：无 `hopper-level` PDC 的漏斗（普通放置）使用此段参数，**不是**任意 `levels` 条目。
 - **`levels.<id>`**：唯一 ID（如 `iron`）；`/xlrhopper give` 与物品 PDC / 方块 PDC `hopper-level` 引用同一 ID；改仓库内 `Update.yml` 后须 **`/xlrhopper reload`**，已放置方块 PDC 等级 ID 不变。
-- **`transfer-tick` / `max-item`**（`HopperTransferGate` + `HopperLevelResolver.resolveForBlock`）同时作用于：
-  - **原版漏斗链**：`InventoryMoveItemEvent`、`InventoryPickupItemEvent`（HIGH 门控；LOWEST 仍为模板过滤）；
+- **`transfer-tick` / `max-item`**（`HopperTransferGate` + `HopperLevelResolver.resolveForBlock`）**仅作用于容器间转移**：
+  - **原版漏斗链**：`InventoryMoveItemEvent`（HIGH 门控：`tryAcquire` + `max-item` 限量；LOWEST 仍为模板过滤）；
   - **插件反向搬运**：`HopperTickService` workQueue 内 `HopperTransferReverse` 成功后 `recordTransfer`，与 MoveItem 共用冷却。
-- **`transfer-tick`**：两次**传输**之间至少间隔 N game tick（`HopperTransferGate.tryAcquire` 冷却）。
-- **`max-item`**：**单次传输**最多搬运的物品数量（`setAmount` 上限，非窗口内次数）；Q 丢一组会分多次入漏斗（每次 ≤max-item，间隔 ≥transfer-tick）。
+- **地面拾取**（`InventoryPickupItemEvent`）：**不走** `transfer-tick` / `max-item` 门控，按原版**直接全量吸入**（仅 LOWEST 模板过滤 + 自动销毁逻辑）。
+- **`transfer-tick`**（传输间隔）：两次**容器间转移**之间至少间隔 N game tick（`HopperTransferGate.tryAcquire` 冷却）。
+- **`max-item`**（传输速度）：每一次**容器间转移**最多搬运的物品数量（`setAmount` 上限）；`max-item: 1` 即每次容器间转移 1 个。
 - 全局 **8 tick** `HopperTickService` 定时器不变；lane 上 `transfer-tick` 仍门控熔炼/合成/反向**自动化步**；原版传输不再绕过等级参数。
 
 **验收（漏斗链）**
@@ -78,7 +79,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 1. 必须用 **`/xlrhopper give %player% <等级> 1` 放置**（方块须有 `hopper-level` PDC）；仅改名/颜色的漏斗仍走 `default`。
 2. 上方满箱、下方空箱对比：钻石（如 8/8）应明显快于铁（16/2）与普通放置漏斗（`default` 24/1）。
 3. 铁漏斗每次传输最多 **2** 个，且每 **16 tick** 可传输一次（对比铜 `max-item: 1`）。
-4. 钻石漏斗 Q 丢 64：首次约 8 个入漏斗，地面剩余每隔 **8 tick** 再继续传输。
+4. 任意等级漏斗 Q 丢 64：地面物品**直接全量**进漏斗（空间足够时 64 个全进），不因 `max-item` 截断或吞掉剩余。
+5. 铁漏斗向下方箱子输出：每传输间隔 **16 tick** 最多转出 **2** 个（传输速度）；铜/默认每次 **1** 个。
 5. `reload` 后修改 `Update.yml` 中数值，后续传输节奏随之变化。
 
 **排错**：若各等级速度仍一致，检查 Paper 是否关闭 `InventoryMoveItem`（如 `hopper.disable-move-event`）；并确认 `plugins/XLRHopper/Update.yml` 已 reload。
@@ -224,8 +226,10 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 - **依赖**：服务端须安装 [DecentHolograms](https://github.com/DecentSoftware-eu/DecentHolograms)（≥ 2.0.12，`plugin.yml` `softdepend`）；未安装时 XLRHopper 仍可加载，悬浮不可用。
 - 实现：`display.HopperOverlayDisplayService` + `display.HopperOverlayListener`；**不**进入 `HopperTickService`（属 P0 事件驱动，与 8 tick `workQueue` 排水无关）。
-- 全息：`DHAPI.createHologram` **非持久化**（`xlrhopper_{world}_{x}_{y}_{z}`）；物品行（`ItemStack` 数量 1）+ 五行文本（漏斗等级 `Update.yml` `name`、模板名、白/黑名单、附魔数、耐久）。
-- 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用 **4 tick 防抖**；内容签名未变则跳过 `setHologramLine` 重建。
+- 全息：`DHAPI.createHologram` **非持久化**（`xlrhopper_{world}_{x}_{y}_{z}`）；物品行（`ItemStack` 数量 1，`setOffsetX` 横向并排、`setHeight(0)`）+ 五行文本（漏斗等级 `Update.yml` `name`、模板名、白/黑名单、附魔数、耐久）；`setAlwaysFacePlayer(false)`。
+- 增量刷新：`DHAPI.setHologramLine` 按行更新；内容签名**不含物品数量**；行数不变时跳过 `realignLines` / `setLocation`。
+- 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用 **4 tick 防抖**；内容签名未变则跳过重建。
+- `DecentHologramsReloadEvent` 后恢复已开启 `hover-display` 的全息。
 - 文案硬编码于 Java；**不读** `Gui.yml` 悬浮行配置；`Message.yml` 仅 `overlay-dh-missing` 提示。
 - PDC：`hover-display`（开关）；套模板/初始化时 `hover-display=false`；卸载/关悬浮/破坏时 `hologram.destroy()`。
 - **刷新事件**（仅 `hover-display=true`）：`InventoryMoveItemEvent`、`InventoryPickupItemEvent`、漏斗 GUI 的 `InventoryClickEvent` / `InventoryDragEvent` / `InventoryCloseEvent`；`ChunkLoad` 恢复 `show`；破坏/爆炸/卸载 `hide`；`onDisable` → `hideAll`。
