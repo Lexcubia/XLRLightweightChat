@@ -7,6 +7,7 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -32,6 +33,7 @@ public final class GuiConfig {
     private final JavaPlugin plugin;
     private final Logger logger;
     private YamlConfiguration config;
+    private YamlConfiguration jarDefaults = new YamlConfiguration();
     private Map<String, String> enchantNames = Collections.emptyMap();
 
     private String diskToggleOn;
@@ -49,9 +51,10 @@ public final class GuiConfig {
         if (!file.exists()) {
             plugin.saveResource("Gui.yml", false);
         }
-        YamlConfiguration loaded = YamlConfiguration.loadConfiguration(file);
+        jarDefaults = loadJarDefaults();
+        YamlConfiguration loaded = loadUserFile(file);
         captureDiskTokens(loaded, file);
-        mergeDefaults(loaded);
+        applyDefaults(loaded, jarDefaults);
         config = loaded;
         enchantNames = loadEnchantNames();
         logLoadedTokens(file);
@@ -61,51 +64,91 @@ public final class GuiConfig {
         load();
     }
 
+    private YamlConfiguration loadUserFile(File file) {
+        try (InputStreamReader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)) {
+            return YamlConfiguration.loadConfiguration(reader);
+        } catch (Exception e) {
+            logger.warning("[XLRHopper] Gui.yml UTF-8 读取失败，回退系统编码: " + e.getMessage());
+            return YamlConfiguration.loadConfiguration(file);
+        }
+    }
+
+    private YamlConfiguration loadJarDefaults() {
+        try (InputStream in = plugin.getResource("Gui.yml")) {
+            if (in != null) {
+                return YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
+            }
+        } catch (Exception e) {
+            logger.warning("[XLRHopper] 无法读取 jar 内 Gui.yml: " + e.getMessage());
+        }
+        return new YamlConfiguration();
+    }
+
+    private void applyDefaults(YamlConfiguration target, YamlConfiguration defaults) {
+        if (defaults.getKeys(true).isEmpty()) {
+            logger.warning("[XLRHopper] jar 内 Gui.yml 为空，toggle/filtermode 仅能来自磁盘文件");
+            return;
+        }
+        target.setDefaults(defaults);
+        target.options().copyDefaults(true);
+    }
+
     private void captureDiskTokens(YamlConfiguration loaded, File file) {
-        diskToggleOn = readDiskToken(loaded, "toggle.on");
-        diskToggleOff = readDiskToken(loaded, "toggle.off");
-        diskFilterModeOn = readDiskToken(loaded, "filtermode.on");
-        diskFilterModeOff = readDiskToken(loaded, "filtermode.off");
+        diskToggleOn = readTokenFromSection(loaded, "toggle", "on");
+        diskToggleOff = readTokenFromSection(loaded, "toggle", "off");
+        diskFilterModeOn = readTokenFromSection(loaded, "filtermode", "on");
+        diskFilterModeOff = readTokenFromSection(loaded, "filtermode", "off");
 
         if (diskToggleOn == null) {
-            diskToggleOn = findMisnestedToken(loaded, "toggle.on");
+            diskToggleOn = findMisnestedToken(loaded, "toggle", "on");
         }
         if (diskToggleOff == null) {
-            diskToggleOff = findMisnestedToken(loaded, "toggle.off");
+            diskToggleOff = findMisnestedToken(loaded, "toggle", "off");
         }
         if (diskFilterModeOn == null) {
-            diskFilterModeOn = findMisnestedToken(loaded, "filtermode.on");
+            diskFilterModeOn = findMisnestedToken(loaded, "filtermode", "on");
         }
         if (diskFilterModeOff == null) {
-            diskFilterModeOff = findMisnestedToken(loaded, "filtermode.off");
+            diskFilterModeOff = findMisnestedToken(loaded, "filtermode", "off");
         }
 
-        ConfigurationSection toggle = loaded.getConfigurationSection("toggle");
-        ConfigurationSection filtermode = loaded.getConfigurationSection("filtermode");
-        if (toggle == null && diskToggleOn == null) {
-            logger.warning("[XLRHopper] Gui.yml 缺少根节点 toggle（须与 TemplateSet 同级顶格）: "
+        diagnoseSection(loaded, file, "toggle", diskToggleOn);
+        diagnoseSection(loaded, file, "filtermode", diskFilterModeOn);
+    }
+
+    private void diagnoseSection(YamlConfiguration loaded, File file, String sectionName, String diskValue) {
+        Object node = loaded.get(sectionName);
+        if (node == null && diskValue == null) {
+            logger.warning("[XLRHopper] Gui.yml 缺少根节点 " + sectionName + "（须与 TemplateSet 同级顶格）: "
                     + file.getAbsolutePath());
+            return;
         }
-        if (filtermode == null && diskFilterModeOn == null) {
-            logger.warning("[XLRHopper] Gui.yml 缺少根节点 filtermode: " + file.getAbsolutePath());
+        if (node instanceof String) {
+            logger.warning("[XLRHopper] Gui.yml 节点 " + sectionName + " 被解析为字符串「" + node
+                    + "」而非节；请改为:\n" + sectionName + ":\n    \"on\": \"&a启\"");
+            return;
+        }
+        if (diskValue == null) {
+            ConfigurationSection section = loaded.getConfigurationSection(sectionName);
+            if (section != null) {
+                logger.warning("[XLRHopper] Gui.yml 存在 " + sectionName + " 节但读不到 on/off，子键="
+                        + section.getKeys(false) + "；建议对 on/off 加引号: \"on\": \"&a启\"");
+            }
         }
     }
 
-    private static String readDiskToken(YamlConfiguration loaded, String path) {
-        String raw = loaded.getString(path);
-        if (raw == null || raw.isEmpty()) {
-            return null;
-        }
-        return raw;
-    }
-
-    private String findMisnestedToken(YamlConfiguration loaded, String suffix) {
+    private String findMisnestedToken(YamlConfiguration loaded, String sectionName, String childKey) {
+        String suffix = sectionName + "." + childKey;
         for (String key : loaded.getKeys(true)) {
             if (!key.endsWith(suffix) || key.equals(suffix)) {
                 continue;
             }
-            String raw = loaded.getString(key);
-            if (raw != null && !raw.isEmpty()) {
+            String raw = readTokenFromSection(loaded, key.substring(0, key.length() - childKey.length() - 1),
+                    childKey);
+            if (raw == null) {
+                raw = loaded.getString(key);
+            }
+            if (isPresent(raw)) {
                 logger.warning("[XLRHopper] Gui.yml 发现 " + suffix + " 位于非根路径 " + key
                         + "，请移到根节点与 TemplateSet 同级");
                 return raw;
@@ -114,24 +157,52 @@ public final class GuiConfig {
         return null;
     }
 
-    private void logLoadedTokens(File file) {
-        logger.info("[XLRHopper] Gui.yml: " + file.getAbsolutePath()
-                + " | disk: toggle.on=" + diskToggleOn
-                + " | merged: toggle.on=" + config.getString("toggle.on")
-                + " (isSet=" + config.isSet("toggle.on") + ")"
-                + " | filtermode.on=" + resolveToken("filtermode.on", diskFilterModeOn, null));
+    private static String readTokenFromSection(YamlConfiguration cfg, String sectionName, String childKey) {
+        ConfigurationSection section = cfg.getConfigurationSection(sectionName);
+        if (section == null) {
+            return null;
+        }
+        String raw = section.getString(childKey);
+        if (isPresent(raw)) {
+            return raw;
+        }
+        for (String key : section.getKeys(false)) {
+            if (!normalizeKey(key).equalsIgnoreCase(childKey)) {
+                continue;
+            }
+            raw = section.getString(key);
+            if (isPresent(raw)) {
+                return raw;
+            }
+            Object val = section.get(key);
+            if (val != null && !(val instanceof ConfigurationSection)) {
+                String text = val.toString();
+                if (isPresent(text)) {
+                    return text;
+                }
+            }
+        }
+        return null;
     }
 
-    private void mergeDefaults(YamlConfiguration target) {
-        try (InputStream in = plugin.getResource("Gui.yml")) {
-            if (in != null) {
-                YamlConfiguration defaults = YamlConfiguration.loadConfiguration(
-                        new InputStreamReader(in, StandardCharsets.UTF_8));
-                target.setDefaults(defaults);
-            }
-        } catch (Exception e) {
-            logger.warning("[XLRHopper] 无法合并 jar 内 Gui.yml 默认值: " + e.getMessage());
+    private static String normalizeKey(String key) {
+        if (key == null) {
+            return "";
         }
+        return key.replace("\"", "").trim();
+    }
+
+    private static boolean isPresent(String raw) {
+        return raw != null && !raw.isEmpty();
+    }
+
+    private void logLoadedTokens(File file) {
+        String jarOn = readTokenFromSection(jarDefaults, "toggle", "on");
+        logger.info("[XLRHopper] Gui.yml: " + file.getAbsolutePath()
+                + " | disk: toggle.on=" + diskToggleOn
+                + " | merged: toggle.on=" + readTokenFromSection(config, "toggle", "on")
+                + " | jar: toggle.on=" + jarOn
+                + " | filtermode.on=" + resolveToken("filtermode", "on", diskFilterModeOn, "&a1名单模式"));
     }
 
     private Map<String, String> loadEnchantNames() {
@@ -162,34 +233,32 @@ public final class GuiConfig {
     }
 
     public String toggle(boolean on) {
-        String path = on ? "toggle.on" : "toggle.off";
+        String child = on ? "on" : "off";
         String disk = on ? diskToggleOn : diskToggleOff;
         String builtin = on ? "&a启" : "&c关";
-        return color(resolveToken(path, disk, builtin));
+        return color(resolveToken("toggle", child, disk, builtin));
     }
 
     public String filterMode(boolean whitelist) {
-        String path = whitelist ? "filtermode.on" : "filtermode.off";
+        String child = whitelist ? "on" : "off";
         String disk = whitelist ? diskFilterModeOn : diskFilterModeOff;
         String builtin = whitelist ? "&a1名单模式" : "&c2名单模式";
-        return color(resolveToken(path, disk, builtin));
+        return color(resolveToken("filtermode", child, disk, builtin));
     }
 
-    private String resolveToken(String path, String diskValue, String builtinFallback) {
-        if (diskValue != null && !diskValue.isEmpty()) {
+    private String resolveToken(String sectionName, String childKey, String diskValue, String builtinFallback) {
+        if (isPresent(diskValue)) {
             return diskValue;
         }
-        String raw = config.getString(path);
-        if (raw == null || raw.isEmpty()) {
-            var defaults = config.getDefaults();
-            if (defaults != null) {
-                raw = defaults.getString(path);
-            }
+        String raw = readTokenFromSection(config, sectionName, childKey);
+        if (isPresent(raw)) {
+            return raw;
         }
-        if (raw == null || raw.isEmpty()) {
-            return builtinFallback;
+        raw = readTokenFromSection(jarDefaults, sectionName, childKey);
+        if (isPresent(raw)) {
+            return raw;
         }
-        return raw;
+        return builtinFallback;
     }
 
     public String getEnchantDisplayName(Enchantment enchant) {
