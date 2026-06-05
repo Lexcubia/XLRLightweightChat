@@ -216,6 +216,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - **出站门控**：`shouldHoldOutbound` 在凑料中、即将启动 job、或 job 进行中拦截配方原料；**产物**与非配方物品正常放行
 - **单槽多扣**：同一漏斗槽位可扣减多个配方单位（如 1 格 64 木板，不要求占满 4 格）；原木不匹配工作台配方
 - **目标流程**：投入原料 → hold 凑料 → `tryStartCraft` 扣料开 job → `craft-tick` 后产物入**下方箱子**
+- **与自动熔炼互斥**：同模板仅能开启自动合成或自动熔炼其一；GUI 左键开启本功能时自动关闭另一项；两者可同时关闭
 
 ### 4.8 自动熔炼（行数可配）
 
@@ -229,6 +230,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - **出站门控**：job 进行中或待熔炼输入匹配时拦截；产物样板正常放行
 - **多输入源反查**：`findAllSmeltMappings` 覆盖铁锭 ← 铁矿石 / 深板岩铁矿石 / 原铁等
 - **目标流程**：投入原料 → `tryStartSmelt` → `smelt-tick` 后产物入**下方箱子**
+- **与自动合成互斥**：同模板仅能开启自动合成或自动熔炼其一；GUI 左键开启本功能时自动关闭另一项；两者可同时关闭
 
 ### 4.4 过滤附魔属性（6 行 × 9 列）
 
@@ -252,14 +254,15 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 - **依赖**：服务端须安装 [DecentHolograms](https://github.com/DecentSoftware-eu/DecentHolograms)（≥ 2.0.12，`plugin.yml` `softdepend`）；未安装时 XLRHopper 仍可加载，悬浮不可用。
 - 实现：`display.HopperOverlayDisplayService` + `display.HopperOverlayListener`；**不**进入 `HopperTickService`（属 P0 事件驱动，与 8 tick `workQueue` 排水无关）。
-- **布局（自上而下）**：
-  - **最顶层物品带**：漏斗 5 格内非空气物品，按 `Material` 去重，最多 5 个小图标；首物品行 `ITEM_ROW_HEIGHT + ITEM_TEXT_GAP`（约 0.28 + 0.18）预留顶带并与首行文字拉开间距；多图标 `setOffsetX` 横排 + `offsetY` 回拉同排
-  - **其下文本带**：`config.yml` → `Hologram.hologram-lines` 五行；各行 `setHeight(Hologram.line-height)`，`offsetY=0`
+- **布局（自上而下）**：由 `config.yml` → `Hologram.hologram-lines` 逐行解析
+  - **物品行**：行内包含 `%item1%`–`%item5%` 时，按占位符顺序映射漏斗槽位 0–4，同一横排固定 5 格位置展示物品图标（`offsetX = (slotIndex - 2) * ITEM_ROW_SPACING`）；空槽用空白行占位、不显示图标；首个物品行首格设 `ITEM_ROW_HEIGHT + ITEM_TEXT_GAP`（约 0.28 + 0.18）与下方文字拉开间距
+  - **文本行**：无物品占位符的行，替换 `%hoppername%` / `%template%` / `%mode%` / `%enchan%` / `%durability%` 后渲染；各行 `setHeight(Hologram.line-height)`，`offsetY=0`
+- **物品占位符**：`%item1%`=slot0 … `%item5%`=slot4；默认首行为 `"%item1%%item2%%item3%%item4%%item5%"`
 - 全息：`DHAPI.createHologram` **非持久化**；`setAlwaysFacePlayer(true)` 随玩家视角；每次 `syncLines` 后 `realignLines()`
-- 增量刷新：`DHAPI.setHologramLine` 按行更新；内容签名基于**材质集合**（不含数量）；签名未变时跳过重建
+- 增量刷新：`DHAPI.setHologramLine` 按行更新；内容签名基于**配置行顺序 + 各槽位材质**（不含数量）；签名未变时跳过重建
 - 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用 **4 tick 防抖**；内容签名未变则跳过重建。
 - `DecentHologramsReloadEvent` 后恢复已开启 `hover-display` 的全息。
-- 文案硬编码于 Java；**不读** `Gui.yml` 悬浮行配置；`Message.yml` 悬浮相关：`overlay-feature-disabled`（未安装 DH 时开启悬浮）、`overlay-dh-missing`（保留键，运行时未使用）。
+- 文案由 `config.yml` → `Hologram.hologram-lines` 配置；**不读** `Gui.yml` 悬浮行；`Message.yml` 悬浮相关：`overlay-feature-disabled`（未安装 DH 时开启悬浮）、`overlay-dh-missing`（保留键，运行时未使用）。
 - PDC：`hover-display`（开关）；套模板/初始化时 `hover-display=false`；卸载/关悬浮/破坏时 `hologram.destroy()`。
 - **刷新事件**（仅 `hover-display=true`）：`InventoryMoveItemEvent`、`InventoryPickupItemEvent`、漏斗 GUI 的 `InventoryClickEvent` / `InventoryDragEvent` / `InventoryCloseEvent`；`ChunkLoad` 恢复 `show`；破坏/爆炸/卸载 `hide`；`onDisable` → `hideAll`。
 
@@ -385,7 +388,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 | `FilterItem` / `FilterItemMatcher` 等 | 过滤维度 |
 | `HopperAutoCraftService` / `HopperAutoSmeltService` | 漏斗内合成与熔炼 |
 | `HopperCommand` | 指令（含 `reload`） |
-| `display.HopperOverlayDisplayService` | DecentHolograms 全息创建/刷新/删除（硬编码文案） |
+| `display.HopperOverlayDisplayService` | DecentHolograms 全息创建/刷新/删除（`config.yml` 行配置 + `%item1%`–`%item5%` 槽位物品） |
 | `display.HopperOverlayListener` | 库存/区块/破坏事件驱动悬浮刷新与清理 |
 | `HopperSettingsListener` | Shift+左键打开漏斗设置 |
 

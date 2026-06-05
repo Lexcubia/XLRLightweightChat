@@ -27,12 +27,12 @@ import xlingran.gui.TextPlaceholders;
 import xlingran.gui.UpdateConfig;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 漏斗上方悬浮信息：DecentHolograms DHAPI（非持久化全息）。
@@ -42,6 +42,7 @@ public final class HopperOverlayDisplayService {
     private static final double ITEM_ROW_SPACING = 0.38;
     private static final double ITEM_ROW_HEIGHT = 0.28;
     private static final double ITEM_TEXT_GAP = 0.18;
+    private static final Pattern ITEM_SLOT_PATTERN = Pattern.compile("%item([1-5])%");
 
     private final Shan plugin;
     private final HopperKeys keys;
@@ -122,9 +123,8 @@ public final class HopperOverlayDisplayService {
             return;
         }
 
-        List<ItemStack> items = collectTransferDisplayItems(block);
-        List<String> textLines = buildOverlayLines(block, template, config);
-        String signature = contentSignature(textLines, items);
+        List<HologramSegment> layout = parseHologramLayout(block, template, config);
+        String signature = contentSignature(block, layout);
         String locKey = locationKey(block.getLocation());
         if (signature.equals(signaturesByLocation.get(locKey))) {
             Hologram existing = DHAPI.getHologram(hologramName(block.getLocation()));
@@ -153,7 +153,7 @@ public final class HopperOverlayDisplayService {
             hologram.showAll();
         }
 
-        syncLines(hologram, items, textLines);
+        syncLines(hologram, block, layout);
         signaturesByLocation.put(locKey, signature);
     }
 
@@ -225,45 +225,46 @@ public final class HopperOverlayDisplayService {
                 && block != null && block.getType() == Material.HOPPER;
     }
 
-    private void syncLines(Hologram hologram, List<ItemStack> items, List<String> textLines) {
+    private void syncLines(Hologram hologram, Block block, List<HologramSegment> layout) {
         HologramPage page = DHAPI.getHologramPage(hologram, 0);
         if (page == null) {
             return;
         }
-        List<String> filteredText = filterTextLines(textLines);
-        int itemCount = items.size();
-        int textCount = filteredText.size();
-        int targetTotal = itemCount + textCount;
+        Inventory inv = HopperContainerUtil.getContainerInventory(block);
         double lineHeight = pluginConfig.getHologramLineHeight();
+        int lineIndex = 0;
+        boolean firstItemRow = true;
 
-        for (int i = 0; i < itemCount; i++) {
-            ItemStack display = singleDisplayStack(items.get(i));
-            if (i < page.size()) {
-                DHAPI.setHologramLine(hologram, i, display);
-            } else {
-                DHAPI.addHologramLine(hologram, display);
-            }
-            page = DHAPI.getHologramPage(hologram, 0);
-            if (page != null && i < page.size()) {
-                applyItemLineLayout(DHAPI.getHologramLine(page, i), i, itemCount);
-            }
-        }
-
-        for (int t = 0; t < textCount; t++) {
-            int lineIndex = itemCount + t;
-            String line = filteredText.get(t);
-            page = DHAPI.getHologramPage(hologram, 0);
-            if (page == null) {
-                return;
-            }
-            if (lineIndex < page.size()) {
-                DHAPI.setHologramLine(hologram, lineIndex, line);
-            } else {
-                DHAPI.addHologramLine(hologram, line);
-            }
-            page = DHAPI.getHologramPage(hologram, 0);
-            if (page != null && lineIndex < page.size()) {
-                applyTextLineLayout(DHAPI.getHologramLine(page, lineIndex), lineHeight);
+        for (HologramSegment segment : layout) {
+            if (segment instanceof ItemSlotRow itemRow) {
+                List<Integer> slots = itemRow.slotIndices();
+                for (int i = 0; i < slots.size(); i++) {
+                    int slotIndex = slots.get(i);
+                    boolean leadSlot = firstItemRow && i == 0;
+                    ItemStack stack = inv != null ? inv.getItem(slotIndex) : null;
+                    if (stack == null || stack.getType().isAir()) {
+                        setHologramLineAt(hologram, lineIndex, " ");
+                    } else {
+                        setHologramLineAt(hologram, lineIndex, singleDisplayStack(stack));
+                    }
+                    page = DHAPI.getHologramPage(hologram, 0);
+                    if (page != null && lineIndex < page.size()) {
+                        applyItemSlotLayout(DHAPI.getHologramLine(page, lineIndex), slotIndex, leadSlot);
+                    }
+                    lineIndex++;
+                }
+                firstItemRow = false;
+            } else if (segment instanceof TextLine textLine) {
+                String line = textLine.text();
+                if (line == null || line.isEmpty()) {
+                    continue;
+                }
+                setHologramLineAt(hologram, lineIndex, line);
+                page = DHAPI.getHologramPage(hologram, 0);
+                if (page != null && lineIndex < page.size()) {
+                    applyTextLineLayout(DHAPI.getHologramLine(page, lineIndex), lineHeight);
+                }
+                lineIndex++;
             }
         }
 
@@ -271,7 +272,7 @@ public final class HopperOverlayDisplayService {
         if (page == null) {
             return;
         }
-        while (page.size() > targetTotal) {
+        while (page.size() > lineIndex) {
             DHAPI.removeHologramLine(hologram, page.size() - 1);
             page = DHAPI.getHologramPage(hologram, 0);
             if (page == null) {
@@ -282,18 +283,41 @@ public final class HopperOverlayDisplayService {
         hologram.realignLines();
     }
 
-    private static void applyItemLineLayout(HologramLine line, int index, int itemCount) {
-        if (line == null || itemCount <= 0) {
+    private static void setHologramLineAt(Hologram hologram, int lineIndex, String content) {
+        HologramPage page = DHAPI.getHologramPage(hologram, 0);
+        if (page == null) {
             return;
         }
-        if (index == 0) {
+        if (lineIndex < page.size()) {
+            DHAPI.setHologramLine(hologram, lineIndex, content);
+        } else {
+            DHAPI.addHologramLine(hologram, content);
+        }
+    }
+
+    private static void setHologramLineAt(Hologram hologram, int lineIndex, ItemStack content) {
+        HologramPage page = DHAPI.getHologramPage(hologram, 0);
+        if (page == null) {
+            return;
+        }
+        if (lineIndex < page.size()) {
+            DHAPI.setHologramLine(hologram, lineIndex, content);
+        } else {
+            DHAPI.addHologramLine(hologram, content);
+        }
+    }
+
+    private static void applyItemSlotLayout(HologramLine line, int slotIndex, boolean leadSlot) {
+        if (line == null) {
+            return;
+        }
+        if (leadSlot) {
             line.setHeight(ITEM_ROW_HEIGHT + ITEM_TEXT_GAP);
         } else {
             line.setHeight(0);
         }
-        double centerOffset = (index - (itemCount - 1) / 2.0) * ITEM_ROW_SPACING;
-        line.setOffsetX(centerOffset);
-        line.setOffsetY(index > 0 ? index * ITEM_ROW_HEIGHT : 0);
+        line.setOffsetX((slotIndex - 2) * ITEM_ROW_SPACING);
+        line.setOffsetY(0);
         line.setOffsetZ(0);
         line.update();
     }
@@ -307,16 +331,6 @@ public final class HopperOverlayDisplayService {
         line.setOffsetY(0);
         line.setOffsetZ(0);
         line.update();
-    }
-
-    private static List<String> filterTextLines(List<String> textLines) {
-        List<String> filtered = new ArrayList<>();
-        for (String line : textLines) {
-            if (line != null && !line.isEmpty()) {
-                filtered.add(line);
-            }
-        }
-        return filtered;
     }
 
     private static boolean locationChanged(Hologram hologram, Location target) {
@@ -352,38 +366,24 @@ public final class HopperOverlayDisplayService {
                 + loc.getBlockZ();
     }
 
-    private static String contentSignature(List<String> lines, List<ItemStack> items) {
+    private static String contentSignature(Block block, List<HologramSegment> layout) {
         StringBuilder sb = new StringBuilder();
-        for (String line : lines) {
-            sb.append(line).append('\n');
-        }
-        for (ItemStack stack : items) {
-            if (stack == null || stack.getType().isAir()) {
-                sb.append("air;");
-            } else {
-                sb.append(stack.getType().name()).append(';');
+        Inventory inv = HopperContainerUtil.getContainerInventory(block);
+        for (HologramSegment segment : layout) {
+            if (segment instanceof ItemSlotRow itemRow) {
+                for (int slotIndex : itemRow.slotIndices()) {
+                    ItemStack stack = inv != null ? inv.getItem(slotIndex) : null;
+                    if (stack == null || stack.getType().isAir()) {
+                        sb.append("air;");
+                    } else {
+                        sb.append(stack.getType().name()).append(';');
+                    }
+                }
+            } else if (segment instanceof TextLine textLine) {
+                sb.append(textLine.text()).append('\n');
             }
         }
         return sb.toString();
-    }
-
-    private List<ItemStack> collectTransferDisplayItems(Block block) {
-        List<ItemStack> out = new ArrayList<>();
-        Set<Material> seen = new HashSet<>();
-        Inventory inv = HopperContainerUtil.getContainerInventory(block);
-        if (inv == null) {
-            return out;
-        }
-        for (int i = 0; i < inv.getSize(); i++) {
-            ItemStack stack = inv.getItem(i);
-            if (stack == null || stack.getType().isAir()) {
-                continue;
-            }
-            if (seen.add(stack.getType())) {
-                out.add(singleDisplayStack(stack));
-            }
-        }
-        return out;
     }
 
     private static ItemStack singleDisplayStack(ItemStack stack) {
@@ -392,7 +392,7 @@ public final class HopperOverlayDisplayService {
         return one;
     }
 
-    private List<String> buildOverlayLines(Block block, HopperTemplate template, HopperBlockConfig config) {
+    private List<HologramSegment> parseHologramLayout(Block block, HopperTemplate template, HopperBlockConfig config) {
         HopperLevelDef levelDef = HopperLevelResolver.resolveForBlock(block, keys, updateConfig);
         String hopperName = levelDef != null ? levelDef.displayName() : "&7默认漏斗";
         String templateName = readTemplateName(block);
@@ -412,11 +412,39 @@ public final class HopperOverlayDisplayService {
                 "enchan", String.valueOf(enchantCount),
                 "durability", durability);
 
-        List<String> lines = new ArrayList<>();
+        List<HologramSegment> layout = new ArrayList<>();
         for (String raw : pluginConfig.getHologramLines()) {
-            lines.add(TextPlaceholders.apply(raw, vars));
+            if (raw == null || raw.isEmpty()) {
+                continue;
+            }
+            if (ITEM_SLOT_PATTERN.matcher(raw).find()) {
+                List<Integer> slots = parseItemSlotIndices(raw);
+                if (!slots.isEmpty()) {
+                    layout.add(new ItemSlotRow(slots));
+                }
+            } else {
+                layout.add(new TextLine(TextPlaceholders.apply(raw, vars)));
+            }
         }
-        return lines;
+        return layout;
+    }
+
+    private static List<Integer> parseItemSlotIndices(String raw) {
+        List<Integer> slots = new ArrayList<>();
+        Matcher matcher = ITEM_SLOT_PATTERN.matcher(raw);
+        while (matcher.find()) {
+            slots.add(Integer.parseInt(matcher.group(1)) - 1);
+        }
+        return slots;
+    }
+
+    private sealed interface HologramSegment permits ItemSlotRow, TextLine {
+    }
+
+    private record ItemSlotRow(List<Integer> slotIndices) implements HologramSegment {
+    }
+
+    private record TextLine(String text) implements HologramSegment {
     }
 
     private String readTemplateName(Block block) {

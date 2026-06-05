@@ -60,6 +60,7 @@ public final class HopperLaneRegistry {
         HopperBlockConfig config = HopperBlockConfig.read(block, keys);
         boolean reverseAllowed = pluginConfig.isReverseHopperEnabled();
         lane.setReverse(reverseAllowed && config.isReverseSuction());
+        template.normalizeAutomationExclusivity();
         lane.setAutoCraft(pluginConfig.isAutoCraftEnabled() && template.isAutoCraftEnabled());
         lane.setAutoSmelt(pluginConfig.isAutoSmeltEnabled() && template.isAutoSmeltEnabled());
         HopperLevelResolver.applyLevelToLane(lane, block, keys, updateConfig);

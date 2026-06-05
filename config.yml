@@ -49,6 +49,7 @@ Hologram:
     display-range: 48
     # 全息显示文字
     hologram-lines:
+        - "%item1%%item2%%item3%%item4%%item5%"
         - "&a漏斗等级: %hoppername%"
         - "&a当前使用模板: %template%"
         - "&7模式: %mode%"

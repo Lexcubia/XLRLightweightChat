@@ -67,8 +67,9 @@ public final class TemplateRepository {
                     HopperTemplate template = new HopperTemplate();
                     template.setWhitelist(rs.getInt("whitelist") != 0);
                     template.setAutoDestroy(rs.getInt("auto_destroy") != 0);
-                    template.setAutoCraftEnabled(rs.getInt("auto_craft_enabled") != 0);
-                    template.setAutoSmeltEnabled(rs.getInt("auto_smelt_enabled") != 0);
+                    template.loadAutomationFlags(
+                            rs.getInt("auto_craft_enabled") != 0,
+                            rs.getInt("auto_smelt_enabled") != 0);
                     int dur = rs.getInt("durability_threshold");
                     if (!rs.wasNull()) {
                         template.setDurabilityThreshold(dur);

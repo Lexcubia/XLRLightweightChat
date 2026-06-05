@@ -51,9 +51,15 @@ public class HopperTemplate {
 
     public void setAutoCraftEnabled(boolean autoCraftEnabled) {
         this.autoCraftEnabled = autoCraftEnabled;
+        if (autoCraftEnabled) {
+            this.autoSmeltEnabled = false;
+        }
     }
 
     public void toggleAutoCraftEnabled() {
+        if (!this.autoCraftEnabled) {
+            this.autoSmeltEnabled = false;
+        }
         this.autoCraftEnabled = !this.autoCraftEnabled;
     }
 
@@ -79,10 +85,28 @@ public class HopperTemplate {
 
     public void setAutoSmeltEnabled(boolean autoSmeltEnabled) {
         this.autoSmeltEnabled = autoSmeltEnabled;
+        if (autoSmeltEnabled) {
+            this.autoCraftEnabled = false;
+        }
     }
 
     public void toggleAutoSmeltEnabled() {
+        if (!this.autoSmeltEnabled) {
+            this.autoCraftEnabled = false;
+        }
         this.autoSmeltEnabled = !this.autoSmeltEnabled;
+    }
+
+    public void loadAutomationFlags(boolean craftEnabled, boolean smeltEnabled) {
+        this.autoCraftEnabled = craftEnabled;
+        this.autoSmeltEnabled = smeltEnabled;
+        normalizeAutomationExclusivity();
+    }
+
+    public void normalizeAutomationExclusivity() {
+        if (autoCraftEnabled && autoSmeltEnabled) {
+            autoSmeltEnabled = false;
+        }
     }
 
     public List<ItemStack> getAutoSmeltOutputs() {

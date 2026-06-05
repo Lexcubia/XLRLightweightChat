@@ -268,6 +268,7 @@ public final class XLRHopperConfig {
 
     private static List<String> defaultHologramLines() {
         List<String> defaults = new ArrayList<>();
+        defaults.add("%item1%%item2%%item3%%item4%%item5%");
         defaults.add("&a漏斗等级: %hoppername%");
         defaults.add("&a当前使用模板: %template%");
         defaults.add("&7模式: %mode%");
