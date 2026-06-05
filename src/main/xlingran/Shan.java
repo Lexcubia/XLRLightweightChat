@@ -118,6 +118,9 @@ public class Shan extends JavaPlugin implements Listener {
                     if (canonical != null) {
                         title = canonical;
                     }
+                } else {
+                    getLogger().warning("已忽略无效的玩家称号数据: " + entry.getKey());
+                    continue;
                 }
                 playerCurrentTitles.put(uuid, title);
             } catch (IllegalArgumentException e) {
@@ -844,7 +847,24 @@ public class Shan extends JavaPlugin implements Listener {
      * 获取玩家当前穿戴的称号
      */
     public String getPlayerCurrentTitle(Player player) {
-        return playerCurrentTitles.get(player.getUniqueId());
+        String title = playerCurrentTitles.get(player.getUniqueId());
+        Optional<TitleAccess.ResolvedTitle> resolved = TitleAccess.resolveAuthorizedTitle(
+                title,
+                playerTitles,
+                this::processTitleColors,
+                titleId -> player.hasPermission("xlr.playertitle." + titleId));
+        if (resolved.isEmpty()) {
+            if (title != null) {
+                playerCurrentTitles.remove(player.getUniqueId());
+            }
+            return null;
+        }
+
+        String canonicalTitle = resolved.get().canonicalTitle();
+        if (!canonicalTitle.equals(title)) {
+            playerCurrentTitles.put(player.getUniqueId(), canonicalTitle);
+        }
+        return canonicalTitle;
     }
 
     /**
@@ -870,16 +890,7 @@ public class Shan extends JavaPlugin implements Listener {
      * 根据玩家当前穿戴的称号文本解析配置 ID（需与配置名同样经过 {@link #processTitleColors} 再比较）。
      */
     private int resolveTitleId(String wornTitle) {
-        if (wornTitle == null || wornTitle.isEmpty()) {
-            return -1;
-        }
-        String wornDisplay = processTitleColors(wornTitle);
-        for (Map.Entry<Integer, String> entry : playerTitles.entrySet()) {
-            if (processTitleColors(entry.getValue()).equals(wornDisplay)) {
-                return entry.getKey();
-            }
-        }
-        return -1;
+        return TitleAccess.resolveTitleId(wornTitle, playerTitles, this::processTitleColors);
     }
 
     private String applyGradientPlaceholders(String text) {
