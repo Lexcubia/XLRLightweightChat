@@ -499,7 +499,7 @@ public class Gui implements Listener {
             changed = true;
         } else if (slot == slotHopperFloatOverlay) {
             if (!config.isHoverDisplay() && !overlayService.isAvailable()) {
-                player.sendMessage(messageConfig.message("overlay-dh-missing"));
+                player.sendMessage(messageConfig.message("overlay-feature-disabled"));
                 openHopperSettings(player, block);
                 return;
             }

@@ -4,6 +4,7 @@ import eu.decentsoftware.holograms.api.DHAPI;
 import eu.decentsoftware.holograms.api.holograms.Hologram;
 import eu.decentsoftware.holograms.api.holograms.HologramLine;
 import eu.decentsoftware.holograms.api.holograms.HologramPage;
+import eu.decentsoftware.holograms.api.utils.items.HologramItem;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
@@ -227,11 +228,11 @@ public final class HopperOverlayDisplayService {
         int previousTotal = page.size();
 
         for (int i = 0; i < itemCount; i++) {
-            ItemStack display = singleDisplayStack(items.get(i));
+            String itemLine = toSmallHeadLineContent(items.get(i));
             if (i < page.size()) {
-                DHAPI.setHologramLine(hologram, i, display);
+                DHAPI.setHologramLine(hologram, i, itemLine);
             } else {
-                DHAPI.addHologramLine(hologram, display);
+                DHAPI.addHologramLine(hologram, itemLine);
             }
             page = DHAPI.getHologramPage(hologram, 0);
             if (page != null && i < page.size()) {
@@ -279,6 +280,21 @@ public final class HopperOverlayDisplayService {
         line.setOffsetX(centerOffset);
         line.setOffsetY(0);
         line.setOffsetZ(0);
+        line.setFacing(0f);
+        line.update();
+    }
+
+    private static String toSmallHeadLineContent(ItemStack stack) {
+        ItemStack one = singleDisplayStack(stack);
+        HologramItem item = HologramItem.fromItemStack(one);
+        String content = item.getContent();
+        if (content != null && content.startsWith("#ICON:")) {
+            return "#SMALLHEAD:" + content.substring(6);
+        }
+        if (content != null && !content.isBlank()) {
+            return content.replaceFirst("#ICON:", "#SMALLHEAD:");
+        }
+        return "#SMALLHEAD: " + one.getType().name();
     }
 
     private static List<String> filterTextLines(List<String> textLines) {

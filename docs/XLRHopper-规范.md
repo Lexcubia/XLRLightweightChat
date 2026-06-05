@@ -92,7 +92,15 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - `/xlrhopper reload` 会 **重读数据库**（不先 save），便于外部工具改库后热重载。
 - **1.2 遗留 `data.yml` / `data.yml.bak` 可安全删除**；插件不再读取或生成。
 
-### 3.5 主线程 / 异步边界
+### 3.5 启动控制台与版本检查
+
+- **`VersionChecker`**（`onEnable` 仅一次）：异步 GET `https://plugin.xlingran.com/XLRHopperVersion.txt`（纯版本号）；`/xlrhopper reload` **不**重复检测。
+- 启动必定输出：绿色「当前版本: 」+ 青色 `plugin.yml` 版本。
+- 检测完成：一致 → 绿色「当前已是最新版: 」；不一致 → 绿色「有新版本: 」+ 青色远程版本 + 绿色「请及时更新」；失败 → 红色「插件更新检测失败」。
+- DecentHolograms：已安装 → 绿色「全息显示前置  DecentHolograms  加载成功」；未安装 → 红色「未找到全息显示前置  DecentHolograms  已关闭全息显示功能」。
+- 模板 `shan.db` 异步加载完成 → 绿色「漏斗模板数据已加载完成」。
+
+### 3.6 主线程 / 异步边界
 
 | 主线程 | 异步 |
 |--------|------|
@@ -219,18 +227,18 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - **打开**：对已套用模板（PDC 含 `template` + `owner`）的漏斗 **Shift + 左键**（手持物品亦可）；无模板时提示（`Message.yml` → `no-template`），不打开 GUI
 - **`HopperSetting.Redstone`**（默认 slot 10）→ PDC `redstone-list-toggle`
 - **`HopperSetting.Reverse`**（默认 slot 12）→ PDC `reverse-suction`
-- **`HopperSetting.FloatOverlay`**（默认 slot 14，绿宝石）→ PDC `hover-display`（默认 **false**）；左/右键切换后**同一 tick、主线程**立即 `show` / `hide` 全息，再刷新本 GUI 的 `%toggle%`（不依赖关 GUI 或重进世界）；未安装 DecentHolograms 时提示 `overlay-dh-missing`
+- **`HopperSetting.FloatOverlay`**（默认 slot 14，绿宝石）→ PDC `hover-display`（默认 **false**）；左/右键切换后**同一 tick、主线程**立即 `show` / `hide` 全息，再刷新本 GUI 的 `%toggle%`（不依赖关 GUI 或重进世界）；未安装 DecentHolograms 时尝试开启提示 `overlay-feature-disabled`（该功能未启用）
 - **`HopperSetting.Filler`**：占位玻璃
 
 ### 4.6 漏斗上方悬浮全息（DecentHolograms DHAPI）
 
 - **依赖**：服务端须安装 [DecentHolograms](https://github.com/DecentSoftware-eu/DecentHolograms)（≥ 2.0.12，`plugin.yml` `softdepend`）；未安装时 XLRHopper 仍可加载，悬浮不可用。
 - 实现：`display.HopperOverlayDisplayService` + `display.HopperOverlayListener`；**不**进入 `HopperTickService`（属 P0 事件驱动，与 8 tick `workQueue` 排水无关）。
-- 全息：`DHAPI.createHologram` **非持久化**（`xlrhopper_{world}_{x}_{y}_{z}`）；物品行（`ItemStack` 数量 1，`setOffsetX` 横向并排、`setHeight(0)`）+ 五行文本（漏斗等级 `Update.yml` `name`、模板名、白/黑名单、附魔数、耐久）；`setAlwaysFacePlayer(false)`。
+- 全息：`DHAPI.createHologram` **非持久化**（`xlrhopper_{world}_{x}_{y}_{z}`）；物品行 **`#SMALLHEAD`**（`HologramItem.fromItemStack` 序列化，`setOffsetX` 横向并排、`setHeight(0)`、`setFacing(0)`）+ 五行文本（漏斗等级 `Update.yml` `name`、模板名、白/黑名单、附魔数、耐久）；`setAlwaysFacePlayer(false)`。
 - 增量刷新：`DHAPI.setHologramLine` 按行更新；内容签名**不含物品数量**；行数不变时跳过 `realignLines` / `setLocation`。
 - 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用 **4 tick 防抖**；内容签名未变则跳过重建。
 - `DecentHologramsReloadEvent` 后恢复已开启 `hover-display` 的全息。
-- 文案硬编码于 Java；**不读** `Gui.yml` 悬浮行配置；`Message.yml` 仅 `overlay-dh-missing` 提示。
+- 文案硬编码于 Java；**不读** `Gui.yml` 悬浮行配置；`Message.yml` 悬浮相关：`overlay-feature-disabled`（未安装 DH 时开启悬浮）、`overlay-dh-missing`（保留键，运行时未使用）。
 - PDC：`hover-display`（开关）；套模板/初始化时 `hover-display=false`；卸载/关悬浮/破坏时 `hologram.destroy()`。
 - **刷新事件**（仅 `hover-display=true`）：`InventoryMoveItemEvent`、`InventoryPickupItemEvent`、漏斗 GUI 的 `InventoryClickEvent` / `InventoryDragEvent` / `InventoryCloseEvent`；`ChunkLoad` 恢复 `show`；破坏/爆炸/卸载 `hide`；`onDisable` → `hideAll`。
 

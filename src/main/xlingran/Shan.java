@@ -104,9 +104,19 @@ public class Shan extends JavaPlugin {
         laneRegistry = new HopperLaneRegistry();
         hopperTickService = new HopperTickService(this, templateManager, hopperKeys, laneRegistry, updateConfig);
         hopperLaneListener = new HopperLaneListener(this, hopperTickService);
+        VersionChecker.checkOnEnable(this);
+
         boolean decentHologramsAvailable = getServer().getPluginManager().isPluginEnabled("DecentHolograms");
-        if (!decentHologramsAvailable) {
-            getLogger().warning("[XLRHopper] 未检测到 DecentHolograms，漏斗悬浮显示将不可用");
+        if (decentHologramsAvailable) {
+            Bukkit.getConsoleSender().sendMessage(
+                    ChatColor.GREEN + "全息显示前置"
+                            + ChatColor.AQUA + " DecentHolograms "
+                            + ChatColor.GREEN + "加载成功 ");
+        } else {
+            Bukkit.getConsoleSender().sendMessage(
+                    ChatColor.RED + "未找到全息显示前置"
+                            + ChatColor.AQUA + " DecentHolograms "
+                            + ChatColor.RED + "已关闭全息显示功能");
         }
         overlayDisplayService = new HopperOverlayDisplayService(this, hopperKeys, templateManager, updateConfig,
                 decentHologramsAvailable);
@@ -120,7 +130,8 @@ public class Shan extends JavaPlugin {
             } catch (Exception e) {
                 getLogger().severe("[XLRHopper] 加载 shan.db 失败: " + e.getMessage());
             }
-            Bukkit.getScheduler().runTask(this, () -> getLogger().info("[XLRHopper] 模板数据已加载"));
+            Bukkit.getScheduler().runTask(this, () -> Bukkit.getConsoleSender().sendMessage(
+                    ChatColor.GREEN + "漏斗模板数据已加载完成"));
         });
 
         PluginCommand cmd = getCommand("xlrhopper");
