@@ -5,9 +5,11 @@ on:
   push:
     branches:
       - XLRHopper
+      - 'cursor/**'
   pull_request:
     branches:
       - XLRHopper
+      - 'cursor/**'
 
 jobs:
   build:
