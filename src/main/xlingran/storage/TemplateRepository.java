@@ -33,7 +33,9 @@ public final class TemplateRepository {
     private final JavaPlugin plugin;
     private final ShanDatabase database;
     private final Logger logger;
+    private final Object saveLock = new Object();
     private BukkitTask flushTask;
+    private BukkitTask periodicSaveTask;
     private volatile boolean dirty;
 
     public TemplateRepository(JavaPlugin plugin, ShanDatabase database) {
@@ -116,6 +118,12 @@ public final class TemplateRepository {
     }
 
     public void saveAll(HopperTemplateManager manager) throws Exception {
+        synchronized (saveLock) {
+            saveAllUnlocked(manager);
+        }
+    }
+
+    private void saveAllUnlocked(HopperTemplateManager manager) throws Exception {
         try (Connection conn = database.getConnection()) {
             conn.setAutoCommit(false);
             try (Statement st = conn.createStatement()) {
@@ -205,18 +213,26 @@ public final class TemplateRepository {
         scheduleFlush();
     }
 
-    /** 定期将未落盘的脏数据写入 shan.db（防崩溃/kill 丢失）。 */
+    /** 定期将未落盘的脏数据写入 shan.db（防崩溃/kill 丢失）；须在 loadInto 完成后调用。 */
     public void startPeriodicSave(HopperTemplateManager manager) {
-        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, () -> {
+        if (periodicSaveTask != null) {
+            periodicSaveTask.cancel();
+        }
+        periodicSaveTask = plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, () -> {
             if (!dirty) {
                 return;
             }
-            dirty = false;
-            try {
-                saveAll(manager);
-            } catch (Exception e) {
-                logger.severe("[XLRHopper] 定期保存 shan.db 失败: " + e.getMessage());
-                dirty = true;
+            synchronized (saveLock) {
+                if (!dirty) {
+                    return;
+                }
+                dirty = false;
+                try {
+                    saveAllUnlocked(manager);
+                } catch (Exception e) {
+                    logger.severe("[XLRHopper] 定期保存 shan.db 失败: " + e.getMessage());
+                    dirty = true;
+                }
             }
         }, 20L * 60L * 2L, 20L * 60L * 2L);
     }
@@ -242,15 +258,18 @@ public final class TemplateRepository {
     }
 
     public void flushSync(HopperTemplateManager manager) {
-        dirty = false;
         if (flushTask != null) {
             flushTask.cancel();
             flushTask = null;
         }
-        try {
-            saveAll(manager);
-        } catch (Exception e) {
-            logger.severe("[XLRHopper] 保存 shan.db 失败: " + e.getMessage());
+        synchronized (saveLock) {
+            dirty = false;
+            try {
+                saveAllUnlocked(manager);
+            } catch (Exception e) {
+                logger.severe("[XLRHopper] 保存 shan.db 失败: " + e.getMessage());
+                dirty = true;
+            }
         }
     }
 

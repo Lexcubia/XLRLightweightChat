@@ -53,6 +53,9 @@ public final class HopperManagedTransferHandler implements Listener {
         if (!isVerticalContainerNeighbor(hopper, other)) {
             return false;
         }
+        if (HopperBlockConfig.isReverse(hopper, keys)) {
+            return false;
+        }
         if (HopperRedstoneTransferService.isRedstonePoweredTransferActive(hopper, keys, pluginConfig)) {
             return true;
         }

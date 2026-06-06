@@ -55,10 +55,6 @@ public final class HopperWorkEvaluator {
         }
         lane.resetIdleTicks();
         lane.setSleepCooldownTicks(0);
-        if (!lane.isTargetHasSpace() && lane.isReverse()) {
-            registry.removeFromWorkQueue(key);
-            return;
-        }
         registry.offerWork(key);
     }
 
@@ -156,25 +152,7 @@ public final class HopperWorkEvaluator {
         if (config != null && config.isSleepFullContainer() && !lane.isReverse() && isDownstreamFull(block)) {
             return false;
         }
-        if (lane.isAutoCraft() || lane.isReverse()) {
-            for (ItemStack stack : inv.getContents()) {
-                if (stack != null && !stack.getType().isAir() && template.allows(stack, block, keys)) {
-                    return true;
-                }
-            }
-        }
-        if (lane.isReverse()) {
-            Block below = block.getRelative(BlockFace.DOWN);
-            Inventory belowInv = HopperContainerUtil.getContainerInventory(below);
-            if (belowInv != null) {
-                for (ItemStack stack : belowInv.getContents()) {
-                    if (stack != null && !stack.getType().isAir() && template.allows(stack, block, keys)) {
-                        return true;
-                    }
-                }
-            }
-        }
-        if (lane.isAutoSmelt() && template.isAutoSmeltEnabled()) {
+        if (lane.isAutoCraft() || lane.isAutoSmelt()) {
             for (ItemStack stack : inv.getContents()) {
                 if (stack != null && !stack.getType().isAir() && template.allows(stack, block, keys)) {
                     return true;

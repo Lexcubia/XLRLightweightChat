@@ -48,16 +48,38 @@ public final class HopperContainerUtil {
     }
 
     /**
-     * 自动合成/熔炼产物交付：反向吸取时优先上方容器，否则下方容器。
+     * 自动合成/熔炼产物交付：反向吸取时产物先进入漏斗，由原版向上推送；正向则下入方容器。
      */
     public static boolean deliverAutomationOutput(Block hopperBlock, HopperKeys keys, ItemStack stack) {
         if (hopperBlock == null || stack == null || stack.getType().isAir()) {
             return false;
         }
         if (keys != null && HopperBlockConfig.isReverse(hopperBlock, keys)) {
-            return deliverUpstream(hopperBlock, stack);
+            return depositInHopper(hopperBlock, stack);
         }
         return deliverDownstream(hopperBlock, stack);
+    }
+
+    /**
+     * 将物品填入漏斗库存；空间不足时掉落至漏斗位置。
+     */
+    public static boolean depositInHopper(Block hopperBlock, ItemStack stack) {
+        if (hopperBlock == null || stack == null || stack.getType().isAir()) {
+            return false;
+        }
+        Inventory hopperInv = getContainerInventory(hopperBlock);
+        if (hopperInv == null) {
+            return false;
+        }
+        HashMap<Integer, ItemStack> left = hopperInv.addItem(stack.clone());
+        syncContainer(hopperBlock);
+        if (left.isEmpty()) {
+            return true;
+        }
+        for (ItemStack drop : left.values()) {
+            hopperBlock.getWorld().dropItemNaturally(hopperBlock.getLocation().add(0.5, 0.5, 0.5), drop);
+        }
+        return false;
     }
 
     /**

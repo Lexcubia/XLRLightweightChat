@@ -348,10 +348,11 @@ public class Gui implements Listener {
         if (holder == null) {
             return;
         }
+        Inventory topInventory = event.getView().getTopInventory();
         if (holder.getType() == GuiType.FILTER_ITEMS) {
             String templateName = resolveTemplateName(holder, player);
             if (templateName != null) {
-                processFilterItemsClose(player, event.getInventory(), templateName);
+                processFilterItemsClose(player, topInventory, templateName);
                 saveStorageDataImmediate();
             }
             return;
@@ -359,7 +360,7 @@ public class Gui implements Listener {
         if (holder.getType() == GuiType.AUTO_CRAFT) {
             String templateName = resolveTemplateName(holder, player);
             if (templateName != null) {
-                processAutoCraftClose(player, event.getInventory(), templateName);
+                processAutoCraftClose(player, topInventory, templateName);
                 saveStorageDataImmediate();
             }
             return;
@@ -367,7 +368,7 @@ public class Gui implements Listener {
         if (holder.getType() == GuiType.AUTO_SMELT) {
             String templateName = resolveTemplateName(holder, player);
             if (templateName != null) {
-                processAutoSmeltClose(player, event.getInventory(), templateName);
+                processAutoSmeltClose(player, topInventory, templateName);
                 saveStorageDataImmediate();
             }
             return;
@@ -818,6 +819,7 @@ public class Gui implements Listener {
         } else {
             template.setAutoSmeltOutputs(result.uniqueRules());
         }
+        templateRepository.markDirty();
         returnDuplicateItems(player, inventory, result.toReturn());
     }
 
@@ -828,6 +830,7 @@ public class Gui implements Listener {
         }
         PrototypeDedupeResult result = dedupePrototypeSnapshot(inventory);
         template.setFilterPrototypes(result.uniqueRules());
+        templateRepository.markDirty();
         returnDuplicateItems(player, inventory, result.toReturn());
     }
 

@@ -142,7 +142,6 @@ public class Shan extends JavaPlugin {
 
         gui = new Gui(this, templateManager, playerGuiSession, templateRepository, hopperKeys, guiConfig,
                 messageConfig, pluginConfig, hopperTickService, hopperLaneListener, overlayDisplayService);
-        templateRepository.startPeriodicSave(templateManager);
 
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
@@ -150,8 +149,10 @@ public class Shan extends JavaPlugin {
             } catch (Exception e) {
                 getLogger().severe("[XLRHopper] 加载 shan.db 失败: " + e.getMessage());
             }
-            Bukkit.getScheduler().runTask(this, () -> Bukkit.getConsoleSender().sendMessage(
-                    ChatColor.GREEN + "漏斗模板数据已加载完成"));
+            Bukkit.getScheduler().runTask(this, () -> {
+                templateRepository.startPeriodicSave(templateManager);
+                Bukkit.getConsoleSender().sendMessage(ChatColor.GREEN + "漏斗模板数据已加载完成");
+            });
         });
 
         PluginCommand cmd = getCommand("xlrhopper");

@@ -327,11 +327,9 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 ### 6.3 反向吸取（reverse-suction）
 
-- 套用模板的漏斗：`HopperManagedTransferHandler` **取消原版上下方容器移动**，改由 tick 驱动（正向 `HopperTransferForward` / 反向 `HopperTransferReverse` / 红石充能 `HopperRedstoneTransferService`）；`scheduleEvaluate` 由事件侧入队
-- 每 **8 game tick**、每个**已在 workQueue 中**的 lane **最多 1 步**反向搬运（同上 push/pull 规则）
-- `HopperTransferReverse` 直接读写方块 `Container` 库存，扣减前后双向校验；写失败回滚漏斗与来源箱；相邻容器 `InventoryCloseEvent` 唤醒入队
+- **反向吸取**：套用模板且开启反向的漏斗**保留原版**上下方容器移动（`HopperManagedTransferHandler` 不取消）；自动合成/熔炼在漏斗内完成，产物先进入漏斗再由原版向上推送
+- **正向传输**：套用模板且非反向的漏斗由 `HopperManagedTransferHandler` 取消原版上下方移动，改由 tick 驱动（`HopperTransferForward` / 红石充能 `HopperRedstoneTransferService`）；`scheduleEvaluate` 由事件侧入队
 - 反向 push 前执行合成/熔炼 `shouldHoldOutbound`，避免原料从 push 路径漏传
-- **目标满背压**：push 到上方容器时若目标已满且漏斗内仍有可推物品，`markTargetFull` 暂退出 workQueue；`InventoryMoveItem` 或成功搬运后 `invalidateTargetSpace` 恢复入队
 
 ### 6.3.1 事件驱动 + 8 tick 管线（1.3.0）
 
@@ -345,10 +343,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 **阶段 B（每 8 tick，`HopperTickService.tickAll`）**
 
 - 红石充能锁（`redstone-list-toggle` + powered）：每 8 tick `absorb` → `runAutomationImmediate` → `push`（不受 `transfer-tick` 门控）
-- 达 `transfer-tick` 后单步管线：
-  - **反向+自动合成/熔炼**：`pull` 下方 → `smelt/craft tick` → 产物 `deliverUpstream` **直达上方箱**（不经漏斗堆叠后再 push）；`push` 上方处理其余可传输物品
-  - **反向（无自动化）**：`pull` 下方 → `push` 上方
-  - **正向**：`HopperTransferForward.pull` 上方 → `smelt/craft tick` → `push` 下方
+- **反向吸取**：每 8 tick 仅推进 `smelt/craft tick`（`runAutomationImmediate` + job 计时）；容器搬运由原版 `InventoryMoveItem` 负责
+- 达 `transfer-tick` 后单步管线（**正向**）：`HopperTransferForward.pull` 上方 → `smelt/craft tick` → `push` 下方
 - 等级 `transfer-tick` / `max-item` 由插件 tick 驱动（`HopperManagedTransferHandler` 取消原版上下方移动）
 - 无剩余工作则 **出队**；红石充能漏斗持续保留在队
 
