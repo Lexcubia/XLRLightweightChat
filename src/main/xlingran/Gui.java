@@ -87,7 +87,7 @@ public class Gui implements Listener {
 
     /** 样板列表（过滤/合成/熔炼）变更后立即写入 shan.db */
     public void saveStorageDataImmediate() {
-        templateRepository.flushSync(templateManager);
+        templateRepository.flushSyncStorage(templateManager);
     }
 
     private void logStorageDebug(String message) {

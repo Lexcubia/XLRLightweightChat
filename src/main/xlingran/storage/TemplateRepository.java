@@ -2,6 +2,7 @@ package xlingran.storage;
 
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
@@ -20,6 +21,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -312,19 +314,24 @@ public final class TemplateRepository {
 
     public void saveAll(HopperTemplateManager manager) throws Exception {
         synchronized (saveLock) {
-            saveAllUnlocked(manager, false, false);
+            saveAllUnlocked(manager, false, false, false);
         }
     }
 
     private boolean saveAllUnlocked(HopperTemplateManager manager, boolean force, boolean allowEmptyItemLists)
             throws Exception {
+        return saveAllUnlocked(manager, force, allowEmptyItemLists, false);
+    }
+
+    private boolean saveAllUnlocked(HopperTemplateManager manager, boolean force, boolean allowEmptyItemLists,
+                                    boolean bypassLoadHealthy) throws Exception {
         if (!force && !dataLoaded) {
             logger.warning("[XLRHopper] 跳过保存：模板数据尚未从 shan.db 加载完成");
             logStorageDebug("跳过 saveAll：数据未加载");
             dirty = true;
             return false;
         }
-        if (!force && !loadHealthy) {
+        if (!force && !bypassLoadHealthy && !loadHealthy) {
             logger.warning("[XLRHopper] 跳过保存：模板数据加载不完整（存在反序列化失败）");
             logStorageDebug("跳过 saveAll：loadHealthy=false");
             dirty = true;
@@ -554,15 +561,28 @@ public final class TemplateRepository {
     }
 
     public void flushSync(HopperTemplateManager manager) {
-        flushSync(manager, false);
+        flushSync(manager, false, false);
+    }
+
+    /** 存储 GUI 关闭等显式落盘：允许空列表并绕过 loadHealthy 门禁。 */
+    public void flushSyncStorage(HopperTemplateManager manager) {
+        flushSync(manager, false, true);
     }
 
     /** @param force 关服等场景强制落盘，绕过 dataLoaded 门禁 */
     public void flushSync(HopperTemplateManager manager, boolean force) {
+        flushSync(manager, force, force);
+    }
+
+    /**
+     * @param force           关服等场景强制落盘，绕过 dataLoaded 门禁
+     * @param bypassLoadHealthy 存储 GUI 关闭等用户显式保存时绕过 loadHealthy
+     */
+    public void flushSync(HopperTemplateManager manager, boolean force, boolean bypassLoadHealthy) {
         cancelPendingFlush();
         synchronized (saveLock) {
             logger.info("[XLRHopper] flushSync 开始 force=" + force + " dataLoaded=" + dataLoaded
-                    + " loadHealthy=" + loadHealthy);
+                    + " loadHealthy=" + loadHealthy + " bypassLoadHealthy=" + bypassLoadHealthy);
             if (!force && !dataLoaded) {
                 logger.warning("[XLRHopper] flushSync 跳过：模板数据尚未加载完成");
                 logStorageDebug("flushSync 跳过：数据未加载");
@@ -572,7 +592,7 @@ public final class TemplateRepository {
             logStorageDebug("flushSync 开始" + (force ? "（强制）" : ""));
             dirty = false;
             try {
-                boolean saved = saveAllUnlocked(manager, force, true);
+                boolean saved = saveAllUnlocked(manager, force, true, bypassLoadHealthy);
                 if (saved) {
                     if (!force) {
                         loadHealthy = true;
@@ -611,9 +631,23 @@ public final class TemplateRepository {
             return BYTES_BLOB_PREFIX + Base64.getEncoder().encodeToString(bytes);
         }
         YamlConfiguration yml = new YamlConfiguration();
-        yml.set("item", stack.serialize());
+        writeSerializedItem(yml, "item", stack.serialize());
         return Base64.getEncoder().encodeToString(
                 yml.saveToString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private static void writeSerializedItem(YamlConfiguration yml, String path, Map<String, Object> serialized) {
+        for (Map.Entry<String, Object> entry : serialized.entrySet()) {
+            String childPath = path + "." + entry.getKey();
+            Object value = entry.getValue();
+            if (value instanceof Map<?, ?> nested) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> childMap = (Map<String, Object>) nested;
+                writeSerializedItem(yml, childPath, childMap);
+            } else {
+                yml.set(childPath, value);
+            }
+        }
     }
 
     private ItemStack deserializeBlob(String blob, long templateId, String listType, String templateName) {
@@ -641,10 +675,9 @@ public final class TemplateRepository {
             byte[] raw = Base64.getDecoder().decode(blob);
             YamlConfiguration yml = new YamlConfiguration();
             yml.loadFromString(new String(raw, java.nio.charset.StandardCharsets.UTF_8));
-            Object map = yml.get("item");
-            if (map instanceof Map<?, ?> m) {
-                @SuppressWarnings("unchecked")
-                ItemStack stack = ItemStack.deserialize((Map<String, Object>) m);
+            Map<String, Object> map = readSerializedItemMap(yml, "item");
+            if (map != null && !map.isEmpty()) {
+                ItemStack stack = ItemStack.deserialize(map);
                 ItemStack proto = ItemStackUtil.clonePrototype(stack);
                 if (proto != null && isDebugEnabled()) {
                     logger.info("[XLRHopper][存储调试] 反序列化 legacy 成功 template=" + templateName
@@ -659,6 +692,68 @@ public final class TemplateRepository {
                     + ", list=" + listType + ", format=legacy): " + e.getMessage());
         }
         return null;
+    }
+
+    private Map<String, Object> readSerializedItemMap(YamlConfiguration yml, String path) {
+        ConfigurationSection section = yml.getConfigurationSection(path);
+        if (section != null) {
+            return sectionToMap(section);
+        }
+        Object raw = yml.get(path);
+        if (raw instanceof Map<?, ?> map) {
+            return normalizeMap(map);
+        }
+        return null;
+    }
+
+    private Map<String, Object> sectionToMap(ConfigurationSection section) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (String key : section.getKeys(false)) {
+            Object value = section.get(key);
+            if (value instanceof ConfigurationSection nested) {
+                map.put(key, sectionToMap(nested));
+            } else if (value instanceof List<?> list) {
+                map.put(key, normalizeList(list));
+            } else {
+                map.put(key, value);
+            }
+        }
+        return map;
+    }
+
+    private List<Object> normalizeList(List<?> list) {
+        List<Object> normalized = new ArrayList<>(list.size());
+        for (Object value : list) {
+            if (value instanceof ConfigurationSection nested) {
+                normalized.add(sectionToMap(nested));
+            } else if (value instanceof Map<?, ?> map) {
+                normalized.add(normalizeMap(map));
+            } else {
+                normalized.add(value);
+            }
+        }
+        return normalized;
+    }
+
+    private Map<String, Object> normalizeMap(Map<?, ?> source) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : source.entrySet()) {
+            Object key = entry.getKey();
+            if (!(key instanceof String stringKey)) {
+                continue;
+            }
+            Object value = entry.getValue();
+            if (value instanceof ConfigurationSection nested) {
+                map.put(stringKey, sectionToMap(nested));
+            } else if (value instanceof Map<?, ?> nestedMap) {
+                map.put(stringKey, normalizeMap(nestedMap));
+            } else if (value instanceof List<?> list) {
+                map.put(stringKey, normalizeList(list));
+            } else {
+                map.put(stringKey, value);
+            }
+        }
+        return map;
     }
 
     private static boolean isDebugEnabled() {
