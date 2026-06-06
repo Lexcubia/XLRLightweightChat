@@ -63,30 +63,65 @@ public final class HopperAutoCraftService {
         if (!template.isAutoCraftEnabled() || template.getAutoCraftTargets().isEmpty()) {
             return false;
         }
-        for (ItemStack target : template.getAutoCraftTargets()) {
-            if (HopperRecipeUtil.matchesPrototype(moving, target)) {
-                return false;
-            }
-        }
         if (!(hopperBlock.getState() instanceof Container container)) {
             return false;
         }
         Location loc = hopperBlock.getLocation();
-        if (hasJob(loc)) {
-            return isMovingRecipeIngredient(hopperBlock, template, keys, moving);
-        }
         Inventory inv = container.getInventory();
-        CraftPlan plan = peekBestPlan(inv, hopperBlock, template, keys);
-        if (plan == null || !isMovingRecipeIngredient(hopperBlock, template, keys, moving)) {
+        if (!isCraftPipelineActive(inv, hopperBlock, template, keys, loc)) {
+            return false;
+        }
+        if (matchesAnyCraftTargetPrototype(moving, template)) {
+            return true;
+        }
+        return isMovingRecipeIngredient(hopperBlock, template, keys, moving);
+    }
+
+    private static boolean matchesAnyCraftTargetPrototype(ItemStack moving, HopperTemplate template) {
+        for (ItemStack target : template.getAutoCraftTargets()) {
+            if (HopperRecipeUtil.matchesPrototype(moving, target)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isCraftPipelineActive(Inventory inv, Block hopperBlock, HopperTemplate template,
+                                          HopperKeys keys, Location loc) {
+        if (hasJob(loc)) {
+            return true;
+        }
+        for (ItemStack target : template.getAutoCraftTargets()) {
+            for (ShapelessRecipe recipe : HopperRecipeUtil.findShapelessRecipes(target)) {
+                if (isActivePlan(inv, hopperBlock, template, keys,
+                        planShapeless(inv, hopperBlock, template, keys, recipe))) {
+                    return true;
+                }
+            }
+            for (ShapedRecipe recipe : HopperRecipeUtil.findShapedRecipes(target)) {
+                if (isActivePlan(inv, hopperBlock, template, keys,
+                        planShaped(inv, hopperBlock, template, keys, recipe))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean isActivePlan(Inventory inv, Block hopperBlock, HopperTemplate template,
+                                        HopperKeys keys, CraftPlan plan) {
+        if (plan == null) {
             return false;
         }
         if (plan.canCraftNow()) {
             return true;
         }
-        if (plan.needed() == null || plan.needed().isEmpty()) {
-            return false;
+        if (!plan.reservedSlots().isEmpty()) {
+            return true;
         }
-        return hasInsufficientMaterials(inv, hopperBlock, template, keys, plan.needed());
+        Map<RecipeChoice, Integer> needed = plan.needed();
+        return needed != null && !needed.isEmpty()
+                && hasInsufficientMaterials(inv, hopperBlock, template, keys, needed);
     }
 
     public void clear(Location loc) {

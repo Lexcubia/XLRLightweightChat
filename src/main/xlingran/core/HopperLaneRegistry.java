@@ -45,12 +45,12 @@ public final class HopperLaneRegistry {
             unregisterLane(block.getLocation());
             return null;
         }
-        if (lanes.size() >= pluginConfig.getMaxQueueLimit()) {
+        Location loc = block.getLocation();
+        String key = HopperLane.laneKey(loc);
+        if (lanes.get(key) == null && lanes.size() >= pluginConfig.getMaxQueueLimit()) {
             return null;
         }
         HopperTemplate template = HopperTemplateResolver.resolve(block, keys, templateManager);
-        Location loc = block.getLocation();
-        String key = HopperLane.laneKey(loc);
         if (template == null) {
             unregisterLane(loc);
             return null;

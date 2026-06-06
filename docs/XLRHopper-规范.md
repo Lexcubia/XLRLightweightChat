@@ -53,7 +53,9 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - 占位符：`%Template%`、`%modename%`、`%toggle%`、`%filtermode%`、`%Durability%`、`%Enchant%` 等。
 - **开关文案（根节点顶格，与 `TemplateSet` 同级）**：
   - `%toggle%` ← `toggleon`（开启）/ `toggleoff`（关闭），如 `toggleon: "&a开启"`
-  - `%filtermode%` ← `filtermodeon` / `filtermodeoff`
+  - `%filtermode%` ← `filtermodeon` / `filtermodeoff`（模板过滤模式）
+  - `%stonemode%` ← `stonemodeon` / `stonemodeoff`（单漏斗红石功能开启时的模式文案）
+  - 全息 `config.yml` → `%mode%`：未开红石功能用 `filtermodeon/off`；已开红石功能用 `stonemodeon/off`（`GuiConfig.displayMode()`）
   - 须修改服务端 **`plugins/XLRHopper/Gui.yml`**（非 jar 内文件）；`GuiConfig.toggle()` 每次打开 GUI 时实时读取
   - `/xlrhopper reload` 与重启均会重载；控制台打印 `toggleon=...`
 - **仅** `Auto-Crafting`、`Filter-Item`、`Auto-Furnace` 可配置 **`rows`（≥1，建议 ≤6）**；其余界面行数在 `GuiConfig` 中硬编码（3/5/6 行等）。
@@ -215,7 +217,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - 未凑齐配方的原料槽位由 `HopperReservation` 预留，不参与反向 push/pull
 - **入料**：`tryStartCraft` 仅在原料足够时**启动 job 并扣料**；**不**在入料同一 tick 即时完成产出（推进由 8 tick `workQueue` 的 `tick` 负责）
 - **产物下传**：job 完成时 `HopperContainerUtil.deliverDownstream` **优先放入漏斗正下方容器**；无容器或已满时回退填入漏斗
-- **出站门控**：`shouldHoldOutbound` 在凑料中、即将启动 job、或 job 进行中拦截配方原料；**产物**与非配方物品正常放行
+- **出站门控**：`shouldHoldOutbound` 在凑料管线活跃期拦截配方原料与产物样板；产物仅经 `deliverDownstream` 下传，不经原版漏斗链漏传
 - **单槽多扣**：同一漏斗槽位可扣减多个配方单位（如 1 格 64 木板，不要求占满 4 格）；原木不匹配工作台配方
 - **目标流程**：投入原料 → hold 凑料 → `tryStartCraft` 扣料开 job → `craft-tick` 后产物入**下方箱子**
 - **与自动熔炼互斥**：同模板仅能开启自动合成或自动熔炼其一；GUI 左键开启本功能时自动关闭另一项；两者可同时关闭
@@ -229,7 +231,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - 每漏斗同时仅 1 个熔炼 job；`config.yml` → `Gui.smelt-tick`（默认 **100 tick**）后产出 1 个
 - **入料即时熔炼**：入料后同一 tick 执行 `tryStartSmelt`（仅启动，不推进计时）
 - **产物下传**：job 完成时 `deliverDownstream` 优先放入**下方箱子**（与 §4.7 对称）
-- **出站门控**：job 进行中或待熔炼输入匹配时拦截；产物样板正常放行
+- **出站门控**：熔炼管线活跃期拦截输入与产物样板；产物仅经 `deliverDownstream` 下传
 - **多输入源反查**：`findAllSmeltMappings` 覆盖铁锭 ← 铁矿石 / 深板岩铁矿石 / 原铁等
 - **目标流程**：投入原料 → `tryStartSmelt` → `smelt-tick` 后产物入**下方箱子**
 - **与自动合成互斥**：同模板仅能开启自动合成或自动熔炼其一；GUI 左键开启本功能时自动关闭另一项；两者可同时关闭
@@ -247,7 +249,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 - **标题**：`HopperSetting.name`（默认 `&e漏斗设置`）
 - **打开**：对已套用模板（PDC 含 `template` + `owner`）的漏斗 **Shift + 左键**（手持物品亦可）；无模板时提示（`Message.yml` → `no-template`），不打开 GUI
-- **`HopperSetting.Redstone`**（默认 slot 10）→ PDC `redstone-list-toggle`
+- **`HopperSetting.Redstone`**（默认 slot 10）→ PDC `redstone-list-toggle`；**仅该漏斗**开启后过滤模式由红石接管（模板过滤模式对该漏斗失效直至关闭）；同模板其他未开红石漏斗仍跟模板；Lore 含 `%stonemode%`
 - **`HopperSetting.Reverse`**（默认 slot 12）→ PDC `reverse-suction`
 - **`HopperSetting.FloatOverlay`**（默认 slot 14，绿宝石）→ PDC `hover-display`（默认 **false**）；左/右键切换后**同一 tick、主线程**立即 `show` / `hide` 全息，再刷新本 GUI 的 `%toggle%`（不依赖关 GUI 或重进世界）；未安装 DecentHolograms 时尝试开启提示 `overlay-feature-disabled`（该功能未启用）
 - **`HopperSetting.Filler`**：占位玻璃
@@ -289,10 +291,16 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 允许进入漏斗 = passItem(样板) ∧ passDurability ∧ passEnchant
 ```
 
-**有效白/黑名单**（仅影响 passItem）：
+**有效白/黑名单**（仅影响 passItem；`HopperBlockConfig.getEffectiveWhitelist` 唯一入口）：
 
-- 方块 PDC `redstone-list-toggle` 关闭 → 使用模板 `whitelist`（模板设置红石块切换）
-- 方块 PDC `redstone-list-toggle` 开启 → 漏斗方块 **有充能** = 白名单，**无充能** = 黑名单
+| 该漏斗 `redstone-list-toggle` | 有效模式来源 |
+|-------------------------------|--------------|
+| **关闭**（默认） | 模板 `whitelist`（模板设置过滤模式） |
+| **开启** | **红石信号**（`HopperRedstoneUtil.isSignalActive`）：有信号=白名单，无信号=黑名单；**不读**模板 `whitelist` |
+
+- 红石功能**按单漏斗** PDC 生效；套用同模板且未开红石的漏斗不受红石影响。
+- 过滤物品样板、附魔、耐久仍来自模板（全漏斗共享）。
+- 红石信号变化时 `HopperRedstoneListener` 刷新过滤与全息 `%mode%`。
 
 任一维度不通过 → 取消对应进入路径的事件。
 
@@ -318,7 +326,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 - 单漏斗 PDC `reverse-suction` 为 true 时，`HopperReverseHandler` **取消原版四向冲突移动**；并 **`scheduleEvaluate`** 由事件侧决定是否入队，**不在** handler 内 `syncHopper` 或全量登记
 - 每 **8 game tick**、每个**已在 workQueue 中**的 lane **最多 1 步**反向搬运（同上 push/pull 规则）
-- `HopperTransferReverse` 直接读写方块 `Container` 库存，扣减前后校验；写失败退回目标容器（满则 `dropItemNaturally`）
+- `HopperTransferReverse` 直接读写方块 `Container` 库存，扣减前后双向校验；写失败回滚漏斗与来源箱；相邻容器 `InventoryCloseEvent` 唤醒入队
+- 反向 push 前执行合成/熔炼 `shouldHoldOutbound`，避免原料从 push 路径漏传
 - **目标满背压**：push 到上方容器时若目标已满且漏斗内仍有可推物品，`markTargetFull` 暂退出 workQueue；`InventoryMoveItem` 或成功搬运后 `invalidateTargetSpace` 恢复入队
 
 ### 6.3.1 事件驱动 + 8 tick 管线（1.3.0）
@@ -422,6 +431,9 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 11. 漏斗设置内点「悬浮开关」：不开关重进世界，悬浮**立即**出现/消失；`Message.yml` 无 `overlay-*` 键；`Gui.yml` 仅有 `FloatOverlay` 开关项。
 12. 打开漏斗设置：**Shift+左键**；默认无悬浮直至开启 `hover-display`。
 13. 等级漏斗：`give` 两枚同等级应直接堆叠；放置后挖掘掉落与手中剩余应能合并；拾取地面等级漏斗后 Meta 与 give 一致。
+14. 自动合成/熔炼：持续入料时原料不得经原版链漏到下方箱；产物仅 `deliverDownstream` 下传。
+15. 反向吸取：手动往下方箱放货后应被 pull；不得吞物品；上方箱满时背压不丢物。
+16. 红石名单：同模板漏斗 A 未开红石、B 开红石；改模板模式仅影响 A；红石信号仅影响 B；全息 `%mode%` 与 `Gui.yml` 四变量一致。
 
 ---
 

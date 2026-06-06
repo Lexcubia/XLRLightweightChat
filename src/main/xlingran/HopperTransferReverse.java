@@ -21,6 +21,10 @@ public final class HopperTransferReverse {
     public record ReverseTransferResult(int moved, boolean pushTargetFull) {
     }
 
+    public record ReverseTransferContext(HopperAutoCraftService craftService, HopperAutoSmeltService smeltService,
+                                         XLRHopperConfig pluginConfig) {
+    }
+
     private enum MoveResult {
         SUCCESS,
         TARGET_FULL,
@@ -34,7 +38,8 @@ public final class HopperTransferReverse {
     }
 
     public static ReverseTransferResult transferStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
-                                                     HopperReservation reservation, int maxItem) {
+                                                     HopperReservation reservation, int maxItem,
+                                                     ReverseTransferContext context) {
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER
                 || !HopperBlockConfig.isReverse(hopperBlock, keys) || template == null) {
             return new ReverseTransferResult(0, false);
@@ -55,7 +60,8 @@ public final class HopperTransferReverse {
                 lastPushAttempt = PushAttempt.NO_WORK;
                 break;
             }
-            PushAttempt attempt = tryPushOne(hopperInv, hopperBlock, aboveInv, aboveBlock, template, keys, reserved);
+            PushAttempt attempt = tryPushOne(hopperInv, hopperBlock, aboveInv, aboveBlock, template, keys, reserved,
+                    context);
             lastPushAttempt = attempt;
             if (attempt != PushAttempt.MOVED) {
                 break;
@@ -85,7 +91,8 @@ public final class HopperTransferReverse {
     }
 
     private static PushAttempt tryPushOne(Inventory hopperInv, Block hopperBlock, Inventory to, Block toBlock,
-                                          HopperTemplate template, HopperKeys keys, Set<Integer> reserved) {
+                                          HopperTemplate template, HopperKeys keys, Set<Integer> reserved,
+                                          ReverseTransferContext context) {
         boolean hasPushable = false;
         for (int i = 0; i < hopperInv.getSize(); i++) {
             if (reserved.contains(i)) {
@@ -93,6 +100,9 @@ public final class HopperTransferReverse {
             }
             ItemStack slot = hopperInv.getItem(i);
             if (slot == null || slot.getType().isAir() || !template.allows(slot, hopperBlock, keys)) {
+                continue;
+            }
+            if (shouldHoldForAutomation(hopperBlock, template, keys, slot, context)) {
                 continue;
             }
             hasPushable = true;
@@ -109,6 +119,21 @@ public final class HopperTransferReverse {
         return hasPushable ? PushAttempt.NO_WORK : PushAttempt.NO_WORK;
     }
 
+    private static boolean shouldHoldForAutomation(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                                   ItemStack stack, ReverseTransferContext context) {
+        if (context == null || context.pluginConfig() == null) {
+            return false;
+        }
+        if (template.isAutoCraftEnabled() && context.pluginConfig().isAutoCraftEnabled()
+                && context.craftService() != null
+                && context.craftService().shouldHoldOutbound(hopperBlock, template, keys, stack)) {
+            return true;
+        }
+        return template.isAutoSmeltEnabled() && context.pluginConfig().isAutoSmeltEnabled()
+                && context.smeltService() != null
+                && context.smeltService().shouldHoldOutbound(hopperBlock, template, keys, stack);
+    }
+
     private static boolean tryPullOne(Inventory from, Block fromBlock, Inventory hopperInv, Block hopperBlock,
                                       HopperTemplate template, HopperKeys keys, Set<Integer> reserved) {
         if (!hasHopperSpace(hopperInv, reserved)) {
@@ -121,6 +146,7 @@ public final class HopperTransferReverse {
             }
             ItemStack one = slot.clone();
             one.setAmount(1);
+            int amountBefore = slot.getAmount();
             int countBefore = HopperContainerUtil.countSimilar(hopperInv, one);
             HashMap<Integer, ItemStack> leftover = hopperInv.addItem(one);
             if (!leftover.isEmpty()) {
@@ -128,20 +154,24 @@ public final class HopperTransferReverse {
             }
             int countAfter = HopperContainerUtil.countSimilar(hopperInv, one);
             if (countAfter - countBefore < 1) {
+                hopperInv.removeItem(one);
+                HopperContainerUtil.syncContainer(hopperBlock);
                 continue;
             }
-            int newAmount = slot.getAmount() - 1;
-            if (newAmount <= 0) {
+            int expectedAfter = amountBefore - 1;
+            if (expectedAfter <= 0) {
                 from.setItem(i, null);
             } else {
                 ItemStack updated = slot.clone();
-                updated.setAmount(newAmount);
+                updated.setAmount(expectedAfter);
                 from.setItem(i, updated);
             }
-            int fromBefore = slot.getAmount() + 1;
-            int fromAfter = newAmount <= 0 ? 0 : newAmount;
-            if (fromBefore - fromAfter != 1) {
+            ItemStack verify = from.getItem(i);
+            int actualAfter = verify == null || verify.getType().isAir() ? 0 : verify.getAmount();
+            if (actualAfter != expectedAfter) {
                 hopperInv.removeItem(one);
+                from.setItem(i, slot);
+                HopperContainerUtil.syncContainer(fromBlock);
                 HopperContainerUtil.syncContainer(hopperBlock);
                 continue;
             }
@@ -181,11 +211,7 @@ public final class HopperTransferReverse {
             return MoveResult.SUCCESS;
         }
         HopperContainerUtil.refund(toBlock, toInv, one);
-        if (amountBefore <= 1) {
-            fromInv.setItem(fromSlot, slot.clone());
-        } else {
-            fromInv.setItem(fromSlot, slot.clone());
-        }
+        fromInv.setItem(fromSlot, slot);
         HopperContainerUtil.syncContainer(fromBlock);
         HopperContainerUtil.syncContainer(toBlock);
         return MoveResult.FAILED;
