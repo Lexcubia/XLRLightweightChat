@@ -73,22 +73,10 @@ public final class HopperAutoSmeltService {
         if (!isSmeltPipelineActive(inv, hopperBlock, template, keys, loc)) {
             return false;
         }
-        if (matchesAnySmeltOutputPrototype(moving, template)) {
-            return true;
-        }
         if (!template.allows(moving, hopperBlock, keys)) {
             return false;
         }
         return matchesAnySmeltInput(template, moving);
-    }
-
-    private static boolean matchesAnySmeltOutputPrototype(ItemStack moving, HopperTemplate template) {
-        for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
-            if (HopperRecipeUtil.matchesPrototype(moving, outputProto)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private boolean isSmeltPipelineActive(Inventory inv, Block hopperBlock, HopperTemplate template,

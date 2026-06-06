@@ -100,6 +100,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 ### 3.4 shan.db
 
 - 表结构由 `ShanDatabase` 初始化；读写经 `TemplateRepository`（异步加载、防抖保存、关服 `flushSync`）。
+- **`dataLoaded` 门禁**：`loadInto` 完成前禁止 `saveAll`（防止空内存清空整库）；关服 `flushSync(force)` 例外。
+- **`config.yml` → `XLRHopper.debug-template-storage`**：为 `true` 时，存储 GUI 关闭/打开、`flushSync`、`loadInto` 输出 `[XLRHopper][存储调试]` INFO 日志，便于排错持久化。
 - **过滤物品 / 自动合成 / 自动熔炼** GUI 关闭时 `flushSync` 立即写入；关服前对仍打开的上述 GUI 强制落盘；每 2 分钟定期保存脏数据。
 - 模板字段：白名单、filter-items、自动合成/熔炼、附魔过滤、耐久阈值等。
 - `/xlrhopper reload` 会 **重读数据库**（不先 save），便于外部工具改库后热重载。
@@ -330,7 +332,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - 套用模板且开启反向的漏斗：`HopperManagedTransferHandler` **取消原版上下方容器移动**，改由 tick 驱动 `HopperTransferReverse`（从下方 pull → 漏斗内合成/熔炼 → push 上方）；`scheduleEvaluate` 由事件侧入队
 - **正向传输**：套用模板且非反向的漏斗同样取消原版上下方移动，改由 `HopperTransferForward` / 红石充能 `HopperRedstoneTransferService` tick 驱动
 - 自动合成/熔炼产物经 `depositInHopper` **先进入漏斗槽位**，再由 `pushStep` 推向上方容器（不经 `deliverUpstream` 直达）
-- 反向 push 前执行合成/熔炼 `shouldHoldOutbound`，避免原料从 push 路径漏传
+- 反向 push 前 `shouldHoldOutbound` **仅拦截配方原料/熔炼输入**；已完成合成/熔炼产物允许 `pushStep` 推向上方
 - **目标满背压**：push 到上方容器时若目标已满，`markTargetFull` 暂退出 workQueue；成功搬运后 `invalidateTargetSpace` 恢复入队
 
 ### 6.3.1 事件驱动 + 8 tick 管线（1.3.0）
@@ -340,7 +342,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - `ChunkLoad`、`BlockPlace`、批量套模板、库存移动、邻居变化等：登记 `HopperLane`、构建 **`FilterSnapshot`**（一次 resolve）、更新自动化标志、`workQueue.offer/remove`
 - **禁止**在 8 tick 内做登记、resolve、全服盲扫、`syncHopper`
 - **自动合成 / 自动熔炼 lane 入料即时处理**：物品**进入**漏斗时 `scheduleEvaluateImmediate`（跳过 4 tick 防抖）→ `runEvaluate` + `HopperTickService.runAutomationImmediate`（`tryCraft` / `tryStartSmelt`）
-- **出站门控**（`HopperListener`，`InventoryMoveItemEvent` `HIGH`）：漏斗作为 `source` 向下游输出时，`HopperAutoCraftService.shouldHoldOutbound` / `HopperAutoSmeltService.shouldHoldOutbound` 拦截配方原料与熔炼输入；产物样板匹配的物品放行
+- **出站门控**（`HopperListener`，`InventoryMoveItemEvent` `HIGH`）：漏斗作为 `source` 向下游输出时，`shouldHoldOutbound` 仅拦截配方原料与熔炼输入；**合成/熔炼产物不 hold**，反向由 `pushStep` 推上方
 
 **阶段 B（每 8 tick，`HopperTickService.tickAll`）**
 

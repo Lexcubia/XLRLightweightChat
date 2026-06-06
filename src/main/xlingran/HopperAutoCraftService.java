@@ -71,19 +71,7 @@ public final class HopperAutoCraftService {
         if (!isCraftPipelineActive(inv, hopperBlock, template, keys, loc)) {
             return false;
         }
-        if (matchesAnyCraftTargetPrototype(moving, template)) {
-            return true;
-        }
         return isMovingRecipeIngredient(hopperBlock, template, keys, moving);
-    }
-
-    private static boolean matchesAnyCraftTargetPrototype(ItemStack moving, HopperTemplate template) {
-        for (ItemStack target : template.getAutoCraftTargets()) {
-            if (HopperRecipeUtil.matchesPrototype(moving, target)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private boolean isCraftPipelineActive(Inventory inv, Block hopperBlock, HopperTemplate template,

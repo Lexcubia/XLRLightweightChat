@@ -31,6 +31,7 @@ public final class XLRHopperConfig {
     private boolean clearOnChunkUnload = true;
     private int maxQueueSize = 8192;
     private boolean queueOverflowRetry = true;
+    private boolean debugTemplateStorage = false;
 
     private boolean hologramEnabled = true;
     private int hologramRefreshTimeSeconds = 1;
@@ -84,6 +85,7 @@ public final class XLRHopperConfig {
         clearOnChunkUnload = cfg.getBoolean("XLRHopper.clear-on-chunk-unload", true);
         maxQueueSize = cfg.getInt("XLRHopper.max-queue-size", 8192);
         queueOverflowRetry = cfg.getBoolean("XLRHopper.queue-overflow-policy", true);
+        debugTemplateStorage = cfg.getBoolean("XLRHopper.debug-template-storage", false);
 
         hologramEnabled = cfg.getBoolean("Hologram.enable", true);
         hologramRefreshTimeSeconds = cfg.getInt("Hologram.refresh-time", 1);
@@ -168,6 +170,10 @@ public final class XLRHopperConfig {
 
     public boolean isQueueOverflowRetry() {
         return queueOverflowRetry;
+    }
+
+    public boolean isDebugTemplateStorage() {
+        return debugTemplateStorage;
     }
 
     public boolean isHologramEnabled() {

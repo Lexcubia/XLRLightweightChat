@@ -1,6 +1,5 @@
 package xlingran.storage;
 
-import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -11,6 +10,8 @@ import org.bukkit.scheduler.BukkitTask;
 import xlingran.HopperTemplate;
 import xlingran.HopperTemplateManager;
 import xlingran.ItemStackUtil;
+import xlingran.Shan;
+import xlingran.XLRHopperConfig;
 
 import java.io.File;
 import java.lang.reflect.Method;
@@ -19,8 +20,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Base64;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -39,6 +38,7 @@ public final class TemplateRepository {
     private BukkitTask flushTask;
     private BukkitTask periodicSaveTask;
     private volatile boolean dirty;
+    private volatile boolean dataLoaded;
 
     public TemplateRepository(JavaPlugin plugin, ShanDatabase database) {
         this.plugin = plugin;
@@ -46,8 +46,15 @@ public final class TemplateRepository {
         this.logger = plugin.getLogger();
     }
 
+    public boolean isDataLoaded() {
+        return dataLoaded;
+    }
+
     public void loadInto(HopperTemplateManager manager) throws Exception {
+        dataLoaded = false;
+        logStorageDebug("loadInto 开始");
         manager.clearAll();
+        int templateCount = 0;
         try (Connection conn = database.getConnection();
              Statement st = conn.createStatement();
              ResultSet players = st.executeQuery("SELECT uuid, enabled_template FROM players")) {
@@ -78,30 +85,39 @@ public final class TemplateRepository {
                     if (!rs.wasNull()) {
                         template.setDurabilityThreshold(dur);
                     }
-                    loadItemList(conn, templateId, LIST_FILTER, template.getFilterPrototypes());
-                    loadItemList(conn, templateId, LIST_CRAFT, template.getAutoCraftTargets());
-                    loadItemList(conn, templateId, LIST_SMELT, template.getAutoSmeltOutputs());
+                    int filterCount = loadItemList(conn, templateId, LIST_FILTER, template.getFilterPrototypes(), name);
+                    int craftCount = loadItemList(conn, templateId, LIST_CRAFT, template.getAutoCraftTargets(), name);
+                    int smeltCount = loadItemList(conn, templateId, LIST_SMELT, template.getAutoSmeltOutputs(), name);
                     loadEnchants(conn, templateId, template);
                     manager.putTemplate(uuid, name, template);
+                    templateCount++;
+                    logStorageDebug("loadInto 模板=" + name + " player=" + uuid + " filter=" + filterCount
+                            + " craft=" + craftCount + " smelt=" + smeltCount);
                 }
             }
         }
+        dataLoaded = true;
+        logStorageDebug("loadInto 完成，共 " + templateCount + " 个模板");
     }
 
-    private void loadItemList(Connection conn, long templateId, String listType, List<ItemStack> target) throws Exception {
+    private int loadItemList(Connection conn, long templateId, String listType,
+                             java.util.List<ItemStack> target, String templateName) throws Exception {
+        int loaded = 0;
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT item_blob FROM template_item_lists WHERE template_id=? AND list_type=? ORDER BY item_index")) {
             ps.setLong(1, templateId);
             ps.setString(2, listType);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    ItemStack stack = deserializeBlob(rs.getString("item_blob"), templateId, listType);
+                    ItemStack stack = deserializeBlob(rs.getString("item_blob"), templateId, listType, templateName);
                     if (stack != null) {
                         target.add(stack);
+                        loaded++;
                     }
                 }
             }
         }
+        return loaded;
     }
 
     private void loadEnchants(Connection conn, long templateId, HopperTemplate template) throws Exception {
@@ -121,11 +137,22 @@ public final class TemplateRepository {
 
     public void saveAll(HopperTemplateManager manager) throws Exception {
         synchronized (saveLock) {
-            saveAllUnlocked(manager);
+            saveAllUnlocked(manager, false);
         }
     }
 
-    private void saveAllUnlocked(HopperTemplateManager manager) throws Exception {
+    private boolean saveAllUnlocked(HopperTemplateManager manager, boolean force) throws Exception {
+        if (!force && !dataLoaded) {
+            logger.warning("[XLRHopper] 跳过保存：模板数据尚未从 shan.db 加载完成");
+            logStorageDebug("跳过 saveAll：数据未加载");
+            dirty = true;
+            return false;
+        }
+        logStorageDebug("saveAll 开始" + (force ? "（强制）" : ""));
+        int templateCount = 0;
+        int filterRows = 0;
+        int craftRows = 0;
+        int smeltRows = 0;
         try (Connection conn = database.getConnection()) {
             conn.setAutoCommit(false);
             try (Statement st = conn.createStatement()) {
@@ -143,15 +170,25 @@ public final class TemplateRepository {
                     ps.executeUpdate();
                 }
                 for (Map.Entry<String, HopperTemplate> entry : manager.getTemplates(uuid).entrySet()) {
-                    long id = insertTemplate(conn, uuid, entry.getKey(), entry.getValue());
-                    saveItemList(conn, id, LIST_FILTER, entry.getValue().getFilterPrototypes());
-                    saveItemList(conn, id, LIST_CRAFT, entry.getValue().getAutoCraftTargets());
-                    saveItemList(conn, id, LIST_SMELT, entry.getValue().getAutoSmeltOutputs());
+                    String templateName = entry.getKey();
+                    long id = insertTemplate(conn, uuid, templateName, entry.getValue());
+                    int f = saveItemList(conn, id, LIST_FILTER, entry.getValue().getFilterPrototypes());
+                    int c = saveItemList(conn, id, LIST_CRAFT, entry.getValue().getAutoCraftTargets());
+                    int s = saveItemList(conn, id, LIST_SMELT, entry.getValue().getAutoSmeltOutputs());
                     saveEnchants(conn, id, entry.getValue());
+                    filterRows += f;
+                    craftRows += c;
+                    smeltRows += s;
+                    templateCount++;
+                    logStorageDebug("saveAll 写入模板=" + templateName + " player=" + uuid
+                            + " filter=" + f + " craft=" + c + " smelt=" + s);
                 }
             }
             conn.commit();
         }
+        logStorageDebug("saveAll 完成，模板数=" + templateCount + " filter行=" + filterRows
+                + " craft行=" + craftRows + " smelt行=" + smeltRows);
+        return true;
     }
 
     private long insertTemplate(Connection conn, UUID uuid, String name, HopperTemplate t) throws Exception {
@@ -180,7 +217,8 @@ public final class TemplateRepository {
         throw new IllegalStateException("insert template failed");
     }
 
-    private void saveItemList(Connection conn, long templateId, String listType, List<ItemStack> stacks) throws Exception {
+    private int saveItemList(Connection conn, long templateId, String listType,
+                             java.util.List<ItemStack> stacks) throws Exception {
         int index = 0;
         for (ItemStack stack : stacks) {
             ItemStack proto = ItemStackUtil.clonePrototype(stack);
@@ -196,6 +234,7 @@ public final class TemplateRepository {
                 ps.executeUpdate();
             }
         }
+        return index;
     }
 
     private void saveEnchants(Connection conn, long templateId, HopperTemplate t) throws Exception {
@@ -228,9 +267,14 @@ public final class TemplateRepository {
                 if (!dirty) {
                     return;
                 }
+                if (!dataLoaded) {
+                    logger.warning("[XLRHopper] 定期保存跳过：模板数据尚未加载完成");
+                    logStorageDebug("定期保存跳过：数据未加载");
+                    return;
+                }
                 dirty = false;
                 try {
-                    saveAllUnlocked(manager);
+                    saveAllUnlocked(manager, false);
                 } catch (Exception e) {
                     logger.severe("[XLRHopper] 定期保存 shan.db 失败: " + e.getMessage());
                     dirty = true;
@@ -248,31 +292,66 @@ public final class TemplateRepository {
             if (!dirty) {
                 return;
             }
-            dirty = false;
-            HopperTemplateManager manager = xlingran.Shan.getInstance().getTemplateManager();
-            try {
-                saveAll(manager);
-            } catch (Exception e) {
-                logger.severe("[XLRHopper] 异步保存 shan.db 失败: " + e.getMessage());
-                dirty = true;
+            synchronized (saveLock) {
+                if (!dirty) {
+                    return;
+                }
+                if (!dataLoaded) {
+                    logger.warning("[XLRHopper] 异步保存跳过：模板数据尚未加载完成");
+                    logStorageDebug("scheduleFlush 跳过：数据未加载");
+                    return;
+                }
+                dirty = false;
+                HopperTemplateManager manager = Shan.getInstance().getTemplateManager();
+                try {
+                    saveAllUnlocked(manager, false);
+                } catch (Exception e) {
+                    logger.severe("[XLRHopper] 异步保存 shan.db 失败: " + e.getMessage());
+                    dirty = true;
+                }
             }
         }, 20L);
     }
 
     public void flushSync(HopperTemplateManager manager) {
+        flushSync(manager, false);
+    }
+
+    /** @param force 关服等场景强制落盘，绕过 dataLoaded 门禁 */
+    public void flushSync(HopperTemplateManager manager, boolean force) {
         if (flushTask != null) {
             flushTask.cancel();
             flushTask = null;
         }
         synchronized (saveLock) {
+            if (!force && !dataLoaded) {
+                logger.warning("[XLRHopper] flushSync 跳过：模板数据尚未加载完成");
+                logStorageDebug("flushSync 跳过：数据未加载");
+                dirty = true;
+                return;
+            }
+            logStorageDebug("flushSync 开始" + (force ? "（强制）" : ""));
             dirty = false;
             try {
-                saveAllUnlocked(manager);
+                saveAllUnlocked(manager, force);
+                logStorageDebug("flushSync 完成");
             } catch (Exception e) {
                 logger.severe("[XLRHopper] 保存 shan.db 失败: " + e.getMessage());
                 dirty = true;
             }
         }
+    }
+
+    private void logStorageDebug(String message) {
+        XLRHopperConfig config = pluginConfig();
+        if (config != null && config.isDebugTemplateStorage()) {
+            logger.info("[XLRHopper][存储调试] " + message);
+        }
+    }
+
+    private static XLRHopperConfig pluginConfig() {
+        Shan shan = Shan.getInstance();
+        return shan != null ? shan.getPluginConfig() : null;
     }
 
     private static String serializeBlob(ItemStack stack) {
@@ -285,7 +364,7 @@ public final class TemplateRepository {
         return Base64.getEncoder().encodeToString(yml.saveToString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
-    private ItemStack deserializeBlob(String blob, long templateId, String listType) {
+    private ItemStack deserializeBlob(String blob, long templateId, String listType, String templateName) {
         if (blob == null || blob.isEmpty()) {
             return null;
         }
@@ -297,8 +376,8 @@ public final class TemplateRepository {
                     return ItemStackUtil.clonePrototype(stack);
                 }
             } catch (Exception e) {
-                logger.warning("[XLRHopper] 反序列化物品失败 (template=" + templateId + ", list="
-                        + listType + ", format=bytes): " + e.getMessage());
+                logger.warning("[XLRHopper] 反序列化物品失败 (template=" + templateName + ", id=" + templateId
+                        + ", list=" + listType + ", format=bytes): " + e.getMessage());
             }
             return null;
         }
@@ -310,13 +389,23 @@ public final class TemplateRepository {
             if (map instanceof Map<?, ?> m) {
                 @SuppressWarnings("unchecked")
                 ItemStack stack = ItemStack.deserialize((Map<String, Object>) m);
-                return ItemStackUtil.clonePrototype(stack);
+                ItemStack proto = ItemStackUtil.clonePrototype(stack);
+                if (proto != null && isDebugEnabled()) {
+                    logger.info("[XLRHopper][存储调试] 反序列化 legacy 成功 template=" + templateName
+                            + " list=" + listType + " material=" + proto.getType());
+                }
+                return proto;
             }
         } catch (Exception e) {
-            logger.warning("[XLRHopper] 反序列化物品失败 (template=" + templateId + ", list="
-                    + listType + ", format=legacy): " + e.getMessage());
+            logger.warning("[XLRHopper] 反序列化物品失败 (template=" + templateName + ", id=" + templateId
+                    + ", list=" + listType + ", format=legacy): " + e.getMessage());
         }
         return null;
+    }
+
+    private static boolean isDebugEnabled() {
+        XLRHopperConfig config = pluginConfig();
+        return config != null && config.isDebugTemplateStorage();
     }
 
     private static byte[] trySerializeAsBytes(ItemStack stack) {

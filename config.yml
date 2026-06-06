@@ -32,6 +32,8 @@ XLRHopper:
     # 队列溢出后，true 为等待下一周期重试，false 丢弃本次入队
     # 一般不用去管它
     queue-overflow-policy: true
+    # 模板存储 GUI（过滤/合成/熔炼）保存与加载的控制台调试日志
+    debug-template-storage: true
 
 # 全息显示
 Hologram:

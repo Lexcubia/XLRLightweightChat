@@ -200,7 +200,7 @@ public class Shan extends JavaPlugin {
             gui.persistOpenStorageGuisBeforeShutdown();
         }
         if (templateRepository != null && templateManager != null) {
-            templateRepository.flushSync(templateManager);
+            templateRepository.flushSync(templateManager, true);
         }
         if (database != null) {
             database.close();
