@@ -154,11 +154,14 @@ public final class HopperAutoCraftService {
                     HopperContainerUtil.deliverAutomationOutput(hopperBlock, keys, output);
                     jobs.remove(key);
                     HopperContainerUtil.syncContainer(hopperBlock);
+                } else {
+                    reserved.addAll(job.reservedSlots);
                     return reserved;
                 }
+            } else {
+                reserved.addAll(job.reservedSlots);
+                return reserved;
             }
-            reserved.addAll(job.reservedSlots);
-            return reserved;
         }
 
         CraftMatch match = findCraftMatch(inv, hopperBlock, template, keys);

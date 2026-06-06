@@ -146,11 +146,14 @@ public final class HopperAutoSmeltService {
                     HopperContainerUtil.deliverAutomationOutput(hopperBlock, keys, output);
                     jobs.remove(key);
                     HopperContainerUtil.syncContainer(hopperBlock);
+                } else {
+                    reserved.add(job.sourceSlot);
                     return reserved;
                 }
+            } else {
+                reserved.add(job.sourceSlot);
+                return reserved;
             }
-            reserved.add(job.sourceSlot);
-            return reserved;
         }
 
         for (ItemStack outputProto : template.getAutoSmeltOutputs()) {

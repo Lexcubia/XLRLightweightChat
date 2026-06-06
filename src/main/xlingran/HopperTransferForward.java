@@ -26,6 +26,11 @@ public final class HopperTransferForward {
     }
 
     public static int pullStep(Block hopperBlock, HopperTemplate template, HopperKeys keys, int maxItem) {
+        return pullStep(hopperBlock, template, keys, maxItem, Set.of());
+    }
+
+    public static int pullStep(Block hopperBlock, HopperTemplate template, HopperKeys keys, int maxItem,
+                               Set<Integer> reserved) {
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER || template == null) {
             return 0;
         }
@@ -41,10 +46,11 @@ public final class HopperTransferForward {
         if (aboveInv == null) {
             return 0;
         }
+        Set<Integer> reservedSlots = reserved == null ? Set.of() : reserved;
         int limit = Math.max(1, maxItem);
         int moved = 0;
         for (int i = 0; i < limit; i++) {
-            if (!tryPullOne(aboveInv, aboveBlock, hopperInv, hopperBlock, template, keys)) {
+            if (!tryPullOne(aboveInv, aboveBlock, hopperInv, hopperBlock, template, keys, reservedSlots)) {
                 break;
             }
             moved++;
@@ -89,8 +95,8 @@ public final class HopperTransferForward {
     }
 
     private static boolean tryPullOne(Inventory from, Block fromBlock, Inventory hopperInv, Block hopperBlock,
-                                      HopperTemplate template, HopperKeys keys) {
-        if (!hasHopperSpace(hopperInv, Set.of())) {
+                                      HopperTemplate template, HopperKeys keys, Set<Integer> reserved) {
+        if (!hasHopperSpace(hopperInv, reserved)) {
             return false;
         }
         for (int i = 0; i < from.getSize(); i++) {
