@@ -39,6 +39,11 @@ public final class HopperTransferReverse {
 
     public static int pullStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
                                HopperReservation reservation, int maxItem) {
+        return pullStep(hopperBlock, template, keys, reservation, maxItem, null);
+    }
+
+    public static int pullStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                               HopperReservation reservation, int maxItem, ReverseTransferContext context) {
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER
                 || !HopperBlockConfig.isReverse(hopperBlock, keys) || template == null) {
             return 0;
@@ -56,7 +61,7 @@ public final class HopperTransferReverse {
         int limit = Math.max(1, maxItem);
         int moved = 0;
         for (int i = 0; i < limit; i++) {
-            if (!tryPullOne(belowInv, belowBlock, hopperInv, hopperBlock, template, keys, reserved)) {
+            if (!tryPullOne(belowInv, belowBlock, hopperInv, hopperBlock, template, keys, reserved, context)) {
                 break;
             }
             moved++;
@@ -134,6 +139,15 @@ public final class HopperTransferReverse {
         return hasPushable ? PushAttempt.NO_WORK : PushAttempt.NO_WORK;
     }
 
+    private static boolean shouldThrottleSmeltInbound(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                                      ItemStack stack, ReverseTransferContext context) {
+        if (context == null || context.smeltService() == null || context.pluginConfig() == null) {
+            return false;
+        }
+        return template.isAutoSmeltEnabled() && context.pluginConfig().isAutoSmeltEnabled()
+                && context.smeltService().shouldThrottleInboundSmeltItem(hopperBlock, template, keys, stack);
+    }
+
     private static boolean shouldHoldForAutomation(Block hopperBlock, HopperTemplate template, HopperKeys keys,
                                                    ItemStack stack, ReverseTransferContext context) {
         if (context == null || context.pluginConfig() == null) {
@@ -150,7 +164,8 @@ public final class HopperTransferReverse {
     }
 
     private static boolean tryPullOne(Inventory from, Block fromBlock, Inventory hopperInv, Block hopperBlock,
-                                      HopperTemplate template, HopperKeys keys, Set<Integer> reserved) {
+                                      HopperTemplate template, HopperKeys keys, Set<Integer> reserved,
+                                      ReverseTransferContext context) {
         if (!hasHopperSpace(hopperInv, reserved)) {
             return false;
         }
@@ -161,6 +176,9 @@ public final class HopperTransferReverse {
             }
             ItemStack one = slot.clone();
             one.setAmount(1);
+            if (shouldThrottleSmeltInbound(hopperBlock, template, keys, one, context)) {
+                continue;
+            }
             int amountBefore = slot.getAmount();
             int countBefore = HopperContainerUtil.countSimilar(hopperInv, one);
             HashMap<Integer, ItemStack> leftover = hopperInv.addItem(one);

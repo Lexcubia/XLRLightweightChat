@@ -58,6 +58,51 @@ public final class HopperAutoSmeltService {
         return reserved;
     }
 
+    /**
+     * 漏斗内已有待熔炼原料时，不再从上方/红石吸取同类物品，避免随机数量堆积。
+     */
+    public boolean shouldThrottleInboundSmeltItem(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                                  ItemStack incoming) {
+        if (hopperBlock == null || template == null || incoming == null || incoming.getType().isAir()) {
+            return false;
+        }
+        if (!template.isAutoSmeltEnabled() || template.getAutoSmeltOutputs().isEmpty()) {
+            return false;
+        }
+        if (pluginConfig != null && !pluginConfig.isAutoSmeltEnabled()) {
+            return false;
+        }
+        if (!matchesAnySmeltInput(template, incoming) || !template.allows(incoming, hopperBlock, keys)) {
+            return false;
+        }
+        if (!(hopperBlock.getState() instanceof Container container)) {
+            return false;
+        }
+        return countSmeltInputItems(container.getInventory(), hopperBlock, template, keys) >= 1;
+    }
+
+    public int countSmeltInputItems(Block hopperBlock, HopperTemplate template, HopperKeys keys) {
+        if (hopperBlock == null || !(hopperBlock.getState() instanceof Container container)) {
+            return 0;
+        }
+        return countSmeltInputItems(container.getInventory(), hopperBlock, template, keys);
+    }
+
+    private int countSmeltInputItems(Inventory inv, Block hopperBlock, HopperTemplate template, HopperKeys keys) {
+        int total = 0;
+        for (int i = 0; i < inv.getSize(); i++) {
+            ItemStack slot = inv.getItem(i);
+            if (slot == null || slot.getType().isAir()) {
+                continue;
+            }
+            if (!matchesAnySmeltInput(template, slot) || !template.allows(slot, hopperBlock, keys)) {
+                continue;
+            }
+            total += slot.getAmount();
+        }
+        return total;
+    }
+
     public boolean shouldHoldOutbound(Block hopperBlock, HopperTemplate template, HopperKeys keys, ItemStack moving) {
         if (hopperBlock == null || template == null || moving == null || moving.getType().isAir()) {
             return false;

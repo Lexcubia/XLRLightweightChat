@@ -26,11 +26,16 @@ public final class HopperTransferForward {
     }
 
     public static int pullStep(Block hopperBlock, HopperTemplate template, HopperKeys keys, int maxItem) {
-        return pullStep(hopperBlock, template, keys, maxItem, Set.of());
+        return pullStep(hopperBlock, template, keys, maxItem, Set.of(), null);
     }
 
     public static int pullStep(Block hopperBlock, HopperTemplate template, HopperKeys keys, int maxItem,
                                Set<Integer> reserved) {
+        return pullStep(hopperBlock, template, keys, maxItem, reserved, null);
+    }
+
+    public static int pullStep(Block hopperBlock, HopperTemplate template, HopperKeys keys, int maxItem,
+                               Set<Integer> reserved, ForwardTransferContext context) {
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER || template == null) {
             return 0;
         }
@@ -50,7 +55,7 @@ public final class HopperTransferForward {
         int limit = Math.max(1, maxItem);
         int moved = 0;
         for (int i = 0; i < limit; i++) {
-            if (!tryPullOne(aboveInv, aboveBlock, hopperInv, hopperBlock, template, keys, reservedSlots)) {
+            if (!tryPullOne(aboveInv, aboveBlock, hopperInv, hopperBlock, template, keys, reservedSlots, context)) {
                 break;
             }
             moved++;
@@ -95,7 +100,8 @@ public final class HopperTransferForward {
     }
 
     private static boolean tryPullOne(Inventory from, Block fromBlock, Inventory hopperInv, Block hopperBlock,
-                                      HopperTemplate template, HopperKeys keys, Set<Integer> reserved) {
+                                      HopperTemplate template, HopperKeys keys, Set<Integer> reserved,
+                                      ForwardTransferContext context) {
         if (!hasHopperSpace(hopperInv, reserved)) {
             return false;
         }
@@ -106,6 +112,9 @@ public final class HopperTransferForward {
             }
             ItemStack one = slot.clone();
             one.setAmount(1);
+            if (shouldThrottleSmeltInbound(hopperBlock, template, keys, one, context)) {
+                continue;
+            }
             int amountBefore = slot.getAmount();
             HashMap<Integer, ItemStack> leftover = hopperInv.addItem(one);
             if (!leftover.isEmpty()) {
@@ -156,6 +165,15 @@ public final class HopperTransferForward {
             }
         }
         return false;
+    }
+
+    private static boolean shouldThrottleSmeltInbound(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                                      ItemStack stack, ForwardTransferContext context) {
+        if (context == null || context.smeltService() == null || context.pluginConfig() == null) {
+            return false;
+        }
+        return template.isAutoSmeltEnabled() && context.pluginConfig().isAutoSmeltEnabled()
+                && context.smeltService().shouldThrottleInboundSmeltItem(hopperBlock, template, keys, stack);
     }
 
     private static boolean shouldHoldForAutomation(Block hopperBlock, HopperTemplate template, HopperKeys keys,

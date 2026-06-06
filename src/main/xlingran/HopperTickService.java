@@ -184,7 +184,8 @@ public final class HopperTickService {
 
             if (redstonePowered) {
                 int redstoneMax = HopperRedstoneTransferService.resolveMaxItem(block, keys, updateConfig);
-                HopperRedstoneTransferService.absorbStep(block, template, keys, pluginConfig, redstoneMax);
+                HopperRedstoneTransferService.absorbStep(block, template, keys, pluginConfig, redstoneMax,
+                        smeltService);
                 Set<Integer> automationReserved = runAutomation(block, template, lane, loc);
                 reservation.setReserved(loc, automationReserved);
                 Set<Integer> redstoneReserved = new HashSet<>(automationReserved);
@@ -210,10 +211,10 @@ public final class HopperTickService {
             boolean transferred = false;
             Set<Integer> pullReserved = collectAutomationReserved(loc);
             if (isReverse && !redstonePowered) {
-                int pulled = HopperTransferReverse.pullStep(block, template, keys, reservation, maxItem);
+                int pulled = HopperTransferReverse.pullStep(block, template, keys, reservation, maxItem, reverseCtx);
                 transferred = pulled > 0;
             } else if (!redstonePowered) {
-                int pulled = HopperTransferForward.pullStep(block, template, keys, maxItem, pullReserved);
+                int pulled = HopperTransferForward.pullStep(block, template, keys, maxItem, pullReserved, forwardCtx);
                 transferred = pulled > 0;
             }
 

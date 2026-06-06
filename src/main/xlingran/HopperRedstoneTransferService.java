@@ -32,6 +32,11 @@ public final class HopperRedstoneTransferService {
      */
     public static int absorbStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
                                  XLRHopperConfig pluginConfig, int maxItem) {
+        return absorbStep(hopperBlock, template, keys, pluginConfig, maxItem, null);
+    }
+
+    public static int absorbStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                 XLRHopperConfig pluginConfig, int maxItem, HopperAutoSmeltService smeltService) {
         if (!canRun(hopperBlock, template, keys, pluginConfig)) {
             return 0;
         }
@@ -39,11 +44,11 @@ public final class HopperRedstoneTransferService {
         Inventory hopperInv = hopperContainer.getInventory();
         int limit = Math.max(1, maxItem);
         int moved = 0;
-        if (tryPickupGround(hopperBlock, hopperInv, template, keys)) {
+        if (tryPickupGround(hopperBlock, hopperInv, template, keys, smeltService, pluginConfig)) {
             moved++;
         }
         for (int i = moved; i < limit; i++) {
-            if (!tryPullFromAbove(hopperBlock, hopperInv, template, keys)) {
+            if (!tryPullFromAbove(hopperBlock, hopperInv, template, keys, smeltService, pluginConfig)) {
                 break;
             }
             moved++;
@@ -148,7 +153,8 @@ public final class HopperRedstoneTransferService {
     }
 
     private static boolean tryPickupGround(Block hopperBlock, Inventory hopperInv, HopperTemplate template,
-                                           HopperKeys keys) {
+                                           HopperKeys keys, HopperAutoSmeltService smeltService,
+                                           XLRHopperConfig pluginConfig) {
         if (!hasHopperSpace(hopperInv)) {
             return false;
         }
@@ -169,6 +175,9 @@ public final class HopperRedstoneTransferService {
             }
             ItemStack one = stack.clone();
             one.setAmount(1);
+            if (shouldThrottleSmeltInbound(hopperBlock, template, keys, one, smeltService, pluginConfig)) {
+                continue;
+            }
             HashMap<Integer, ItemStack> leftover = hopperInv.addItem(one);
             if (!leftover.isEmpty()) {
                 continue;
@@ -186,7 +195,8 @@ public final class HopperRedstoneTransferService {
     }
 
     private static boolean tryPullFromAbove(Block hopperBlock, Inventory hopperInv, HopperTemplate template,
-                                            HopperKeys keys) {
+                                            HopperKeys keys, HopperAutoSmeltService smeltService,
+                                            XLRHopperConfig pluginConfig) {
         if (!hasHopperSpace(hopperInv)) {
             return false;
         }
@@ -202,6 +212,9 @@ public final class HopperRedstoneTransferService {
             }
             ItemStack one = slot.clone();
             one.setAmount(1);
+            if (shouldThrottleSmeltInbound(hopperBlock, template, keys, one, smeltService, pluginConfig)) {
+                continue;
+            }
             int amountBefore = slot.getAmount();
             HashMap<Integer, ItemStack> leftover = hopperInv.addItem(one);
             if (!leftover.isEmpty()) {
@@ -241,6 +254,16 @@ public final class HopperRedstoneTransferService {
             }
         }
         return false;
+    }
+
+    private static boolean shouldThrottleSmeltInbound(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                                      ItemStack stack, HopperAutoSmeltService smeltService,
+                                                      XLRHopperConfig pluginConfig) {
+        if (smeltService == null || pluginConfig == null) {
+            return false;
+        }
+        return template.isAutoSmeltEnabled() && pluginConfig.isAutoSmeltEnabled()
+                && smeltService.shouldThrottleInboundSmeltItem(hopperBlock, template, keys, stack);
     }
 
     private static boolean shouldHoldForAutomation(Block hopperBlock, HopperTemplate template, HopperKeys keys,

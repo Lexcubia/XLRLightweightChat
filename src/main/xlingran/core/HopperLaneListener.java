@@ -208,7 +208,8 @@ public final class HopperLaneListener implements Listener {
                 : HopperRedstoneTransferService.resolveMaxItem(hopperBlock, tickService.getKeys(),
                 tickService.getUpdateConfig());
         HopperKeys hopperKeys = tickService.getKeys();
-        HopperRedstoneTransferService.absorbStep(hopperBlock, template, hopperKeys, pluginConfig, maxItem);
+        HopperRedstoneTransferService.absorbStep(hopperBlock, template, hopperKeys, pluginConfig, maxItem,
+                tickService.getSmeltService());
         tickService.runAutomationImmediate(hopperBlock);
         Set<Integer> reserved = new HashSet<>();
         reserved.addAll(tickService.getSmeltService().getActiveReservedSlots(hopperBlock.getLocation()));
