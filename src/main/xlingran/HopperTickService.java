@@ -111,19 +111,33 @@ public final class HopperTickService {
             return;
         }
         Location loc = block.getLocation();
-        Set<Integer> reserved = new HashSet<>(smeltService.getActiveReservedSlots(loc));
-        reserved.addAll(craftService.getActiveReservedSlots(loc));
-        if (lane.isAutoSmelt() && pluginConfig.isAutoSmeltEnabled()) {
-            reserved.addAll(smeltService.tryStartSmelt(block, template, keys));
-        }
-        if (lane.isAutoCraft() && pluginConfig.isAutoCraftEnabled()) {
-            reserved.addAll(craftService.tryStartCraft(block, template, keys));
-        }
+        Set<Integer> reserved = runAutomation(block, template, lane, loc);
         if (reserved.isEmpty()) {
             reservation.clear(loc);
         } else {
             reservation.setReserved(loc, reserved);
         }
+    }
+
+    private Set<Integer> collectAutomationReserved(Location loc) {
+        Set<Integer> reserved = new HashSet<>(smeltService.getActiveReservedSlots(loc));
+        reserved.addAll(craftService.getActiveReservedSlots(loc));
+        reserved.addAll(reservation.getReserved(loc));
+        return reserved;
+    }
+
+    /** 推进熔炼/合成计时；无 job 时尝试启动。 */
+    private Set<Integer> runAutomation(Block block, HopperTemplate template, HopperLane lane, Location loc) {
+        Set<Integer> reserved = new HashSet<>();
+        if (lane.isAutoSmelt() && pluginConfig.isAutoSmeltEnabled()) {
+            reserved.addAll(smeltService.tick(block, template, keys));
+            reserved.addAll(smeltService.tryStartSmelt(block, template, keys));
+        }
+        if (lane.isAutoCraft() && pluginConfig.isAutoCraftEnabled()) {
+            reserved.addAll(craftService.tick(block, template, keys));
+            reserved.addAll(craftService.tryStartCraft(block, template, keys));
+        }
+        return reserved;
     }
 
     public HopperAutoCraftService getCraftService() {
@@ -158,38 +172,81 @@ public final class HopperTickService {
 
             HopperLevelResolver.applyLevelToLane(lane, block, keys, updateConfig);
             lane.incrementTicksSinceLastStep();
-            if (lane.ticksSinceLastStep() < lane.transferTick()) {
+
+            boolean redstonePowered = HopperRedstoneTransferService.isRedstonePoweredTransferActive(
+                    block, keys, pluginConfig);
+            int maxItem = lane.maxItem();
+            HopperTransferForward.ForwardTransferContext forwardCtx =
+                    new HopperTransferForward.ForwardTransferContext(craftService, smeltService, pluginConfig);
+            HopperTransferReverse.ReverseTransferContext reverseCtx =
+                    new HopperTransferReverse.ReverseTransferContext(craftService, smeltService, pluginConfig);
+            boolean isReverse = lane.isReverse() && pluginConfig.isReverseHopperEnabled();
+
+            if (redstonePowered) {
+                int redstoneMax = HopperRedstoneTransferService.resolveMaxItem(block, keys, updateConfig);
+                HopperRedstoneTransferService.absorbStep(block, template, keys, pluginConfig, redstoneMax,
+                        smeltService);
+                Set<Integer> automationReserved = runAutomation(block, template, lane, loc);
+                reservation.setReserved(loc, automationReserved);
+                Set<Integer> redstoneReserved = new HashSet<>(automationReserved);
+                HopperRedstoneTransferService.RedstoneTransferContext redstoneCtx =
+                        new HopperRedstoneTransferService.RedstoneTransferContext(
+                                craftService, smeltService, pluginConfig, redstoneReserved);
+                HopperRedstoneTransferService.pushStep(block, template, keys, pluginConfig, redstoneMax, redstoneCtx);
+            }
+
+            boolean transferGateOpen = lane.ticksSinceLastStep() >= lane.transferTick();
+            if (!transferGateOpen) {
+                if (!redstonePowered) {
+                    Set<Integer> automationReserved = runAutomation(block, template, lane, loc);
+                    reservation.setReserved(loc, automationReserved);
+                }
                 boolean keepWaiting = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService,
-                        craftService);
+                        craftService) || redstonePowered;
                 laneRegistry.removeLaneFromQueueAfterTick(lane, keepWaiting);
                 continue;
             }
             lane.resetTicksSinceLastStep();
 
-            Set<Integer> reserved = new HashSet<>();
-            if (lane.isAutoSmelt() && pluginConfig.isAutoSmeltEnabled()) {
-                reserved.addAll(smeltService.tick(block, template, keys));
+            boolean transferred = false;
+            Set<Integer> pullReserved = collectAutomationReserved(loc);
+            if (isReverse && !redstonePowered) {
+                int pulled = HopperTransferReverse.pullStep(block, template, keys, reservation, maxItem, reverseCtx);
+                transferred = pulled > 0;
+            } else if (!redstonePowered) {
+                int pulled = HopperTransferForward.pullStep(block, template, keys, maxItem, pullReserved, forwardCtx);
+                transferred = pulled > 0;
             }
-            if (lane.isAutoCraft() && pluginConfig.isAutoCraftEnabled()) {
-                reserved.addAll(craftService.tick(block, template, keys));
-            }
+
+            Set<Integer> reserved = runAutomation(block, template, lane, loc);
             reservation.setReserved(loc, reserved);
 
-            if (lane.isReverse() && pluginConfig.isReverseHopperEnabled()) {
-                HopperTransferReverse.ReverseTransferResult reverseResult = HopperTransferReverse.transferStep(
-                        block, template, keys, reservation, lane.maxItem());
+            if (isReverse && !redstonePowered) {
+                HopperTransferReverse.ReverseTransferResult reverseResult = HopperTransferReverse.pushStep(
+                        block, template, keys, reservation, maxItem, reverseCtx);
                 if (reverseResult.pushTargetFull()) {
                     laneRegistry.markTargetFull(loc);
                 } else if (reverseResult.moved() > 0) {
                     laneRegistry.invalidateTargetSpace(loc);
-                    HopperLevelDef levelDef = HopperLevelResolver.resolveForBlock(block, keys, updateConfig);
-                    if (levelDef != null) {
-                        HopperTransferGate.getInstance().recordTransfer(block, levelDef, GameTickCounter.getInstance().currentTick());
-                    }
+                    transferred = true;
+                }
+            } else if (!redstonePowered) {
+                int pushed = HopperTransferForward.pushStep(block, template, keys, reserved, maxItem, forwardCtx);
+                if (pushed > 0) {
+                    transferred = true;
                 }
             }
 
-            boolean keep = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService, craftService);
+            if (transferred) {
+                HopperLevelDef levelDef = HopperLevelResolver.resolveForBlock(block, keys, updateConfig);
+                if (levelDef != null) {
+                    HopperTransferGate.getInstance().recordTransfer(block, levelDef,
+                            GameTickCounter.getInstance().currentTick());
+                }
+            }
+
+            boolean keep = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService, craftService)
+                    || redstonePowered;
             laneRegistry.removeLaneFromQueueAfterTick(lane, keep);
         }
     }

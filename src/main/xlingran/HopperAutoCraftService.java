@@ -63,30 +63,56 @@ public final class HopperAutoCraftService {
         if (!template.isAutoCraftEnabled() || template.getAutoCraftTargets().isEmpty()) {
             return false;
         }
-        for (ItemStack target : template.getAutoCraftTargets()) {
-            if (HopperRecipeUtil.matchesPrototype(moving, target)) {
-                return false;
-            }
-        }
         if (!(hopperBlock.getState() instanceof Container container)) {
             return false;
         }
         Location loc = hopperBlock.getLocation();
-        if (hasJob(loc)) {
-            return isMovingRecipeIngredient(hopperBlock, template, keys, moving);
-        }
         Inventory inv = container.getInventory();
-        CraftPlan plan = peekBestPlan(inv, hopperBlock, template, keys);
-        if (plan == null || !isMovingRecipeIngredient(hopperBlock, template, keys, moving)) {
+        if (!isCraftPipelineActive(inv, hopperBlock, template, keys, loc)) {
+            return false;
+        }
+        return isMovingRecipeIngredient(hopperBlock, template, keys, moving);
+    }
+
+    private boolean isCraftPipelineActive(Inventory inv, Block hopperBlock, HopperTemplate template,
+                                          HopperKeys keys, Location loc) {
+        if (hasJob(loc)) {
+            return true;
+        }
+        if (containsAnyRecipeIngredient(inv, hopperBlock, template, keys)) {
+            return true;
+        }
+        for (ItemStack target : template.getAutoCraftTargets()) {
+            for (ShapelessRecipe recipe : HopperRecipeUtil.findShapelessRecipes(target)) {
+                if (isActivePlan(inv, hopperBlock, template, keys,
+                        planShapeless(inv, hopperBlock, template, keys, recipe))) {
+                    return true;
+                }
+            }
+            for (ShapedRecipe recipe : HopperRecipeUtil.findShapedRecipes(target)) {
+                if (isActivePlan(inv, hopperBlock, template, keys,
+                        planShaped(inv, hopperBlock, template, keys, recipe))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean isActivePlan(Inventory inv, Block hopperBlock, HopperTemplate template,
+                                        HopperKeys keys, CraftPlan plan) {
+        if (plan == null) {
             return false;
         }
         if (plan.canCraftNow()) {
             return true;
         }
-        if (plan.needed() == null || plan.needed().isEmpty()) {
-            return false;
+        if (!plan.reservedSlots().isEmpty()) {
+            return true;
         }
-        return hasInsufficientMaterials(inv, hopperBlock, template, keys, plan.needed());
+        Map<RecipeChoice, Integer> needed = plan.needed();
+        return needed != null && !needed.isEmpty()
+                && hasInsufficientMaterials(inv, hopperBlock, template, keys, needed);
     }
 
     public void clear(Location loc) {
@@ -120,18 +146,22 @@ public final class HopperAutoCraftService {
 
         CraftJob job = jobs.get(key);
         if (job != null) {
-            reserved.addAll(job.reservedSlots);
             if (advanceTimer) {
                 job.ticksRemaining -= TICK_STEP;
                 if (job.ticksRemaining <= 0) {
                     ItemStack output = job.outputStack.clone();
                     output.setAmount(1);
-                    HopperContainerUtil.deliverDownstream(hopperBlock, output);
+                    HopperContainerUtil.deliverAutomationOutput(hopperBlock, keys, output);
                     jobs.remove(key);
                     HopperContainerUtil.syncContainer(hopperBlock);
+                } else {
+                    reserved.addAll(job.reservedSlots);
+                    return reserved;
                 }
+            } else {
+                reserved.addAll(job.reservedSlots);
+                return reserved;
             }
-            return reserved;
         }
 
         CraftMatch match = findCraftMatch(inv, hopperBlock, template, keys);
@@ -196,6 +226,22 @@ public final class HopperAutoCraftService {
             }
         }
         return null;
+    }
+
+    private static boolean containsAnyRecipeIngredient(Inventory inv, Block hopperBlock, HopperTemplate template,
+                                                     HopperKeys keys) {
+        if (inv == null) {
+            return false;
+        }
+        for (ItemStack stack : inv.getContents()) {
+            if (stack == null || stack.getType().isAir()) {
+                continue;
+            }
+            if (isMovingRecipeIngredient(hopperBlock, template, keys, stack)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isMovingRecipeIngredient(Block hopperBlock, HopperTemplate template, HopperKeys keys,

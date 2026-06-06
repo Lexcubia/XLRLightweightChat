@@ -194,6 +194,7 @@ public class HopperListener implements Listener {
         if (moving == null || moving.getType().isAir()) {
             return;
         }
+        tickService.runAutomationImmediate(hopperBlock);
         if (shouldHoldHopperOutbound(hopperBlock, moving)) {
             event.setCancelled(true);
         }
@@ -402,16 +403,13 @@ public class HopperListener implements Listener {
         if (template == null) {
             return false;
         }
-        HopperLaneRegistry registry = tickService.getLaneRegistry();
-        HopperLane lane = registry.getLane(hopperBlock.getLocation());
-        if (lane == null) {
-            lane = registry.registerLane(hopperBlock, keys, templateManager, updateConfig);
-        }
-        if (lane != null && lane.isAutoCraft() && pluginConfig.isAutoCraftEnabled()
+        HopperLane lane = tickService.getLaneRegistry()
+                .registerLane(hopperBlock, keys, templateManager, updateConfig);
+        if (template.isAutoCraftEnabled() && pluginConfig.isAutoCraftEnabled()
                 && tickService.getCraftService().shouldHoldOutbound(hopperBlock, template, keys, moving)) {
             return true;
         }
-        return lane != null && lane.isAutoSmelt() && pluginConfig.isAutoSmeltEnabled()
+        return template.isAutoSmeltEnabled() && pluginConfig.isAutoSmeltEnabled()
                 && tickService.getSmeltService().shouldHoldOutbound(hopperBlock, template, keys, moving);
     }
 

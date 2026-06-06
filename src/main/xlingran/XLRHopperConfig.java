@@ -31,7 +31,6 @@ public final class XLRHopperConfig {
     private boolean clearOnChunkUnload = true;
     private int maxQueueSize = 8192;
     private boolean queueOverflowRetry = true;
-
     private boolean hologramEnabled = true;
     private int hologramRefreshTimeSeconds = 1;
     private double hologramLineHeight = 0.3;

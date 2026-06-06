@@ -17,6 +17,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import xlingran.HopperAutoCraftService;
 import xlingran.HopperAutoSmeltService;
+import xlingran.HopperBlockConfig;
+import xlingran.HopperRedstoneTransferService;
+import xlingran.HopperTemplate;
 import xlingran.HopperChunkScanUtil;
 import xlingran.HopperKeys;
 import xlingran.HopperTemplateManager;
@@ -24,8 +27,10 @@ import xlingran.HopperTemplateResolver;
 import xlingran.HopperTickService;
 import xlingran.XLRHopperConfig;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class HopperLaneListener implements Listener {
@@ -110,6 +115,7 @@ public final class HopperLaneListener implements Listener {
         Block dest = xlingran.HopperBlockUtil.resolveHopperBlock(event.getDestination());
         Block src = xlingran.HopperBlockUtil.resolveHopperBlock(event.getSource());
         if (dest != null) {
+            tickService.runAutomationImmediate(dest);
             scheduleEvaluateImmediate(dest);
         }
         if (src != null) {
@@ -175,12 +181,43 @@ public final class HopperLaneListener implements Listener {
             lane = tickService.getLaneRegistry().registerLane(hopperBlock, tickService.getKeys(),
                     tickService.getTemplateManager(), tickService.getUpdateConfig());
         }
-        return lane != null && (lane.isAutoCraft() || lane.isAutoSmelt());
+        return lane != null && (lane.isAutoCraft() || lane.isAutoSmelt() || lane.isReverse());
     }
 
     private void runEvaluateAndAutomate(Block hopperBlock) {
         runEvaluate(hopperBlock);
         tickService.runAutomationImmediate(hopperBlock);
+        tryRedstonePoweredTransfer(hopperBlock);
+    }
+
+    private void tryRedstonePoweredTransfer(Block hopperBlock) {
+        if (!pluginConfig.isRedstoneToggleEnabled()) {
+            return;
+        }
+        HopperBlockConfig blockConfig = HopperBlockConfig.read(hopperBlock, tickService.getKeys());
+        if (!blockConfig.isRedstoneListToggle() || !hopperBlock.isBlockPowered()) {
+            return;
+        }
+        HopperTemplate template = HopperTemplateResolver.resolve(hopperBlock, tickService.getKeys(),
+                tickService.getTemplateManager());
+        if (template == null) {
+            return;
+        }
+        HopperLane lane = tickService.getLaneRegistry().getLane(hopperBlock.getLocation());
+        int maxItem = lane != null ? lane.maxItem()
+                : HopperRedstoneTransferService.resolveMaxItem(hopperBlock, tickService.getKeys(),
+                tickService.getUpdateConfig());
+        HopperKeys hopperKeys = tickService.getKeys();
+        HopperRedstoneTransferService.absorbStep(hopperBlock, template, hopperKeys, pluginConfig, maxItem,
+                tickService.getSmeltService());
+        tickService.runAutomationImmediate(hopperBlock);
+        Set<Integer> reserved = new HashSet<>();
+        reserved.addAll(tickService.getSmeltService().getActiveReservedSlots(hopperBlock.getLocation()));
+        reserved.addAll(tickService.getCraftService().getActiveReservedSlots(hopperBlock.getLocation()));
+        HopperRedstoneTransferService.RedstoneTransferContext ctx =
+                new HopperRedstoneTransferService.RedstoneTransferContext(
+                        tickService.getCraftService(), tickService.getSmeltService(), pluginConfig, reserved);
+        HopperRedstoneTransferService.pushStep(hopperBlock, template, hopperKeys, pluginConfig, maxItem, ctx);
     }
 
     private void runEvaluate(Block hopperBlock) {

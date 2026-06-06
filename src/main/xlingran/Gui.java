@@ -85,6 +85,93 @@ public class Gui implements Listener {
         templateRepository.markDirty();
     }
 
+    /** 样板列表（过滤/合成/熔炼）变更后立即写入 shan.db */
+    public void saveStorageDataImmediate() {
+        templateRepository.flushSyncStorage(templateManager);
+    }
+
+    private boolean isStorageGuiTitle(String title) {
+        if (title == null || title.isEmpty()) {
+            return false;
+        }
+        String stripped = ChatColor.stripColor(title);
+        return stripped.equals(ChatColor.stripColor(guiConfig.storageTitle("Filter-Item")))
+                || stripped.equals(ChatColor.stripColor(guiConfig.storageTitle("Auto-Crafting")))
+                || stripped.equals(ChatColor.stripColor(guiConfig.storageTitle("Auto-Furnace")));
+    }
+
+    private XlrGuiHolder resolveStorageGuiHolder(InventoryCloseEvent event) {
+        XlrGuiHolder holder = XlrGuiHolder.from(event.getView().getTopInventory());
+        if (holder != null) {
+            return holder;
+        }
+        return XlrGuiHolder.from(event.getInventory());
+    }
+
+    private static String describeHolder(Inventory inventory) {
+        if (inventory == null) {
+            return "null";
+        }
+        if (inventory.getHolder() == null) {
+            return "null-holder";
+        }
+        return inventory.getHolder().getClass().getName();
+    }
+
+    private static int countNonEmptySlots(Inventory inventory) {
+        int count = 0;
+        for (int i = 0; i < inventory.getSize(); i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (stack != null && !stack.getType().isAir()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * 关服前将仍打开的存储类 GUI 内容写回模板，避免未关闭界面导致列表丢失。
+     */
+    public void persistOpenStorageGuisBeforeShutdown() {
+        int persisted = 0;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            InventoryView view = player.getOpenInventory();
+            if (view == null) {
+                continue;
+            }
+            XlrGuiHolder holder = XlrGuiHolder.from(view.getTopInventory());
+            if (holder == null) {
+                continue;
+            }
+            String templateName = resolveTemplateName(holder, player);
+            if (templateName == null) {
+                plugin.getLogger().warning("[XLRHopper] 关服跳过存储 GUI：无法解析模板名 player="
+                        + player.getName() + " gui=" + holder.getType());
+                continue;
+            }
+            Inventory top = view.getTopInventory();
+            switch (holder.getType()) {
+                case FILTER_ITEMS -> {
+                    processFilterItemsClose(player, top, templateName);
+                    persisted++;
+                }
+                case AUTO_CRAFT -> {
+                    processAutoCraftClose(player, top, templateName);
+                    persisted++;
+                }
+                case AUTO_SMELT -> {
+                    processAutoSmeltClose(player, top, templateName);
+                    persisted++;
+                }
+                default -> {
+                }
+            }
+        }
+        if (persisted > 0) {
+            saveStorageDataImmediate();
+        }
+    }
+
     public void refreshAfterConfigReload() {
         reloadLayoutFromConfig();
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -208,7 +295,7 @@ public class Gui implements Listener {
         }
 
         HopperBlockConfig config = HopperBlockConfig.read(hopperBlock, hopperKeys);
-        inv.setItem(slotHopperRedstone, hopperSettingToggle("Redstone", config.isRedstoneListToggle()));
+        inv.setItem(slotHopperRedstone, hopperRedstoneButton(hopperBlock, config));
         inv.setItem(slotHopperReverse, hopperSettingToggle("Reverse", config.isReverseSuction()));
         inv.setItem(slotHopperFloatOverlay, hopperSettingToggle("FloatOverlay", config.isHoverDisplay()));
 
@@ -233,25 +320,20 @@ public class Gui implements Listener {
     }
 
     public void openFilterItems(Player player, String templateName) {
-        sessions.setEditingTemplate(player.getUniqueId(), templateName);
-        Inventory inv = Bukkit.createInventory(new XlrGuiHolder(GuiType.FILTER_ITEMS, templateName),
-                guiConfig.storageSize("Filter-Item"), guiConfig.storageTitle("Filter-Item"));
-        bindHolder(inv, GuiType.FILTER_ITEMS);
-
-        HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
-        if (template != null) {
-            int slot = 0;
-            for (ItemStack proto : template.getFilterPrototypes()) {
-                if (slot >= guiConfig.storageSize("Filter-Item")) {
-                    break;
-                }
-                ItemStack display = ItemStackUtil.clonePrototype(proto);
-                if (display != null) {
-                    inv.setItem(slot++, display);
-                }
-            }
-        }
-        player.openInventory(inv);
+        openStorageGui(player, templateName, GuiType.FILTER_ITEMS, "Filter-Item",
+                (inv, template) -> {
+                    int slot = 0;
+                    int max = inv.getSize();
+                    for (ItemStack proto : template.getFilterPrototypes()) {
+                        if (slot >= max) {
+                            break;
+                        }
+                        ItemStack display = ItemStackUtil.clonePrototype(proto);
+                        if (display != null) {
+                            inv.setItem(slot++, display);
+                        }
+                    }
+                });
     }
 
     @EventHandler
@@ -311,36 +393,28 @@ public class Gui implements Listener {
         if (!(event.getPlayer() instanceof Player player)) {
             return;
         }
-        XlrGuiHolder holder = XlrGuiHolder.from(event.getInventory());
+        Inventory topInventory = event.getView().getTopInventory();
+        XlrGuiHolder holder = resolveStorageGuiHolder(event);
         if (holder == null) {
+            String title = event.getView().getTitle();
+            if (isStorageGuiTitle(title)) {
+                plugin.getLogger().warning("[XLRHopper] 存储 GUI 关闭但 holder 丢失，无法保存 player="
+                        + player.getName() + " title=" + title + " topHolder="
+                        + describeHolder(topInventory) + " eventHolder=" + describeHolder(event.getInventory()));
+            }
             return;
         }
         if (holder.getType() == GuiType.FILTER_ITEMS) {
-            String templateName = resolveTemplateName(holder, player);
-            if (templateName != null) {
-                processFilterItemsClose(player, event.getInventory(), templateName);
-                saveData();
-            }
+            handleStorageGuiClose(player, topInventory, holder, GuiType.FILTER_ITEMS);
             return;
         }
         if (holder.getType() == GuiType.AUTO_CRAFT) {
-            String templateName = resolveTemplateName(holder, player);
-            if (templateName != null) {
-                processAutoCraftClose(player, event.getInventory(), templateName);
-                saveData();
-            }
+            handleStorageGuiClose(player, topInventory, holder, GuiType.AUTO_CRAFT);
             return;
         }
         if (holder.getType() == GuiType.AUTO_SMELT) {
-            String templateName = resolveTemplateName(holder, player);
-            if (templateName != null) {
-                processAutoSmeltClose(player, event.getInventory(), templateName);
-                saveData();
-            }
+            handleStorageGuiClose(player, topInventory, holder, GuiType.AUTO_SMELT);
             return;
-        }
-        if (holder.getType() == GuiType.TEMPLATE_SETTINGS) {
-            saveData();
         }
     }
 
@@ -611,9 +685,13 @@ public class Gui implements Listener {
             HopperBlockConfig.write(block, hopperKeys, config);
             tickService.getLaneRegistry().registerLane(block, hopperKeys, templateManager,
                     plugin.getUpdateConfig());
-            laneListener.scheduleEvaluate(block);
+            if (slot == slotHopperRedstone || slot == slotHopperReverse) {
+                laneListener.scheduleEvaluateImmediate(block);
+            } else {
+                laneListener.scheduleEvaluate(block);
+            }
             if (config.isHoverDisplay()) {
-                overlayService.show(block);
+                overlayService.refresh(block);
             } else {
                 overlayService.hide(block);
             }
@@ -692,6 +770,16 @@ public class Gui implements Listener {
         bindHolder(inv, type);
         HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
         if (template != null) {
+            switch (type) {
+                case FILTER_ITEMS -> templateRepository.reloadItemListIfEmpty(player.getUniqueId(), templateName,
+                        "filter", template.getFilterPrototypes());
+                case AUTO_CRAFT -> templateRepository.reloadItemListIfEmpty(player.getUniqueId(), templateName,
+                        "auto-craft", template.getAutoCraftTargets());
+                case AUTO_SMELT -> templateRepository.reloadItemListIfEmpty(player.getUniqueId(), templateName,
+                        "auto-smelt", template.getAutoSmeltOutputs());
+                default -> {
+                }
+            }
             filler.fill(inv, template);
         }
         player.openInventory(inv);
@@ -711,6 +799,26 @@ public class Gui implements Listener {
         if (event.getClick() == ClickType.NUMBER_KEY && event.getRawSlot() < topSize) {
             event.setCancelled(true);
         }
+    }
+
+    private void handleStorageGuiClose(Player player, Inventory topInventory, XlrGuiHolder holder, GuiType type) {
+        String holderName = holder.getTemplateName();
+        String sessionName = sessions.getEditingTemplate(player.getUniqueId());
+        String templateName = resolveTemplateName(holder, player);
+        if (templateName == null) {
+            plugin.getLogger().warning("[XLRHopper] 存储 GUI 关闭未保存：templateName 为空 player="
+                    + player.getName() + " gui=" + type + " holder=" + holderName + " session=" + sessionName);
+            return;
+        }
+        switch (type) {
+            case FILTER_ITEMS -> processFilterItemsClose(player, topInventory, templateName);
+            case AUTO_CRAFT -> processAutoCraftClose(player, topInventory, templateName);
+            case AUTO_SMELT -> processAutoSmeltClose(player, topInventory, templateName);
+            default -> {
+                return;
+            }
+        }
+        saveStorageDataImmediate();
     }
 
     private void processAutoCraftClose(Player player, Inventory inventory, String templateName) {
@@ -752,6 +860,11 @@ public class Gui implements Listener {
                 toReturn.add(stack.clone());
             } else {
                 uniqueRules.add(proto);
+                if (stack.getAmount() > 1) {
+                    ItemStack excess = stack.clone();
+                    excess.setAmount(stack.getAmount() - 1);
+                    toReturn.add(excess);
+                }
             }
         }
         return new PrototypeDedupeResult(uniqueRules, toReturn);
@@ -773,6 +886,8 @@ public class Gui implements Listener {
                                               boolean craftTargets) {
         HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
         if (template == null) {
+            plugin.getLogger().warning("[XLRHopper] 存储 GUI 关闭未写入内存：模板不存在 player="
+                    + player.getName() + " template=" + templateName);
             return;
         }
         PrototypeDedupeResult result = dedupePrototypeSnapshot(inventory);
@@ -781,16 +896,20 @@ public class Gui implements Listener {
         } else {
             template.setAutoSmeltOutputs(result.uniqueRules());
         }
+        templateRepository.markDirty();
         returnDuplicateItems(player, inventory, result.toReturn());
     }
 
     private void processFilterItemsClose(Player player, Inventory inventory, String templateName) {
         HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
         if (template == null) {
+            plugin.getLogger().warning("[XLRHopper] 存储 GUI 关闭未写入内存：模板不存在 player="
+                    + player.getName() + " template=" + templateName);
             return;
         }
         PrototypeDedupeResult result = dedupePrototypeSnapshot(inventory);
         template.setFilterPrototypes(result.uniqueRules());
+        templateRepository.markDirty();
         returnDuplicateItems(player, inventory, result.toReturn());
     }
 
@@ -905,6 +1024,21 @@ public class Gui implements Listener {
     private ItemStack hopperSettingToggle(String key, boolean enabled) {
         GuiConfig.GuiButtonDef def = guiConfig.hopperSettingButton(key);
         Map<String, String> vars = Map.of("toggle", guiConfig.toggle(enabled));
+        return button(def.material(), def.name(), guiConfig.resolveLore(def.lore(), vars));
+    }
+
+    private ItemStack hopperRedstoneButton(Block hopperBlock, HopperBlockConfig config) {
+        GuiConfig.GuiButtonDef def = guiConfig.hopperSettingButton("Redstone");
+        HopperTemplate template = HopperTemplateResolver.resolve(hopperBlock, hopperKeys, templateManager);
+        String modeLine;
+        if (config.isRedstoneListToggle() && template != null) {
+            modeLine = guiConfig.stoneMode(HopperBlockConfig.getEffectiveWhitelist(hopperBlock, hopperKeys, template));
+        } else {
+            modeLine = guiConfig.stoneModeDisabled();
+        }
+        Map<String, String> vars = Map.of(
+                "toggle", guiConfig.toggle(config.isRedstoneListToggle()),
+                "stonemode", modeLine);
         return button(def.material(), def.name(), guiConfig.resolveLore(def.lore(), vars));
     }
 

@@ -1,7 +1,11 @@
 package xlingran.gui;
 
 import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.configuration.ConfigurationSection;
+import xlingran.HopperBlockConfig;
+import xlingran.HopperKeys;
+import xlingran.HopperTemplate;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -34,6 +38,9 @@ public final class GuiConfig {
     private static final String KEY_TOGGLE_OFF = "toggleoff";
     private static final String KEY_FILTERMODE_ON = "filtermodeon";
     private static final String KEY_FILTERMODE_OFF = "filtermodeoff";
+    private static final String KEY_STONEMODE_ON = "stonemodeon";
+    private static final String KEY_STONEMODE_OFF = "stonemodeoff";
+    private static final String KEY_STONEMODE_DISABLED = "stonemodeodisabled";
 
     private final JavaPlugin plugin;
     private final Logger logger;
@@ -45,6 +52,9 @@ public final class GuiConfig {
     private String diskToggleOff;
     private String diskFilterModeOn;
     private String diskFilterModeOff;
+    private String diskStoneModeOn;
+    private String diskStoneModeOff;
+    private String diskStoneModeDisabled;
 
     public GuiConfig(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -102,6 +112,9 @@ public final class GuiConfig {
         diskToggleOff = readFlatToken(loaded, KEY_TOGGLE_OFF);
         diskFilterModeOn = readFlatToken(loaded, KEY_FILTERMODE_ON);
         diskFilterModeOff = readFlatToken(loaded, KEY_FILTERMODE_OFF);
+        diskStoneModeOn = readFlatToken(loaded, KEY_STONEMODE_ON);
+        diskStoneModeOff = readFlatToken(loaded, KEY_STONEMODE_OFF);
+        diskStoneModeDisabled = readFlatToken(loaded, KEY_STONEMODE_DISABLED);
 
         if (!isPresent(diskToggleOn) && !isPresent(diskToggleOff)
                 && !isPresent(diskFilterModeOn) && !isPresent(diskFilterModeOff)) {
@@ -161,6 +174,28 @@ public final class GuiConfig {
         String disk = whitelist ? diskFilterModeOn : diskFilterModeOff;
         String builtin = whitelist ? "&a3名单模式" : "&c4名单模式";
         return color(resolveFlatToken(key, disk, builtin));
+    }
+
+    public String stoneMode(boolean whitelist) {
+        String key = whitelist ? KEY_STONEMODE_ON : KEY_STONEMODE_OFF;
+        String disk = whitelist ? diskStoneModeOn : diskStoneModeOff;
+        String builtin = whitelist ? "&a红石白名单模式" : "&c红石黑名单模式";
+        return color(resolveFlatToken(key, disk, builtin));
+    }
+
+    public String stoneModeDisabled() {
+        return color(resolveFlatToken(KEY_STONEMODE_DISABLED, diskStoneModeDisabled, "&6功能已关闭"));
+    }
+
+    public String displayMode(Block hopper, HopperTemplate template, HopperKeys keys) {
+        if (hopper == null || template == null || keys == null) {
+            return filterMode(true);
+        }
+        boolean effectiveWhitelist = HopperBlockConfig.getEffectiveWhitelist(hopper, keys, template);
+        if (HopperBlockConfig.read(hopper, keys).isRedstoneListToggle()) {
+            return stoneMode(effectiveWhitelist);
+        }
+        return filterMode(effectiveWhitelist);
     }
 
     private String resolveFlatToken(String flatKey, String diskValue, String builtinFallback) {

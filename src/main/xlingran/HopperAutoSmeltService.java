@@ -58,6 +58,51 @@ public final class HopperAutoSmeltService {
         return reserved;
     }
 
+    /**
+     * 漏斗内已有待熔炼原料时，不再从上方/红石吸取同类物品，避免随机数量堆积。
+     */
+    public boolean shouldThrottleInboundSmeltItem(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                                  ItemStack incoming) {
+        if (hopperBlock == null || template == null || incoming == null || incoming.getType().isAir()) {
+            return false;
+        }
+        if (!template.isAutoSmeltEnabled() || template.getAutoSmeltOutputs().isEmpty()) {
+            return false;
+        }
+        if (pluginConfig != null && !pluginConfig.isAutoSmeltEnabled()) {
+            return false;
+        }
+        if (!matchesAnySmeltInput(template, incoming) || !template.allows(incoming, hopperBlock, keys)) {
+            return false;
+        }
+        if (!(hopperBlock.getState() instanceof Container container)) {
+            return false;
+        }
+        return countSmeltInputItems(container.getInventory(), hopperBlock, template, keys) >= 1;
+    }
+
+    public int countSmeltInputItems(Block hopperBlock, HopperTemplate template, HopperKeys keys) {
+        if (hopperBlock == null || !(hopperBlock.getState() instanceof Container container)) {
+            return 0;
+        }
+        return countSmeltInputItems(container.getInventory(), hopperBlock, template, keys);
+    }
+
+    private int countSmeltInputItems(Inventory inv, Block hopperBlock, HopperTemplate template, HopperKeys keys) {
+        int total = 0;
+        for (int i = 0; i < inv.getSize(); i++) {
+            ItemStack slot = inv.getItem(i);
+            if (slot == null || slot.getType().isAir()) {
+                continue;
+            }
+            if (!matchesAnySmeltInput(template, slot) || !template.allows(slot, hopperBlock, keys)) {
+                continue;
+            }
+            total += slot.getAmount();
+        }
+        return total;
+    }
+
     public boolean shouldHoldOutbound(Block hopperBlock, HopperTemplate template, HopperKeys keys, ItemStack moving) {
         if (hopperBlock == null || template == null || moving == null || moving.getType().isAir()) {
             return false;
@@ -65,53 +110,49 @@ public final class HopperAutoSmeltService {
         if (!template.isAutoSmeltEnabled() || template.getAutoSmeltOutputs().isEmpty()) {
             return false;
         }
-        for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
-            if (HopperRecipeUtil.matchesPrototype(moving, outputProto)) {
-                return false;
-            }
+        if (!(hopperBlock.getState() instanceof Container container)) {
+            return false;
+        }
+        Location loc = hopperBlock.getLocation();
+        Inventory inv = container.getInventory();
+        if (!isSmeltPipelineActive(inv, hopperBlock, template, keys, loc)) {
+            return false;
         }
         if (!template.allows(moving, hopperBlock, keys)) {
             return false;
         }
-        Location loc = hopperBlock.getLocation();
-        if (hasJob(loc)) {
-            return matchesAnySmeltInput(template, moving);
-        }
-        if (!(hopperBlock.getState() instanceof Container container)) {
-            return false;
-        }
-        return canStartSmeltWithItem(container.getInventory(), hopperBlock, template, keys, moving);
+        return matchesAnySmeltInput(template, moving);
     }
 
-    private boolean matchesAnySmeltInput(HopperTemplate template, ItemStack stack) {
+    private boolean isSmeltPipelineActive(Inventory inv, Block hopperBlock, HopperTemplate template,
+                                          HopperKeys keys, Location loc) {
+        if (hasJob(loc)) {
+            return true;
+        }
         for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
             for (HopperRecipeUtil.SmeltMapping mapping : HopperRecipeUtil.findAllSmeltMappings(outputProto)) {
-                if (HopperRecipeUtil.matchesChoice(mapping.inputChoice(), stack)) {
-                    return true;
+                RecipeChoice inputChoice = mapping.inputChoice();
+                for (int i = 0; i < inv.getSize(); i++) {
+                    ItemStack slot = inv.getItem(i);
+                    if (slot == null || slot.getType().isAir()) {
+                        continue;
+                    }
+                    if (!HopperRecipeUtil.matchesChoice(inputChoice, slot)) {
+                        continue;
+                    }
+                    if (template.allows(slot, hopperBlock, keys)) {
+                        return true;
+                    }
                 }
             }
         }
         return false;
     }
 
-    private boolean canStartSmeltWithItem(Inventory inv, Block hopperBlock, HopperTemplate template,
-                                          HopperKeys keys, ItemStack moving) {
+    private boolean matchesAnySmeltInput(HopperTemplate template, ItemStack stack) {
         for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
             for (HopperRecipeUtil.SmeltMapping mapping : HopperRecipeUtil.findAllSmeltMappings(outputProto)) {
-                if (!HopperRecipeUtil.matchesChoice(mapping.inputChoice(), moving)) {
-                    continue;
-                }
-                for (int i = 0; i < inv.getSize(); i++) {
-                    ItemStack slot = inv.getItem(i);
-                    if (slot == null || slot.getType().isAir()) {
-                        continue;
-                    }
-                    if (!HopperRecipeUtil.matchesChoice(mapping.inputChoice(), slot)) {
-                        continue;
-                    }
-                    if (!template.allows(slot, hopperBlock, keys)) {
-                        continue;
-                    }
+                if (HopperRecipeUtil.matchesChoice(mapping.inputChoice(), stack)) {
                     return true;
                 }
             }
@@ -142,18 +183,22 @@ public final class HopperAutoSmeltService {
 
         SmeltJob job = jobs.get(key);
         if (job != null) {
-            reserved.add(job.sourceSlot);
             if (advanceTimer) {
                 job.ticksRemaining -= TICK_STEP;
                 if (job.ticksRemaining <= 0) {
                     ItemStack output = job.outputStack.clone();
                     output.setAmount(1);
-                    HopperContainerUtil.deliverDownstream(hopperBlock, output);
+                    HopperContainerUtil.deliverAutomationOutput(hopperBlock, keys, output);
                     jobs.remove(key);
                     HopperContainerUtil.syncContainer(hopperBlock);
+                } else {
+                    reserved.add(job.sourceSlot);
+                    return reserved;
                 }
+            } else {
+                reserved.add(job.sourceSlot);
+                return reserved;
             }
-            return reserved;
         }
 
         for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
