@@ -101,8 +101,11 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 - 表结构由 `ShanDatabase` 初始化；读写经 `TemplateRepository`（异步加载、防抖保存、关服 `flushSync`）。
 - **`dataLoaded` 门禁**：`loadInto` 完成前禁止 `saveAll`（防止空内存清空整库）；关服 `flushSync(force)` 例外。
-- **`config.yml` → `XLRHopper.debug-template-storage`**：默认 `true`（配置项缺失时亦视为开启）；为 `true` 时额外输出 `[XLRHopper][存储调试]` 详细 INFO。无论开关如何，打开/关闭存储 GUI 与 `flushSync` 均会输出 `[XLRHopper][存储]` / `flushSync` 基础 INFO。
-- **排错步骤**：① 确认已部署最新 JAR；② 打开自动熔炼 GUI 应见 `存储 GUI 打开`；③ 关闭应见 `存储 GUI 关闭处理开始` 与 `flushSync 完成`；④ 若见 `holder 丢失` WARNING，检查 Paper 版本与 `Gui.yml` 标题是否被改；⑤ 启动缺配置项时会 WARNING 提示添加 `debug-template-storage`。
+- **`loadHealthy` 门禁**：`loadInto` 若存在物品反序列化失败（`db行 > 成功`），则禁止非强制 `saveAll`，防止空内存全表覆写；存储 GUI 关闭 `flushSync` 成功后可恢复 `loadHealthy=true`。
+- **导航不触发保存**：从模板设置进入过滤物品 / 自动合成 / 自动熔炼子 GUI 时，**不再**在 `TEMPLATE_SETTINGS` 关闭时 `markDirty`；设置项变更已在点击时单独 `saveData()`，存储列表变更由子 GUI 关闭 `flushSync` 落盘。
+- **物品序列化**：新写入优先 legacy YAML（`ItemStack.serialize` + Base64）；仍兼容读取旧 `b:` 字节格式。
+- **`config.yml` → `XLRHopper.debug-template-storage`**：默认 `true`（配置项缺失时亦视为开启）；为 `true` 时额外输出 `[XLRHopper][存储调试]` 详细 INFO。无论开关如何，启动 `loadInto`、打开/关闭存储 GUI 与 `flushSync` 均会输出 `[XLRHopper][存储]` / `flushSync` 基础 INFO。
+- **排错步骤**：① 确认已部署最新 JAR；② 重启后应见 `[XLRHopper][存储] loadInto 模板=… smelt=N/N`；③ 打开自动熔炼 GUI 应见 `从内存加载=N` 且**不应**在约 1 秒后再出现 `saveAll smelt=0`；④ 关闭应见 `存储 GUI 关闭处理开始` 与 `flushSync 完成`；⑤ 若见 `db行=N 成功=0` → 反序列化失败，检查 Paper 版本；⑥ 若见打开后异步 `saveAll` 覆写 → 检查是否旧 JAR（未含导航保存修复）。
 - **过滤物品 / 自动合成 / 自动熔炼** GUI 关闭时 `flushSync` 立即写入；关服前对仍打开的上述 GUI 强制落盘；每 2 分钟定期保存脏数据。
 - 模板字段：白名单、filter-items、自动合成/熔炼、附魔过滤、耐久阈值等。
 - `/xlrhopper reload` 会 **重读数据库**（不先 save），便于外部工具改库后热重载。

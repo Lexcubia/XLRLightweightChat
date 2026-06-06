@@ -431,9 +431,6 @@ public class Gui implements Listener {
             handleStorageGuiClose(player, topInventory, holder, GuiType.AUTO_SMELT);
             return;
         }
-        if (holder.getType() == GuiType.TEMPLATE_SETTINGS) {
-            saveData();
-        }
     }
 
     @EventHandler
