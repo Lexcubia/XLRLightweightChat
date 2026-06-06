@@ -208,7 +208,7 @@ public class Gui implements Listener {
         }
 
         HopperBlockConfig config = HopperBlockConfig.read(hopperBlock, hopperKeys);
-        inv.setItem(slotHopperRedstone, hopperSettingToggle("Redstone", config.isRedstoneListToggle()));
+        inv.setItem(slotHopperRedstone, hopperRedstoneButton(hopperBlock, config));
         inv.setItem(slotHopperReverse, hopperSettingToggle("Reverse", config.isReverseSuction()));
         inv.setItem(slotHopperFloatOverlay, hopperSettingToggle("FloatOverlay", config.isHoverDisplay()));
 
@@ -611,9 +611,13 @@ public class Gui implements Listener {
             HopperBlockConfig.write(block, hopperKeys, config);
             tickService.getLaneRegistry().registerLane(block, hopperKeys, templateManager,
                     plugin.getUpdateConfig());
-            laneListener.scheduleEvaluate(block);
+            if (slot == slotHopperRedstone || slot == slotHopperReverse) {
+                laneListener.scheduleEvaluateImmediate(block);
+            } else {
+                laneListener.scheduleEvaluate(block);
+            }
             if (config.isHoverDisplay()) {
-                overlayService.show(block);
+                overlayService.refreshDebounced(block);
             } else {
                 overlayService.hide(block);
             }
@@ -905,6 +909,23 @@ public class Gui implements Listener {
     private ItemStack hopperSettingToggle(String key, boolean enabled) {
         GuiConfig.GuiButtonDef def = guiConfig.hopperSettingButton(key);
         Map<String, String> vars = Map.of("toggle", guiConfig.toggle(enabled));
+        return button(def.material(), def.name(), guiConfig.resolveLore(def.lore(), vars));
+    }
+
+    private ItemStack hopperRedstoneButton(Block hopperBlock, HopperBlockConfig config) {
+        GuiConfig.GuiButtonDef def = guiConfig.hopperSettingButton("Redstone");
+        HopperTemplate template = HopperTemplateResolver.resolve(hopperBlock, hopperKeys, templateManager);
+        String modeLine;
+        if (config.isRedstoneListToggle() && template != null) {
+            modeLine = guiConfig.stoneMode(HopperBlockConfig.getEffectiveWhitelist(hopperBlock, hopperKeys, template));
+        } else if (template != null) {
+            modeLine = guiConfig.filterMode(template.isWhitelist());
+        } else {
+            modeLine = guiConfig.filterMode(false);
+        }
+        Map<String, String> vars = Map.of(
+                "toggle", guiConfig.toggle(config.isRedstoneListToggle()),
+                "stonemode", modeLine);
         return button(def.material(), def.name(), guiConfig.resolveLore(def.lore(), vars));
     }
 

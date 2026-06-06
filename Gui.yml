@@ -146,8 +146,10 @@ HopperSetting:
             - "&3● &7左键点击 开启/关闭 此功能"
             - "&3● &7红石激活: &6白名单模式"
             - "&3● &7红石关闭: &6黑名单模式"
+            - "&2● &7开启后过滤模式将由红石接管"
             - ""
-            - "&3● &7当前状态: %toggle%"
+            - "&3● &7功能状态: %toggle%"
+            - "&3● &7当前模式: %stonemode%"
     Reverse:
         slot: 12
         material: GOLD_INGOT
@@ -183,9 +185,13 @@ Filter-Item:
 # 开和关变量（替换 Lore 中 %toggle%）
 toggleon: "&a开启"
 toggleoff: "&c关闭"
+# 这个会对应 Config.yml 里面的 %mode% 的变量
 # 白名单和黑名单切换变量（替换 Lore 中 %filtermode%）
 filtermodeon: "&a白名单模式"
 filtermodeoff: "&c黑名单模式"
+# 红石白名单和黑名单切换变量（替换 Lore 中 %stonemode%）
+stonemodeon: "&a红石白名单模式"
+stonemodeoff: "&c红石黑名单模式"
 
 # 附魔名称对照表
 enchant-names:

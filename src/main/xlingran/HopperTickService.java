@@ -176,8 +176,10 @@ public final class HopperTickService {
             reservation.setReserved(loc, reserved);
 
             if (lane.isReverse() && pluginConfig.isReverseHopperEnabled()) {
+                HopperTransferReverse.ReverseTransferContext reverseCtx =
+                        new HopperTransferReverse.ReverseTransferContext(craftService, smeltService, pluginConfig);
                 HopperTransferReverse.ReverseTransferResult reverseResult = HopperTransferReverse.transferStep(
-                        block, template, keys, reservation, lane.maxItem());
+                        block, template, keys, reservation, lane.maxItem(), reverseCtx);
                 if (reverseResult.pushTargetFull()) {
                     laneRegistry.markTargetFull(loc);
                 } else if (reverseResult.moved() > 0) {

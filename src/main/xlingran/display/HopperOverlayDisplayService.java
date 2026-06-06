@@ -22,6 +22,7 @@ import xlingran.HopperTemplateManager;
 import xlingran.HopperTemplateResolver;
 import xlingran.Shan;
 import xlingran.XLRHopperConfig;
+import xlingran.gui.GuiConfig;
 import xlingran.gui.HopperLevelDef;
 import xlingran.gui.TextPlaceholders;
 import xlingran.gui.UpdateConfig;
@@ -401,8 +402,10 @@ public final class HopperOverlayDisplayService {
         if (templateName == null) {
             templateName = "?";
         }
-        boolean whitelist = HopperBlockConfig.getEffectiveWhitelist(block, keys, template);
-        String mode = whitelist ? "白名单" : "黑名单";
+        GuiConfig guiConfig = plugin.getGuiConfig();
+        String mode = guiConfig != null
+                ? guiConfig.displayMode(block, template, keys)
+                : (HopperBlockConfig.getEffectiveWhitelist(block, keys, template) ? "白名单" : "黑名单");
         int enchantCount = template.getEnchantMinLevels().size();
         Integer dur = template.getDurabilityThreshold();
         String durability = dur != null ? String.valueOf(dur) : "未设置";

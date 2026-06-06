@@ -175,7 +175,7 @@ public final class HopperLaneListener implements Listener {
             lane = tickService.getLaneRegistry().registerLane(hopperBlock, tickService.getKeys(),
                     tickService.getTemplateManager(), tickService.getUpdateConfig());
         }
-        return lane != null && (lane.isAutoCraft() || lane.isAutoSmelt());
+        return lane != null && (lane.isAutoCraft() || lane.isAutoSmelt() || lane.isReverse());
     }
 
     private void runEvaluateAndAutomate(Block hopperBlock) {

@@ -65,53 +65,61 @@ public final class HopperAutoSmeltService {
         if (!template.isAutoSmeltEnabled() || template.getAutoSmeltOutputs().isEmpty()) {
             return false;
         }
-        for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
-            if (HopperRecipeUtil.matchesPrototype(moving, outputProto)) {
-                return false;
-            }
+        if (!(hopperBlock.getState() instanceof Container container)) {
+            return false;
+        }
+        Location loc = hopperBlock.getLocation();
+        Inventory inv = container.getInventory();
+        if (!isSmeltPipelineActive(inv, hopperBlock, template, keys, loc)) {
+            return false;
+        }
+        if (matchesAnySmeltOutputPrototype(moving, template)) {
+            return true;
         }
         if (!template.allows(moving, hopperBlock, keys)) {
             return false;
         }
-        Location loc = hopperBlock.getLocation();
-        if (hasJob(loc)) {
-            return matchesAnySmeltInput(template, moving);
-        }
-        if (!(hopperBlock.getState() instanceof Container container)) {
-            return false;
-        }
-        return canStartSmeltWithItem(container.getInventory(), hopperBlock, template, keys, moving);
+        return matchesAnySmeltInput(template, moving);
     }
 
-    private boolean matchesAnySmeltInput(HopperTemplate template, ItemStack stack) {
+    private static boolean matchesAnySmeltOutputPrototype(ItemStack moving, HopperTemplate template) {
+        for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
+            if (HopperRecipeUtil.matchesPrototype(moving, outputProto)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isSmeltPipelineActive(Inventory inv, Block hopperBlock, HopperTemplate template,
+                                          HopperKeys keys, Location loc) {
+        if (hasJob(loc)) {
+            return true;
+        }
         for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
             for (HopperRecipeUtil.SmeltMapping mapping : HopperRecipeUtil.findAllSmeltMappings(outputProto)) {
-                if (HopperRecipeUtil.matchesChoice(mapping.inputChoice(), stack)) {
-                    return true;
+                RecipeChoice inputChoice = mapping.inputChoice();
+                for (int i = 0; i < inv.getSize(); i++) {
+                    ItemStack slot = inv.getItem(i);
+                    if (slot == null || slot.getType().isAir()) {
+                        continue;
+                    }
+                    if (!HopperRecipeUtil.matchesChoice(inputChoice, slot)) {
+                        continue;
+                    }
+                    if (template.allows(slot, hopperBlock, keys)) {
+                        return true;
+                    }
                 }
             }
         }
         return false;
     }
 
-    private boolean canStartSmeltWithItem(Inventory inv, Block hopperBlock, HopperTemplate template,
-                                          HopperKeys keys, ItemStack moving) {
+    private boolean matchesAnySmeltInput(HopperTemplate template, ItemStack stack) {
         for (ItemStack outputProto : template.getAutoSmeltOutputs()) {
             for (HopperRecipeUtil.SmeltMapping mapping : HopperRecipeUtil.findAllSmeltMappings(outputProto)) {
-                if (!HopperRecipeUtil.matchesChoice(mapping.inputChoice(), moving)) {
-                    continue;
-                }
-                for (int i = 0; i < inv.getSize(); i++) {
-                    ItemStack slot = inv.getItem(i);
-                    if (slot == null || slot.getType().isAir()) {
-                        continue;
-                    }
-                    if (!HopperRecipeUtil.matchesChoice(mapping.inputChoice(), slot)) {
-                        continue;
-                    }
-                    if (!template.allows(slot, hopperBlock, keys)) {
-                        continue;
-                    }
+                if (HopperRecipeUtil.matchesChoice(mapping.inputChoice(), stack)) {
                     return true;
                 }
             }
