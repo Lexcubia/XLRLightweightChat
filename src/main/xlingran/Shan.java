@@ -142,6 +142,7 @@ public class Shan extends JavaPlugin {
 
         gui = new Gui(this, templateManager, playerGuiSession, templateRepository, hopperKeys, guiConfig,
                 messageConfig, pluginConfig, hopperTickService, hopperLaneListener, overlayDisplayService);
+        templateRepository.startPeriodicSave(templateManager);
 
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
@@ -193,6 +194,9 @@ public class Shan extends JavaPlugin {
         GameTickCounter.getInstance().stop();
         if (overlayDisplayService != null) {
             overlayDisplayService.hideAll();
+        }
+        if (gui != null) {
+            gui.persistOpenStorageGuisBeforeShutdown();
         }
         if (templateRepository != null && templateManager != null) {
             templateRepository.flushSync(templateManager);

@@ -100,6 +100,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 ### 3.4 shan.db
 
 - 表结构由 `ShanDatabase` 初始化；读写经 `TemplateRepository`（异步加载、防抖保存、关服 `flushSync`）。
+- **过滤物品 / 自动合成 / 自动熔炼** GUI 关闭时 `flushSync` 立即写入；关服前对仍打开的上述 GUI 强制落盘；每 2 分钟定期保存脏数据。
 - 模板字段：白名单、filter-items、自动合成/熔炼、附魔过滤、耐久阈值等。
 - `/xlrhopper reload` 会 **重读数据库**（不先 save），便于外部工具改库后热重载。
 - **1.2 遗留 `data.yml` / `data.yml.bak` 可安全删除**；插件不再读取或生成。
@@ -345,7 +346,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 - 红石充能锁（`redstone-list-toggle` + powered）：每 8 tick `absorb` → `runAutomationImmediate` → `push`（不受 `transfer-tick` 门控）
 - 达 `transfer-tick` 后单步管线：
-  - **反向**：`pull` 下方 → `smelt/craft tick` → `push` 上方
+  - **反向**：`pull` 下方 → `smelt/craft tick` → 产物仅 `deliverDownstream` 下传；**开启自动合成/熔炼时不 push 上方**
+  - **反向（无自动化）**：`pull` 下方 → `push` 上方
   - **正向**：`HopperTransferForward.pull` 上方 → `smelt/craft tick` → `push` 下方
 - 等级 `transfer-tick` / `max-item` 由插件 tick 驱动（`HopperManagedTransferHandler` 取消原版上下方移动）
 - 无剩余工作则 **出队**；红石充能漏斗持续保留在队

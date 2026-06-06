@@ -85,6 +85,39 @@ public class Gui implements Listener {
         templateRepository.markDirty();
     }
 
+    /** 样板列表（过滤/合成/熔炼）变更后立即写入 shan.db */
+    public void saveStorageDataImmediate() {
+        templateRepository.flushSync(templateManager);
+    }
+
+    /**
+     * 关服前将仍打开的存储类 GUI 内容写回模板，避免未关闭界面导致列表丢失。
+     */
+    public void persistOpenStorageGuisBeforeShutdown() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            InventoryView view = player.getOpenInventory();
+            if (view == null) {
+                continue;
+            }
+            XlrGuiHolder holder = XlrGuiHolder.from(view.getTopInventory());
+            if (holder == null) {
+                continue;
+            }
+            String templateName = resolveTemplateName(holder, player);
+            if (templateName == null) {
+                continue;
+            }
+            Inventory top = view.getTopInventory();
+            switch (holder.getType()) {
+                case FILTER_ITEMS -> processFilterItemsClose(player, top, templateName);
+                case AUTO_CRAFT -> processAutoCraftClose(player, top, templateName);
+                case AUTO_SMELT -> processAutoSmeltClose(player, top, templateName);
+                default -> {
+                }
+            }
+        }
+    }
+
     public void refreshAfterConfigReload() {
         reloadLayoutFromConfig();
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -319,7 +352,7 @@ public class Gui implements Listener {
             String templateName = resolveTemplateName(holder, player);
             if (templateName != null) {
                 processFilterItemsClose(player, event.getInventory(), templateName);
-                saveData();
+                saveStorageDataImmediate();
             }
             return;
         }
@@ -327,7 +360,7 @@ public class Gui implements Listener {
             String templateName = resolveTemplateName(holder, player);
             if (templateName != null) {
                 processAutoCraftClose(player, event.getInventory(), templateName);
-                saveData();
+                saveStorageDataImmediate();
             }
             return;
         }
@@ -335,7 +368,7 @@ public class Gui implements Listener {
             String templateName = resolveTemplateName(holder, player);
             if (templateName != null) {
                 processAutoSmeltClose(player, event.getInventory(), templateName);
-                saveData();
+                saveStorageDataImmediate();
             }
             return;
         }

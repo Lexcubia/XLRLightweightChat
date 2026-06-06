@@ -205,6 +205,22 @@ public final class TemplateRepository {
         scheduleFlush();
     }
 
+    /** 定期将未落盘的脏数据写入 shan.db（防崩溃/kill 丢失）。 */
+    public void startPeriodicSave(HopperTemplateManager manager) {
+        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, () -> {
+            if (!dirty) {
+                return;
+            }
+            dirty = false;
+            try {
+                saveAll(manager);
+            } catch (Exception e) {
+                logger.severe("[XLRHopper] 定期保存 shan.db 失败: " + e.getMessage());
+                dirty = true;
+            }
+        }, 20L * 60L * 2L, 20L * 60L * 2L);
+    }
+
     private void scheduleFlush() {
         if (flushTask != null) {
             return;
