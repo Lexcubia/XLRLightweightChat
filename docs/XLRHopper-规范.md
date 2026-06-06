@@ -85,11 +85,13 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 1. 必须用 **`/xlrhopper give %player% <等级> 1` 放置**（方块须有 `hopper-level` PDC）；仅改名/颜色的漏斗仍走 `default`。
 1. 等级漏斗在**启用世界**内挖掘后，掉落物须保留 `Update.yml` 对应等级的名称、Lore 及 `hopper-level-item` PDC，可再次放置并生效。
-2. 上方满箱、下方空箱对比：钻石（如 8/8）应明显快于铁（16/2）与普通放置漏斗（`default` 24/1）。
-3. 铁漏斗每次传输最多 **2** 个，且每 **16 tick** 可传输一次（对比铜 `max-item: 1`）。
-4. 任意等级漏斗 Q 丢 64：地面物品**直接全量**进漏斗（空间足够时 64 个全进），不因 `max-item` 截断或吞掉剩余。
-5. 铁漏斗向下方箱子输出：每传输间隔 **16 tick** 最多转出 **2** 个（传输速度）；铜/默认每次 **1** 个。
-5. `reload` 后修改 `Update.yml` 中数值，后续传输节奏随之变化。
+2. **同等级漏斗可堆叠**：`/xlrhopper give`、挖掘掉落、再次 give 的同类等级漏斗应能合并堆叠（`HopperLevelItems` 规范化 Meta/PDC；拾取时 `EntityPickupItemEvent` 对齐 canonical 形态）。
+3. `reload` 修改 `Update.yml` 名称/Lore 后，**旧物品与新物品 Meta 可能不一致**而无法堆叠；重新 give 或拾取一次（触发规范化）后可与新建物品堆叠。
+4. 上方满箱、下方空箱对比：钻石（如 8/8）应明显快于铁（16/2）与普通放置漏斗（`default` 24/1）。
+5. 铁漏斗每次传输最多 **2** 个，且每 **16 tick** 可传输一次（对比铜 `max-item: 1`）。
+6. 任意等级漏斗 Q 丢 64：地面物品**直接全量**进漏斗（空间足够时 64 个全进），不因 `max-item` 截断或吞掉剩余。
+7. 铁漏斗向下方箱子输出：每传输间隔 **16 tick** 最多转出 **2** 个（传输速度）；铜/默认每次 **1** 个。
+8. `reload` 后修改 `Update.yml` 中数值，后续传输节奏随之变化。
 
 **排错**：若各等级速度仍一致，检查 Paper 是否关闭 `InventoryMoveItem`（如 `hopper.disable-move-event`）；并确认 `plugins/XLRHopper/Update.yml` 已 reload。
 
@@ -419,6 +421,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 10. 空漏斗 / 无 pending：不在 8 tick 盲扫；有货或邻居变化事件入队后才处理。
 11. 漏斗设置内点「悬浮开关」：不开关重进世界，悬浮**立即**出现/消失；`Message.yml` 无 `overlay-*` 键；`Gui.yml` 仅有 `FloatOverlay` 开关项。
 12. 打开漏斗设置：**Shift+左键**；默认无悬浮直至开启 `hover-display`。
+13. 等级漏斗：`give` 两枚同等级应直接堆叠；放置后挖掘掉落与手中剩余应能合并；拾取地面等级漏斗后 Meta 与 give 一致。
 
 ---
 

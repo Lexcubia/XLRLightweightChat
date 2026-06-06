@@ -13,6 +13,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -83,6 +84,27 @@ public class HopperListener implements Listener {
             return;
         }
         Bukkit.getScheduler().runTask(plugin, () -> applyHopperTemplate(placeLoc, player, enabledName));
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onEntityPickupItem(EntityPickupItemEvent event) {
+        if (!(event.getEntity() instanceof Player)) {
+            return;
+        }
+        Item item = event.getItem();
+        if (item == null) {
+            return;
+        }
+        ItemStack picked = item.getItemStack();
+        String levelId = HopperLevelItems.readLevelFromItem(picked, keys);
+        if (levelId == null) {
+            return;
+        }
+        ItemStack canonical = HopperLevelItems.createLevelHopper(updateConfig, keys, levelId, picked.getAmount());
+        if (canonical == null || canonical.isSimilar(picked)) {
+            return;
+        }
+        item.setItemStack(canonical);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
