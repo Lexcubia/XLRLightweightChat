@@ -37,7 +37,7 @@ XLRHopper:
 Hologram:
     # 启用或关闭全息显示，关闭后全息显示将无法使用
     enable: true
-    # 全息显示刷新间隔,单位 秒
+    # 全息显示周期刷新间隔（秒）；事件触发仍使用防抖延迟
     refresh-time: 1
     # 全息显示间距
     line-height: 0.3

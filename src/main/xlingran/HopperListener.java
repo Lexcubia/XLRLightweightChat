@@ -194,6 +194,7 @@ public class HopperListener implements Listener {
         if (moving == null || moving.getType().isAir()) {
             return;
         }
+        tickService.runAutomationImmediate(hopperBlock);
         if (shouldHoldHopperOutbound(hopperBlock, moving)) {
             event.setCancelled(true);
         }

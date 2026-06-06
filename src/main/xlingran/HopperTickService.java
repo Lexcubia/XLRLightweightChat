@@ -175,6 +175,19 @@ public final class HopperTickService {
             }
             reservation.setReserved(loc, reserved);
 
+            if (pluginConfig.isRedstoneToggleEnabled()
+                    && HopperBlockConfig.read(block, keys).isRedstoneListToggle()
+                    && block.isBlockPowered()) {
+                int maxItem = HopperRedstoneTransferService.resolveMaxItem(block, keys, updateConfig);
+                if (HopperRedstoneTransferService.transferStep(block, template, keys, pluginConfig, maxItem)) {
+                    HopperLevelDef levelDef = HopperLevelResolver.resolveForBlock(block, keys, updateConfig);
+                    if (levelDef != null) {
+                        HopperTransferGate.getInstance().recordTransfer(block, levelDef,
+                                GameTickCounter.getInstance().currentTick());
+                    }
+                }
+            }
+
             if (lane.isReverse() && pluginConfig.isReverseHopperEnabled()) {
                 HopperTransferReverse.ReverseTransferContext reverseCtx =
                         new HopperTransferReverse.ReverseTransferContext(craftService, smeltService, pluginConfig);

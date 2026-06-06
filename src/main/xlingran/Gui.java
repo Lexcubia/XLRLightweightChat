@@ -617,7 +617,7 @@ public class Gui implements Listener {
                 laneListener.scheduleEvaluate(block);
             }
             if (config.isHoverDisplay()) {
-                overlayService.refreshDebounced(block);
+                overlayService.refresh(block);
             } else {
                 overlayService.hide(block);
             }
@@ -918,10 +918,8 @@ public class Gui implements Listener {
         String modeLine;
         if (config.isRedstoneListToggle() && template != null) {
             modeLine = guiConfig.stoneMode(HopperBlockConfig.getEffectiveWhitelist(hopperBlock, hopperKeys, template));
-        } else if (template != null) {
-            modeLine = guiConfig.filterMode(template.isWhitelist());
         } else {
-            modeLine = guiConfig.filterMode(false);
+            modeLine = guiConfig.stoneModeDisabled();
         }
         Map<String, String> vars = Map.of(
                 "toggle", guiConfig.toggle(config.isRedstoneListToggle()),

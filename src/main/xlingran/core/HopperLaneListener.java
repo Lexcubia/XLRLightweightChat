@@ -17,6 +17,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import xlingran.HopperAutoCraftService;
 import xlingran.HopperAutoSmeltService;
+import xlingran.HopperBlockConfig;
+import xlingran.HopperRedstoneTransferService;
+import xlingran.HopperTemplate;
 import xlingran.HopperChunkScanUtil;
 import xlingran.HopperKeys;
 import xlingran.HopperTemplateManager;
@@ -110,6 +113,7 @@ public final class HopperLaneListener implements Listener {
         Block dest = xlingran.HopperBlockUtil.resolveHopperBlock(event.getDestination());
         Block src = xlingran.HopperBlockUtil.resolveHopperBlock(event.getSource());
         if (dest != null) {
+            tickService.runAutomationImmediate(dest);
             scheduleEvaluateImmediate(dest);
         }
         if (src != null) {
@@ -181,6 +185,28 @@ public final class HopperLaneListener implements Listener {
     private void runEvaluateAndAutomate(Block hopperBlock) {
         runEvaluate(hopperBlock);
         tickService.runAutomationImmediate(hopperBlock);
+        tryRedstonePoweredTransfer(hopperBlock);
+    }
+
+    private void tryRedstonePoweredTransfer(Block hopperBlock) {
+        if (!pluginConfig.isRedstoneToggleEnabled()) {
+            return;
+        }
+        HopperBlockConfig blockConfig = HopperBlockConfig.read(hopperBlock, tickService.getKeys());
+        if (!blockConfig.isRedstoneListToggle() || !hopperBlock.isBlockPowered()) {
+            return;
+        }
+        HopperTemplate template = HopperTemplateResolver.resolve(hopperBlock, tickService.getKeys(),
+                tickService.getTemplateManager());
+        if (template == null) {
+            return;
+        }
+        HopperLane lane = tickService.getLaneRegistry().getLane(hopperBlock.getLocation());
+        int maxItem = lane != null ? lane.maxItem()
+                : HopperRedstoneTransferService.resolveMaxItem(hopperBlock, tickService.getKeys(),
+                tickService.getUpdateConfig());
+        HopperRedstoneTransferService.transferStep(hopperBlock, template, tickService.getKeys(),
+                pluginConfig, maxItem);
     }
 
     private void runEvaluate(Block hopperBlock) {

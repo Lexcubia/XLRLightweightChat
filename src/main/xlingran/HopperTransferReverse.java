@@ -72,10 +72,8 @@ public final class HopperTransferReverse {
             HopperContainerUtil.syncContainer(hopperBlock);
             return new ReverseTransferResult(moved, false);
         }
-        if (lastPushAttempt == PushAttempt.TARGET_FULL) {
-            return new ReverseTransferResult(0, true);
-        }
 
+        boolean pushTargetFull = lastPushAttempt == PushAttempt.TARGET_FULL;
         for (int i = 0; i < limit; i++) {
             Block belowBlock = hopperBlock.getRelative(BlockFace.DOWN);
             Inventory belowInv = HopperContainerUtil.getContainerInventory(belowBlock);
@@ -86,8 +84,9 @@ public final class HopperTransferReverse {
         }
         if (moved > 0) {
             HopperContainerUtil.syncContainer(hopperBlock);
+            return new ReverseTransferResult(moved, false);
         }
-        return new ReverseTransferResult(moved, false);
+        return new ReverseTransferResult(0, pushTargetFull);
     }
 
     private static PushAttempt tryPushOne(Inventory hopperInv, Block hopperBlock, Inventory to, Block toBlock,
@@ -219,10 +218,16 @@ public final class HopperTransferReverse {
 
     private static boolean hasHopperSpace(Inventory hopperInv, Set<Integer> reserved) {
         for (int i = 0; i < hopperInv.getSize(); i++) {
+            ItemStack slot = hopperInv.getItem(i);
             if (reserved.contains(i)) {
+                if (slot == null || slot.getType().isAir()) {
+                    return true;
+                }
+                if (slot.getAmount() < slot.getMaxStackSize()) {
+                    return true;
+                }
                 continue;
             }
-            ItemStack slot = hopperInv.getItem(i);
             if (slot == null || slot.getType().isAir()) {
                 return true;
             }

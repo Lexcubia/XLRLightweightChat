@@ -40,6 +40,8 @@ public final class GuiConfig {
     private static final String KEY_FILTERMODE_OFF = "filtermodeoff";
     private static final String KEY_STONEMODE_ON = "stonemodeon";
     private static final String KEY_STONEMODE_OFF = "stonemodeoff";
+    private static final String KEY_FILTERMODE_DISABLED = "filtermodedisabled";
+    private static final String KEY_STONEMODE_DISABLED = "stonemodeodisabled";
 
     private final JavaPlugin plugin;
     private final Logger logger;
@@ -53,6 +55,8 @@ public final class GuiConfig {
     private String diskFilterModeOff;
     private String diskStoneModeOn;
     private String diskStoneModeOff;
+    private String diskFilterModeDisabled;
+    private String diskStoneModeDisabled;
 
     public GuiConfig(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -112,6 +116,8 @@ public final class GuiConfig {
         diskFilterModeOff = readFlatToken(loaded, KEY_FILTERMODE_OFF);
         diskStoneModeOn = readFlatToken(loaded, KEY_STONEMODE_ON);
         diskStoneModeOff = readFlatToken(loaded, KEY_STONEMODE_OFF);
+        diskFilterModeDisabled = readFlatToken(loaded, KEY_FILTERMODE_DISABLED);
+        diskStoneModeDisabled = readFlatToken(loaded, KEY_STONEMODE_DISABLED);
 
         if (!isPresent(diskToggleOn) && !isPresent(diskToggleOff)
                 && !isPresent(diskFilterModeOn) && !isPresent(diskFilterModeOff)) {
@@ -178,6 +184,14 @@ public final class GuiConfig {
         String disk = whitelist ? diskStoneModeOn : diskStoneModeOff;
         String builtin = whitelist ? "&a红石白名单模式" : "&c红石黑名单模式";
         return color(resolveFlatToken(key, disk, builtin));
+    }
+
+    public String filterModeDisabled() {
+        return color(resolveFlatToken(KEY_FILTERMODE_DISABLED, diskFilterModeDisabled, "&6功能已关闭"));
+    }
+
+    public String stoneModeDisabled() {
+        return color(resolveFlatToken(KEY_STONEMODE_DISABLED, diskStoneModeDisabled, "&6功能已关闭"));
     }
 
     public String displayMode(Block hopper, HopperTemplate template, HopperKeys keys) {

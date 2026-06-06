@@ -150,7 +150,6 @@ public final class HopperAutoSmeltService {
 
         SmeltJob job = jobs.get(key);
         if (job != null) {
-            reserved.add(job.sourceSlot);
             if (advanceTimer) {
                 job.ticksRemaining -= TICK_STEP;
                 if (job.ticksRemaining <= 0) {
@@ -159,8 +158,10 @@ public final class HopperAutoSmeltService {
                     HopperContainerUtil.deliverDownstream(hopperBlock, output);
                     jobs.remove(key);
                     HopperContainerUtil.syncContainer(hopperBlock);
+                    return reserved;
                 }
             }
+            reserved.add(job.sourceSlot);
             return reserved;
         }
 

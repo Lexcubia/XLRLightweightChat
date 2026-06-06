@@ -53,8 +53,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - 占位符：`%Template%`、`%modename%`、`%toggle%`、`%filtermode%`、`%Durability%`、`%Enchant%` 等。
 - **开关文案（根节点顶格，与 `TemplateSet` 同级）**：
   - `%toggle%` ← `toggleon`（开启）/ `toggleoff`（关闭），如 `toggleon: "&a开启"`
-  - `%filtermode%` ← `filtermodeon` / `filtermodeoff`（模板过滤模式）
-  - `%stonemode%` ← `stonemodeon` / `stonemodeoff`（单漏斗红石功能开启时的模式文案）
+  - `%filtermode%` ← `filtermodeon` / `filtermodeoff`（模板过滤模式）；红石接管时可用 `filtermodedisabled`
+  - `%stonemode%` ← 红石功能**开启**时 `stonemodeon` / `stonemodeoff`；**关闭**时 `stonemodeodisabled`（不展示模板 filtermode）
   - 全息 `config.yml` → `%mode%`：未开红石功能用 `filtermodeon/off`；已开红石功能用 `stonemodeon/off`（`GuiConfig.displayMode()`）
   - 须修改服务端 **`plugins/XLRHopper/Gui.yml`**（非 jar 内文件）；`GuiConfig.toggle()` 每次打开 GUI 时实时读取
   - `/xlrhopper reload` 与重启均会重载；控制台打印 `toggleon=...`
@@ -264,7 +264,8 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - **物品占位符**：`%item1%`=slot0 … `%item5%`=slot4；默认首行为 `"%item1%%item2%%item3%%item4%%item5%"`
 - 全息：`DHAPI.createHologram` **非持久化**；`setAlwaysFacePlayer(true)` 随玩家视角；`setDisplayRange` / `setUpdateRange` 读取 `Hologram.display-range` / `update-range`（默认 48 格）；每次 `syncLines` 后 `realignLines()`
 - 增量刷新：`DHAPI.setHologramLine` 按行更新；内容签名基于**配置行顺序 + 各槽位材质**（不含数量）；签名未变时跳过重建
-- 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用 **4 tick 防抖**；内容签名未变则跳过重建。
+- **周期刷新**：`Hologram.refresh-time`（秒）驱动 `runTaskTimer` 全量 `refreshForce`；事件触发仍用 `refreshDebounced`（延迟 = `refresh-time × 20` tick）
+- 漏斗链 `InventoryMoveItem` / `Pickup` 刷新使用防抖；`/xlrhopper reload` 后 `restoreAllAfterReload` + 重启周期任务
 - `DecentHologramsReloadEvent` 后恢复已开启 `hover-display` 的全息。
 - 文案由 `config.yml` → `Hologram.hologram-lines` 配置；**不读** `Gui.yml` 悬浮行；`Message.yml` → `overlay-feature-disabled`（未安装 DH 或功能未启用时提示）。
 - PDC：`hover-display`（开关）；套模板/初始化时 `hover-display=false`；卸载/关悬浮/破坏时 `hologram.destroy()`。
@@ -301,6 +302,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - 红石功能**按单漏斗** PDC 生效；套用同模板且未开红石的漏斗不受红石影响。
 - 过滤物品样板、附魔、耐久仍来自模板（全漏斗共享）。
 - 红石信号变化时 `HopperRedstoneListener` 刷新过滤与全息 `%mode%`。
+- **充能锁辅助传输**：`redstone-list-toggle=true` 且漏斗被红石充能锁定时，原版 `InventoryMoveItem` / `InventoryPickupItem` 不触发；`HopperRedstoneTransferService` 在 tick / evaluate 中辅助吸取过滤允许的物品（地上 + 上方容器）。
 
 任一维度不通过 → 取消对应进入路径的事件。
 
@@ -434,6 +436,11 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 14. 自动合成/熔炼：持续入料时原料不得经原版链漏到下方箱；产物仅 `deliverDownstream` 下传。
 15. 反向吸取：手动往下方箱放货后应被 pull；不得吞物品；上方箱满时背压不丢物。
 16. 红石名单：同模板漏斗 A 未开红石、B 开红石；改模板模式仅影响 A；红石信号仅影响 B；全息 `%mode%` 与 `Gui.yml` 四变量一致。
+17. 红石充能锁：开红石+有信号+白名单允许时，Q 丢 / 上方容器入料应经插件辅助路径吸入；断信号黑名单仍拒列表内物品。
+18. 红石 GUI：开关仅改 `%toggle%`；关时 `%stonemode%`=`stonemodeodisabled`；开时 `%stonemode%` 仅随红石信号变。
+19. 全息：`refresh-time` 秒内周期刷新；开启悬浮开关同 tick 显示。
+20. 反向+合成：下方原料不得长期卡住；`TARGET_FULL` 时仍尝试 pull。
+21. 正常合成/熔炼：上方容器入料与 Q 丢行为一致，原料不得直下下方箱。
 
 ---
 

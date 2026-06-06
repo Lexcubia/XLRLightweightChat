@@ -1,11 +1,13 @@
 package xlingran;
 
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Container;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import xlingran.core.HopperLaneListener;
 
 import java.util.HashMap;
 
@@ -61,6 +63,7 @@ public final class HopperContainerUtil {
             HashMap<Integer, ItemStack> left = belowInv.addItem(remaining);
             syncContainer(below);
             if (left.isEmpty()) {
+                wakeAdjacentReverseHopper(below, hopperBlock);
                 return true;
             }
             remaining = left.values().iterator().next();
@@ -71,6 +74,26 @@ public final class HopperContainerUtil {
             syncContainer(hopperBlock);
         }
         return false;
+    }
+
+    private static void wakeAdjacentReverseHopper(Block below, Block hopperBlock) {
+        Shan plugin = Shan.getInstance();
+        if (plugin == null) {
+            return;
+        }
+        HopperKeys keys = plugin.getHopperKeys();
+        HopperLaneListener laneListener = plugin.getHopperLaneListener();
+        if (keys == null || laneListener == null) {
+            return;
+        }
+        if (below.getType() == Material.HOPPER && HopperBlockConfig.isReverse(below, keys)) {
+            laneListener.scheduleEvaluateImmediate(below);
+        }
+        Block aboveBelow = below.getRelative(BlockFace.UP);
+        if (aboveBelow.equals(hopperBlock) && hopperBlock.getType() == Material.HOPPER
+                && HopperBlockConfig.isReverse(hopperBlock, keys)) {
+            laneListener.scheduleEvaluateImmediate(hopperBlock);
+        }
     }
 
     static int countSimilar(Inventory inventory, ItemStack prototype) {

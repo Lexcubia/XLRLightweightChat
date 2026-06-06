@@ -91,6 +91,9 @@ public final class HopperAutoCraftService {
         if (hasJob(loc)) {
             return true;
         }
+        if (containsAnyRecipeIngredient(inv, hopperBlock, template, keys)) {
+            return true;
+        }
         for (ItemStack target : template.getAutoCraftTargets()) {
             for (ShapelessRecipe recipe : HopperRecipeUtil.findShapelessRecipes(target)) {
                 if (isActivePlan(inv, hopperBlock, template, keys,
@@ -155,7 +158,6 @@ public final class HopperAutoCraftService {
 
         CraftJob job = jobs.get(key);
         if (job != null) {
-            reserved.addAll(job.reservedSlots);
             if (advanceTimer) {
                 job.ticksRemaining -= TICK_STEP;
                 if (job.ticksRemaining <= 0) {
@@ -164,8 +166,10 @@ public final class HopperAutoCraftService {
                     HopperContainerUtil.deliverDownstream(hopperBlock, output);
                     jobs.remove(key);
                     HopperContainerUtil.syncContainer(hopperBlock);
+                    return reserved;
                 }
             }
+            reserved.addAll(job.reservedSlots);
             return reserved;
         }
 
@@ -231,6 +235,22 @@ public final class HopperAutoCraftService {
             }
         }
         return null;
+    }
+
+    private static boolean containsAnyRecipeIngredient(Inventory inv, Block hopperBlock, HopperTemplate template,
+                                                     HopperKeys keys) {
+        if (inv == null) {
+            return false;
+        }
+        for (ItemStack stack : inv.getContents()) {
+            if (stack == null || stack.getType().isAir()) {
+                continue;
+            }
+            if (isMovingRecipeIngredient(hopperBlock, template, keys, stack)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isMovingRecipeIngredient(Block hopperBlock, HopperTemplate template, HopperKeys keys,

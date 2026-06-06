@@ -53,6 +53,7 @@ public final class HopperOverlayDisplayService {
     private final boolean decentHologramsAvailable;
     private final Map<String, String> signaturesByLocation = new ConcurrentHashMap<>();
     private final Map<String, BukkitTask> debouncedRefresh = new ConcurrentHashMap<>();
+    private BukkitTask periodicRefreshTask;
 
     public HopperOverlayDisplayService(Shan plugin, HopperKeys keys, HopperTemplateManager templateManager,
                                        UpdateConfig updateConfig, XLRHopperConfig pluginConfig,
@@ -63,6 +64,7 @@ public final class HopperOverlayDisplayService {
         this.updateConfig = updateConfig;
         this.pluginConfig = pluginConfig;
         this.decentHologramsAvailable = decentHologramsAvailable;
+        startPeriodicRefresh();
     }
 
     public boolean isAvailable() {
@@ -110,6 +112,14 @@ public final class HopperOverlayDisplayService {
     }
 
     public void refresh(Block block) {
+        refresh(block, false);
+    }
+
+    public void refreshForce(Block block) {
+        refresh(block, true);
+    }
+
+    private void refresh(Block block, boolean force) {
         if (!canShowHologram(block)) {
             return;
         }
@@ -127,7 +137,7 @@ public final class HopperOverlayDisplayService {
         List<HologramSegment> layout = parseHologramLayout(block, template, config);
         String signature = contentSignature(block, layout);
         String locKey = locationKey(block.getLocation());
-        if (signature.equals(signaturesByLocation.get(locKey))) {
+        if (!force && signature.equals(signaturesByLocation.get(locKey))) {
             Hologram existing = DHAPI.getHologram(hologramName(block.getLocation()));
             if (existing != null && existing.isEnabled()) {
                 return;
@@ -202,7 +212,47 @@ public final class HopperOverlayDisplayService {
         }
     }
 
+    public void startPeriodicRefresh() {
+        stopPeriodicRefresh();
+        if (!decentHologramsAvailable || !pluginConfig.isHologramEnabled()) {
+            return;
+        }
+        long periodTicks = Math.max(1L, pluginConfig.getHologramRefreshTimeSeconds() * 20L);
+        periodicRefreshTask = Bukkit.getScheduler().runTaskTimer(plugin, this::refreshAllTracked,
+                periodTicks, periodTicks);
+    }
+
+    public void stopPeriodicRefresh() {
+        if (periodicRefreshTask != null) {
+            periodicRefreshTask.cancel();
+            periodicRefreshTask = null;
+        }
+    }
+
+    public void restartPeriodicRefresh() {
+        startPeriodicRefresh();
+    }
+
+    private void refreshAllTracked() {
+        if (!decentHologramsAvailable || !pluginConfig.isHologramEnabled()) {
+            return;
+        }
+        for (String locKey : new ArrayList<>(signaturesByLocation.keySet())) {
+            Location loc = parseLocationKey(locKey);
+            if (loc == null) {
+                continue;
+            }
+            Block block = loc.getBlock();
+            if (block.getType() == Material.HOPPER && isHoverEnabled(block)) {
+                refreshForce(block);
+            } else {
+                signaturesByLocation.remove(locKey);
+            }
+        }
+    }
+
     public void hideAll() {
+        stopPeriodicRefresh();
         for (BukkitTask task : debouncedRefresh.values()) {
             if (task != null) {
                 task.cancel();

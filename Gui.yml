@@ -189,9 +189,11 @@ toggleoff: "&c关闭"
 # 白名单和黑名单切换变量（替换 Lore 中 %filtermode%）
 filtermodeon: "&a白名单模式"
 filtermodeoff: "&c黑名单模式"
+filtermodedisabled: "&6功能已关闭"
 # 红石白名单和黑名单切换变量（替换 Lore 中 %stonemode%）
 stonemodeon: "&a红石白名单模式"
 stonemodeoff: "&c红石黑名单模式"
+stonemodeodisabled: "&6功能已关闭"
 
 # 附魔名称对照表
 enchant-names:

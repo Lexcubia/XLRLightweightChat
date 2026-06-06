@@ -214,6 +214,10 @@ public class Shan extends JavaPlugin {
             updateConfig.reload();
             gui.refreshAfterConfigReload();
             HopperTransferGate.getInstance().clearAll();
+            if (overlayDisplayService != null) {
+                overlayDisplayService.restartPeriodicRefresh();
+                overlayDisplayService.restoreAllAfterReload();
+            }
             if (sender != null) {
                 int status = updateConfig.levelIds().size();
                 for (String line : pluginConfig.getReloadLines()) {
