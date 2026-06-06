@@ -90,16 +90,6 @@ public class Gui implements Listener {
         templateRepository.flushSyncStorage(templateManager);
     }
 
-    private void logStorageDebug(String message) {
-        if (pluginConfig.isDebugTemplateStorage()) {
-            plugin.getLogger().info("[XLRHopper][存储调试] " + message);
-        }
-    }
-
-    private void logStorageTrace(String message) {
-        plugin.getLogger().info("[XLRHopper][存储] " + message);
-    }
-
     private boolean isStorageGuiTitle(String title) {
         if (title == null || title.isEmpty()) {
             return false;
@@ -126,10 +116,6 @@ public class Gui implements Listener {
             return "null-holder";
         }
         return inventory.getHolder().getClass().getName();
-    }
-
-    private void logStorageSaved(String templateName, String listKind, int kept, int returned) {
-        logStorageDebug("内存已更新 模板=" + templateName + " " + listKind + " 保留=" + kept + " 退回=" + returned);
     }
 
     private static int countNonEmptySlots(Inventory inventory) {
@@ -182,7 +168,6 @@ public class Gui implements Listener {
             }
         }
         if (persisted > 0) {
-            logStorageDebug("关服前处理 " + persisted + " 个仍打开的存储 GUI，执行 flushSync");
             saveStorageDataImmediate();
         }
     }
@@ -783,35 +768,20 @@ public class Gui implements Listener {
         Inventory inv = Bukkit.createInventory(new XlrGuiHolder(type, templateName),
                 guiConfig.storageSize(configKey), guiConfig.storageTitle(configKey));
         bindHolder(inv, type);
-        int loaded = 0;
         HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
         if (template != null) {
-            int reloaded = switch (type) {
+            switch (type) {
                 case FILTER_ITEMS -> templateRepository.reloadItemListIfEmpty(player.getUniqueId(), templateName,
                         "filter", template.getFilterPrototypes());
                 case AUTO_CRAFT -> templateRepository.reloadItemListIfEmpty(player.getUniqueId(), templateName,
                         "auto-craft", template.getAutoCraftTargets());
                 case AUTO_SMELT -> templateRepository.reloadItemListIfEmpty(player.getUniqueId(), templateName,
                         "auto-smelt", template.getAutoSmeltOutputs());
-                default -> 0;
-            };
-            loaded = switch (type) {
-                case FILTER_ITEMS -> template.getFilterPrototypes().size();
-                case AUTO_CRAFT -> template.getAutoCraftTargets().size();
-                case AUTO_SMELT -> template.getAutoSmeltOutputs().size();
-                default -> 0;
-            };
-            if (reloaded > 0) {
-                logStorageTrace("打开前 DB 补载 type=" + type + " template=" + templateName + " 条数=" + reloaded);
+                default -> {
+                }
             }
             filler.fill(inv, template);
         }
-        logStorageTrace("存储 GUI 打开 type=" + type + " player=" + player.getName()
-                + " template=" + templateName + " 从内存加载=" + loaded + " 条 dataLoaded="
-                + templateRepository.isDataLoaded());
-        logStorageDebug("打开存储 GUI type=" + type + " player=" + player.getName()
-                + " template=" + templateName + " 从内存加载=" + loaded + " 条 dataLoaded="
-                + templateRepository.isDataLoaded());
         player.openInventory(inv);
     }
 
@@ -835,12 +805,6 @@ public class Gui implements Listener {
         String holderName = holder.getTemplateName();
         String sessionName = sessions.getEditingTemplate(player.getUniqueId());
         String templateName = resolveTemplateName(holder, player);
-        int slots = countNonEmptySlots(topInventory);
-        logStorageTrace("存储 GUI 关闭处理开始 type=" + type + " player=" + player.getName()
-                + " template=" + templateName + " 物品格数=" + slots);
-        logStorageDebug("关闭存储 GUI type=" + type + " player=" + player.getName()
-                + " holderTemplate=" + holderName + " sessionTemplate=" + sessionName
-                + " resolved=" + templateName + " 物品格数=" + slots);
         if (templateName == null) {
             plugin.getLogger().warning("[XLRHopper] 存储 GUI 关闭未保存：templateName 为空 player="
                     + player.getName() + " gui=" + type + " holder=" + holderName + " session=" + sessionName);
@@ -929,10 +893,8 @@ public class Gui implements Listener {
         PrototypeDedupeResult result = dedupePrototypeSnapshot(inventory);
         if (craftTargets) {
             template.setAutoCraftTargets(result.uniqueRules());
-            logStorageSaved(templateName, "自动合成", result.uniqueRules().size(), result.toReturn().size());
         } else {
             template.setAutoSmeltOutputs(result.uniqueRules());
-            logStorageSaved(templateName, "自动熔炼", result.uniqueRules().size(), result.toReturn().size());
         }
         templateRepository.markDirty();
         returnDuplicateItems(player, inventory, result.toReturn());
@@ -947,7 +909,6 @@ public class Gui implements Listener {
         }
         PrototypeDedupeResult result = dedupePrototypeSnapshot(inventory);
         template.setFilterPrototypes(result.uniqueRules());
-        logStorageSaved(templateName, "过滤物品", result.uniqueRules().size(), result.toReturn().size());
         templateRepository.markDirty();
         returnDuplicateItems(player, inventory, result.toReturn());
     }

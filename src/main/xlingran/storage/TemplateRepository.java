@@ -12,7 +12,6 @@ import xlingran.HopperTemplate;
 import xlingran.HopperTemplateManager;
 import xlingran.ItemStackUtil;
 import xlingran.Shan;
-import xlingran.XLRHopperConfig;
 
 import java.lang.reflect.Method;
 import java.sql.Connection;
@@ -135,9 +134,7 @@ public final class TemplateRepository {
             dataLoaded = false;
             loadHealthy = true;
             dirty = false;
-            logStorageDebug("loadInto 开始");
             manager.clearAll();
-            int templateCount = 0;
             for (PendingTemplate pending : snapshot.templates()) {
                 HopperTemplate template = new HopperTemplate();
                 template.setWhitelist(pending.whitelist());
@@ -159,17 +156,9 @@ public final class TemplateRepository {
                     }
                 }
                 manager.putTemplate(pending.playerUuid(), pending.name(), template);
-                templateCount++;
                 if (filterResult.failed() > 0 || craftResult.failed() > 0 || smeltResult.failed() > 0) {
                     loadHealthy = false;
                 }
-                logStorageTrace("loadInto 模板=" + pending.name() + " player=" + pending.playerUuid()
-                        + " filter=" + filterResult.loaded() + "/" + filterResult.dbRows()
-                        + " craft=" + craftResult.loaded() + "/" + craftResult.dbRows()
-                        + " smelt=" + smeltResult.loaded() + "/" + smeltResult.dbRows());
-                logStorageDebug("loadInto 模板=" + pending.name() + " player=" + pending.playerUuid()
-                        + " filter=" + filterResult.loaded() + " craft=" + craftResult.loaded()
-                        + " smelt=" + smeltResult.loaded());
             }
             for (PendingPlayer player : snapshot.players()) {
                 if (player.enabledTemplate() != null && !player.enabledTemplate().isEmpty()) {
@@ -177,8 +166,6 @@ public final class TemplateRepository {
                 }
             }
             dataLoaded = true;
-            logStorageTrace("loadInto 完成，共 " + templateCount + " 个模板 loadHealthy=" + loadHealthy);
-            logStorageDebug("loadInto 完成，共 " + templateCount + " 个模板");
         }
     }
 
@@ -200,14 +187,10 @@ public final class TemplateRepository {
             try (Connection conn = database.getConnection()) {
                 Long templateId = findTemplateId(conn, playerUuid, templateName);
                 if (templateId == null) {
-                    logStorageTrace("DB 补载跳过：模板不存在 template=" + templateName + " player=" + playerUuid);
                     return 0;
                 }
                 LoadListResult result = loadItemList(conn, templateId, listType, target, templateName);
-                if (result.loaded() > 0) {
-                    logStorageTrace("DB 补载 template=" + templateName + " list=" + listType
-                            + " loaded=" + result.loaded() + "/" + result.dbRows());
-                } else if (result.dbRows() > 0) {
+                if (result.loaded() == 0 && result.dbRows() > 0) {
                     loadHealthy = false;
                 }
                 return result.loaded();
@@ -327,28 +310,20 @@ public final class TemplateRepository {
                                     boolean bypassLoadHealthy) throws Exception {
         if (!force && !dataLoaded) {
             logger.warning("[XLRHopper] 跳过保存：模板数据尚未从 shan.db 加载完成");
-            logStorageDebug("跳过 saveAll：数据未加载");
             dirty = true;
             return false;
         }
         if (!force && !bypassLoadHealthy && !loadHealthy) {
             logger.warning("[XLRHopper] 跳过保存：模板数据加载不完整（存在反序列化失败）");
-            logStorageDebug("跳过 saveAll：loadHealthy=false");
             dirty = true;
             return false;
         }
-        logStorageDebug("saveAll 开始" + (force ? "（强制）" : ""));
-        int templateCount = 0;
-        int filterRows = 0;
-        int craftRows = 0;
-        int smeltRows = 0;
         try (Connection conn = database.getConnection()) {
             if (!force && !allowEmptyItemLists) {
                 int dbItems = countItemListRows(conn);
                 int memItems = countMemoryItemRows(manager);
                 if (dbItems > 0 && memItems == 0) {
                     logger.warning("[XLRHopper] 跳过保存：内存物品列表为空但 shan.db 含 " + dbItems + " 行物品");
-                    logStorageDebug("跳过 saveAll：内存空但 DB 有物品");
                     dirty = true;
                     return false;
                 }
@@ -371,24 +346,14 @@ public final class TemplateRepository {
                 for (Map.Entry<String, HopperTemplate> entry : manager.getTemplates(uuid).entrySet()) {
                     String templateName = entry.getKey();
                     long id = insertTemplate(conn, uuid, templateName, entry.getValue());
-                    int f = saveItemList(conn, id, LIST_FILTER, entry.getValue().getFilterPrototypes());
-                    int c = saveItemList(conn, id, LIST_CRAFT, entry.getValue().getAutoCraftTargets());
-                    int s = saveItemList(conn, id, LIST_SMELT, entry.getValue().getAutoSmeltOutputs());
+                    saveItemList(conn, id, LIST_FILTER, entry.getValue().getFilterPrototypes());
+                    saveItemList(conn, id, LIST_CRAFT, entry.getValue().getAutoCraftTargets());
+                    saveItemList(conn, id, LIST_SMELT, entry.getValue().getAutoSmeltOutputs());
                     saveEnchants(conn, id, entry.getValue());
-                    filterRows += f;
-                    craftRows += c;
-                    smeltRows += s;
-                    templateCount++;
-                    logStorageDebug("saveAll 写入模板=" + templateName + " player=" + uuid
-                            + " filter=" + f + " craft=" + c + " smelt=" + s);
                 }
             }
             conn.commit();
-            logStorageTrace("saveAll 校验 DB 物品行=" + countItemListRows(conn)
-                    + " smelt=" + countListTypeRows(conn, LIST_SMELT));
         }
-        logStorageDebug("saveAll 完成，模板数=" + templateCount + " filter行=" + filterRows
-                + " craft行=" + craftRows + " smelt行=" + smeltRows);
         return true;
     }
 
@@ -396,16 +361,6 @@ public final class TemplateRepository {
         try (Statement st = conn.createStatement();
              ResultSet rs = st.executeQuery("SELECT COUNT(*) AS c FROM template_item_lists")) {
             return rs.next() ? rs.getInt("c") : 0;
-        }
-    }
-
-    private int countListTypeRows(Connection conn, String listType) throws Exception {
-        try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT COUNT(*) AS c FROM template_item_lists WHERE list_type=?")) {
-            ps.setString(1, listType);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? rs.getInt("c") : 0;
-            }
         }
     }
 
@@ -499,12 +454,10 @@ public final class TemplateRepository {
                 }
                 if (!dataLoaded) {
                     logger.warning("[XLRHopper] 定期保存跳过：模板数据尚未加载完成");
-                    logStorageDebug("定期保存跳过：数据未加载");
                     return;
                 }
                 if (!loadHealthy) {
                     logger.warning("[XLRHopper] 定期保存跳过：模板数据加载不完整");
-                    logStorageDebug("定期保存跳过：loadHealthy=false");
                     return;
                 }
                 dirty = false;
@@ -533,12 +486,10 @@ public final class TemplateRepository {
                 }
                 if (!dataLoaded) {
                     logger.warning("[XLRHopper] 异步保存跳过：模板数据尚未加载完成");
-                    logStorageDebug("scheduleFlush 跳过：数据未加载");
                     return;
                 }
                 if (!loadHealthy) {
                     logger.warning("[XLRHopper] 异步保存跳过：模板数据加载不完整");
-                    logStorageDebug("scheduleFlush 跳过：loadHealthy=false");
                     return;
                 }
                 dirty = false;
@@ -581,15 +532,11 @@ public final class TemplateRepository {
     public void flushSync(HopperTemplateManager manager, boolean force, boolean bypassLoadHealthy) {
         cancelPendingFlush();
         synchronized (saveLock) {
-            logger.info("[XLRHopper] flushSync 开始 force=" + force + " dataLoaded=" + dataLoaded
-                    + " loadHealthy=" + loadHealthy + " bypassLoadHealthy=" + bypassLoadHealthy);
             if (!force && !dataLoaded) {
                 logger.warning("[XLRHopper] flushSync 跳过：模板数据尚未加载完成");
-                logStorageDebug("flushSync 跳过：数据未加载");
                 dirty = true;
                 return;
             }
-            logStorageDebug("flushSync 开始" + (force ? "（强制）" : ""));
             dirty = false;
             try {
                 boolean saved = saveAllUnlocked(manager, force, true, bypassLoadHealthy);
@@ -597,32 +544,14 @@ public final class TemplateRepository {
                     if (!force) {
                         loadHealthy = true;
                     }
-                    logger.info("[XLRHopper] flushSync 完成，已写入 shan.db");
                 } else {
                     logger.warning("[XLRHopper] flushSync 未完成：saveAll 被跳过或失败");
                 }
-                logStorageDebug("flushSync 完成");
             } catch (Exception e) {
                 logger.severe("[XLRHopper] 保存 shan.db 失败: " + e.getMessage());
                 dirty = true;
             }
         }
-    }
-
-    private void logStorageTrace(String message) {
-        logger.info("[XLRHopper][存储] " + message);
-    }
-
-    private void logStorageDebug(String message) {
-        XLRHopperConfig config = pluginConfig();
-        if (config != null && config.isDebugTemplateStorage()) {
-            logger.info("[XLRHopper][存储调试] " + message);
-        }
-    }
-
-    private static XLRHopperConfig pluginConfig() {
-        Shan shan = Shan.getInstance();
-        return shan != null ? shan.getPluginConfig() : null;
     }
 
     private static String serializeBlob(ItemStack stack) {
@@ -678,12 +607,7 @@ public final class TemplateRepository {
             Map<String, Object> map = readSerializedItemMap(yml, "item");
             if (map != null && !map.isEmpty()) {
                 ItemStack stack = ItemStack.deserialize(map);
-                ItemStack proto = ItemStackUtil.clonePrototype(stack);
-                if (proto != null && isDebugEnabled()) {
-                    logger.info("[XLRHopper][存储调试] 反序列化 legacy 成功 template=" + templateName
-                            + " list=" + listType + " material=" + proto.getType());
-                }
-                return proto;
+                return ItemStackUtil.clonePrototype(stack);
             }
             logger.warning("[XLRHopper] 反序列化物品失败 (template=" + templateName + ", id=" + templateId
                     + ", list=" + listType + ", format=legacy): item 节点缺失或类型错误");
@@ -754,11 +678,6 @@ public final class TemplateRepository {
             }
         }
         return map;
-    }
-
-    private static boolean isDebugEnabled() {
-        XLRHopperConfig config = pluginConfig();
-        return config != null && config.isDebugTemplateStorage();
     }
 
     private static byte[] trySerializeAsBytes(ItemStack stack) {
