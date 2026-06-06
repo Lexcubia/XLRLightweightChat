@@ -90,6 +90,10 @@ public class Gui implements Listener {
         templateRepository.flushSync(templateManager);
     }
 
+    private void logStorageSaved(String templateName, String listKind, int count) {
+        plugin.getLogger().fine("[XLRHopper] 已保存模板 " + templateName + " 的" + listKind + "列表（" + count + " 条）");
+    }
+
     /**
      * 关服前将仍打开的存储类 GUI 内容写回模板，避免未关闭界面导致列表丢失。
      */
@@ -344,11 +348,11 @@ public class Gui implements Listener {
         if (!(event.getPlayer() instanceof Player player)) {
             return;
         }
-        XlrGuiHolder holder = XlrGuiHolder.from(event.getInventory());
+        Inventory topInventory = event.getView().getTopInventory();
+        XlrGuiHolder holder = XlrGuiHolder.from(topInventory);
         if (holder == null) {
             return;
         }
-        Inventory topInventory = event.getView().getTopInventory();
         if (holder.getType() == GuiType.FILTER_ITEMS) {
             String templateName = resolveTemplateName(holder, player);
             if (templateName != null) {
@@ -790,6 +794,11 @@ public class Gui implements Listener {
                 toReturn.add(stack.clone());
             } else {
                 uniqueRules.add(proto);
+                if (stack.getAmount() > 1) {
+                    ItemStack excess = stack.clone();
+                    excess.setAmount(stack.getAmount() - 1);
+                    toReturn.add(excess);
+                }
             }
         }
         return new PrototypeDedupeResult(uniqueRules, toReturn);
@@ -816,8 +825,10 @@ public class Gui implements Listener {
         PrototypeDedupeResult result = dedupePrototypeSnapshot(inventory);
         if (craftTargets) {
             template.setAutoCraftTargets(result.uniqueRules());
+            logStorageSaved(templateName, "自动合成", result.uniqueRules().size());
         } else {
             template.setAutoSmeltOutputs(result.uniqueRules());
+            logStorageSaved(templateName, "自动熔炼", result.uniqueRules().size());
         }
         templateRepository.markDirty();
         returnDuplicateItems(player, inventory, result.toReturn());
@@ -830,6 +841,7 @@ public class Gui implements Listener {
         }
         PrototypeDedupeResult result = dedupePrototypeSnapshot(inventory);
         template.setFilterPrototypes(result.uniqueRules());
+        logStorageSaved(templateName, "过滤物品", result.uniqueRules().size());
         templateRepository.markDirty();
         returnDuplicateItems(player, inventory, result.toReturn());
     }

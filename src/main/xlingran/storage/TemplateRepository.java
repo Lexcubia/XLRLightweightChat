@@ -13,6 +13,7 @@ import xlingran.HopperTemplateManager;
 import xlingran.ItemStackUtil;
 
 import java.io.File;
+import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -29,6 +30,7 @@ public final class TemplateRepository {
     private static final String LIST_FILTER = "filter";
     private static final String LIST_CRAFT = "auto-craft";
     private static final String LIST_SMELT = "auto-smelt";
+    private static final String BYTES_BLOB_PREFIX = "b:";
 
     private final JavaPlugin plugin;
     private final ShanDatabase database;
@@ -93,7 +95,7 @@ public final class TemplateRepository {
             ps.setString(2, listType);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    ItemStack stack = deserializeBlob(rs.getString("item_blob"));
+                    ItemStack stack = deserializeBlob(rs.getString("item_blob"), templateId, listType);
                     if (stack != null) {
                         target.add(stack);
                     }
@@ -274,13 +276,30 @@ public final class TemplateRepository {
     }
 
     private static String serializeBlob(ItemStack stack) {
+        byte[] bytes = trySerializeAsBytes(stack);
+        if (bytes != null) {
+            return BYTES_BLOB_PREFIX + Base64.getEncoder().encodeToString(bytes);
+        }
         YamlConfiguration yml = new YamlConfiguration();
         yml.set("item", stack.serialize());
         return Base64.getEncoder().encodeToString(yml.saveToString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
-    private static ItemStack deserializeBlob(String blob) {
+    private ItemStack deserializeBlob(String blob, long templateId, String listType) {
         if (blob == null || blob.isEmpty()) {
+            return null;
+        }
+        if (blob.startsWith(BYTES_BLOB_PREFIX)) {
+            try {
+                byte[] raw = Base64.getDecoder().decode(blob.substring(BYTES_BLOB_PREFIX.length()));
+                ItemStack stack = tryDeserializeBytes(raw);
+                if (stack != null) {
+                    return ItemStackUtil.clonePrototype(stack);
+                }
+            } catch (Exception e) {
+                logger.warning("[XLRHopper] 反序列化物品失败 (template=" + templateId + ", list="
+                        + listType + ", format=bytes): " + e.getMessage());
+            }
             return null;
         }
         try {
@@ -293,9 +312,29 @@ public final class TemplateRepository {
                 ItemStack stack = ItemStack.deserialize((Map<String, Object>) m);
                 return ItemStackUtil.clonePrototype(stack);
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            logger.warning("[XLRHopper] 反序列化物品失败 (template=" + templateId + ", list="
+                    + listType + ", format=legacy): " + e.getMessage());
         }
         return null;
+    }
+
+    private static byte[] trySerializeAsBytes(ItemStack stack) {
+        try {
+            Method method = ItemStack.class.getMethod("serializeAsBytes");
+            return (byte[]) method.invoke(stack);
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
+    }
+
+    private static ItemStack tryDeserializeBytes(byte[] raw) {
+        try {
+            Method method = ItemStack.class.getMethod("deserializeBytes", byte[].class);
+            return (ItemStack) method.invoke(null, raw);
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
     }
 
     private static Enchantment resolveEnchantment(String key) {

@@ -164,7 +164,9 @@ public final class HopperTickService {
             int maxItem = lane.maxItem();
             HopperTransferForward.ForwardTransferContext forwardCtx =
                     new HopperTransferForward.ForwardTransferContext(craftService, smeltService, pluginConfig);
-            boolean reverseVanilla = lane.isReverse() && pluginConfig.isReverseHopperEnabled();
+            HopperTransferReverse.ReverseTransferContext reverseCtx =
+                    new HopperTransferReverse.ReverseTransferContext(craftService, smeltService, pluginConfig);
+            boolean isReverse = lane.isReverse() && pluginConfig.isReverseHopperEnabled();
 
             if (redstonePowered) {
                 int redstoneMax = HopperRedstoneTransferService.resolveMaxItem(block, keys, updateConfig);
@@ -179,22 +181,6 @@ public final class HopperTickService {
                 HopperRedstoneTransferService.pushStep(block, template, keys, pluginConfig, redstoneMax, redstoneCtx);
             }
 
-            if (reverseVanilla && !redstonePowered) {
-                runAutomationImmediate(block);
-                Set<Integer> reverseReserved = new HashSet<>();
-                if (lane.isAutoSmelt() && pluginConfig.isAutoSmeltEnabled()) {
-                    reverseReserved.addAll(smeltService.tick(block, template, keys));
-                }
-                if (lane.isAutoCraft() && pluginConfig.isAutoCraftEnabled()) {
-                    reverseReserved.addAll(craftService.tick(block, template, keys));
-                }
-                reservation.setReserved(loc, reverseReserved);
-                boolean keepReverse = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService,
-                        craftService);
-                laneRegistry.removeLaneFromQueueAfterTick(lane, keepReverse);
-                continue;
-            }
-
             boolean transferGateOpen = lane.ticksSinceLastStep() >= lane.transferTick();
             if (!transferGateOpen) {
                 boolean keepWaiting = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService,
@@ -204,9 +190,15 @@ public final class HopperTickService {
             }
             lane.resetTicksSinceLastStep();
 
-            if (!redstonePowered) {
-                HopperTransferForward.pullStep(block, template, keys, maxItem);
+            boolean transferred = false;
+            if (isReverse && !redstonePowered) {
+                int pulled = HopperTransferReverse.pullStep(block, template, keys, reservation, maxItem);
                 runAutomationImmediate(block);
+                transferred = pulled > 0;
+            } else if (!redstonePowered) {
+                int pulled = HopperTransferForward.pullStep(block, template, keys, maxItem);
+                runAutomationImmediate(block);
+                transferred = pulled > 0;
             }
 
             Set<Integer> reserved = new HashSet<>();
@@ -218,14 +210,28 @@ public final class HopperTickService {
             }
             reservation.setReserved(loc, reserved);
 
-            if (!redstonePowered) {
-                HopperTransferForward.pushStep(block, template, keys, reserved, maxItem, forwardCtx);
+            if (isReverse && !redstonePowered) {
+                HopperTransferReverse.ReverseTransferResult reverseResult = HopperTransferReverse.pushStep(
+                        block, template, keys, reservation, maxItem, reverseCtx);
+                if (reverseResult.pushTargetFull()) {
+                    laneRegistry.markTargetFull(loc);
+                } else if (reverseResult.moved() > 0) {
+                    laneRegistry.invalidateTargetSpace(loc);
+                    transferred = true;
+                }
+            } else if (!redstonePowered) {
+                int pushed = HopperTransferForward.pushStep(block, template, keys, reserved, maxItem, forwardCtx);
+                if (pushed > 0) {
+                    transferred = true;
+                }
             }
 
-            HopperLevelDef levelDef = HopperLevelResolver.resolveForBlock(block, keys, updateConfig);
-            if (levelDef != null) {
-                HopperTransferGate.getInstance().recordTransfer(block, levelDef,
-                        GameTickCounter.getInstance().currentTick());
+            if (transferred) {
+                HopperLevelDef levelDef = HopperLevelResolver.resolveForBlock(block, keys, updateConfig);
+                if (levelDef != null) {
+                    HopperTransferGate.getInstance().recordTransfer(block, levelDef,
+                            GameTickCounter.getInstance().currentTick());
+                }
             }
 
             boolean keep = HopperWorkEvaluator.shouldRemainInQueue(block, lane, keys, smeltService, craftService)
