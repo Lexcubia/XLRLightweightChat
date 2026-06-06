@@ -346,7 +346,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 - 红石充能锁（`redstone-list-toggle` + powered）：每 8 tick `absorb` → `runAutomationImmediate` → `push`（不受 `transfer-tick` 门控）
 - 达 `transfer-tick` 后单步管线：
-  - **反向**：`pull` 下方 → `smelt/craft tick` → 产物仅 `deliverDownstream` 下传；**开启自动合成/熔炼时不 push 上方**
+  - **反向+自动合成/熔炼**：`pull` 下方 → `smelt/craft tick` → 产物 `deliverUpstream` **直达上方箱**（不经漏斗堆叠后再 push）；`push` 上方处理其余可传输物品
   - **反向（无自动化）**：`pull` 下方 → `push` 上方
   - **正向**：`HopperTransferForward.pull` 上方 → `smelt/craft tick` → `push` 下方
 - 等级 `transfer-tick` / `max-item` 由插件 tick 驱动（`HopperManagedTransferHandler` 取消原版上下方移动）

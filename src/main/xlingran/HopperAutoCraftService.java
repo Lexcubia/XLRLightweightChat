@@ -163,7 +163,7 @@ public final class HopperAutoCraftService {
                 if (job.ticksRemaining <= 0) {
                     ItemStack output = job.outputStack.clone();
                     output.setAmount(1);
-                    HopperContainerUtil.deliverDownstream(hopperBlock, output);
+                    HopperContainerUtil.deliverAutomationOutput(hopperBlock, keys, output);
                     jobs.remove(key);
                     HopperContainerUtil.syncContainer(hopperBlock);
                     return reserved;

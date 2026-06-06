@@ -130,13 +130,6 @@ public final class HopperTickService {
         return craftService;
     }
 
-    /**
-     * 反向+自动合成/熔炼：产物仅经 deliverDownstream 下传，禁止 push 到上方箱。
-     */
-    private static boolean shouldSkipReversePushForAutomation(HopperLane lane) {
-        return lane.isAutoCraft() || lane.isAutoSmelt();
-    }
-
     private void tickAll() {
         int maxPerTick = pluginConfig.getPerTickMaxProcess();
         List<HopperLane> lanes = laneRegistry.workQueueSnapshot(maxPerTick);
@@ -213,8 +206,7 @@ public final class HopperTickService {
             }
             reservation.setReserved(loc, reserved);
 
-            if (lane.isReverse() && pluginConfig.isReverseHopperEnabled()
-                    && !shouldSkipReversePushForAutomation(lane)) {
+            if (lane.isReverse() && pluginConfig.isReverseHopperEnabled()) {
                 HopperTransferReverse.ReverseTransferResult reverseResult = HopperTransferReverse.pushStep(
                         block, template, keys, reservation, maxItem, reverseCtx);
                 if (reverseResult.pushTargetFull()) {

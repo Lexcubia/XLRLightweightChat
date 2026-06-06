@@ -48,6 +48,45 @@ public final class HopperContainerUtil {
     }
 
     /**
+     * 自动合成/熔炼产物交付：反向吸取时优先上方容器，否则下方容器。
+     */
+    public static boolean deliverAutomationOutput(Block hopperBlock, HopperKeys keys, ItemStack stack) {
+        if (hopperBlock == null || stack == null || stack.getType().isAir()) {
+            return false;
+        }
+        if (keys != null && HopperBlockConfig.isReverse(hopperBlock, keys)) {
+            return deliverUpstream(hopperBlock, stack);
+        }
+        return deliverDownstream(hopperBlock, stack);
+    }
+
+    /**
+     * 优先将物品放入漏斗正上方容器；无容器或已满时回退填入漏斗。
+     */
+    public static boolean deliverUpstream(Block hopperBlock, ItemStack stack) {
+        if (hopperBlock == null || stack == null || stack.getType().isAir()) {
+            return false;
+        }
+        ItemStack remaining = stack.clone();
+        Block above = hopperBlock.getRelative(BlockFace.UP);
+        Inventory aboveInv = getContainerInventory(above);
+        if (aboveInv != null) {
+            HashMap<Integer, ItemStack> left = aboveInv.addItem(remaining);
+            syncContainer(above);
+            if (left.isEmpty()) {
+                return true;
+            }
+            remaining = left.values().iterator().next();
+        }
+        Inventory hopperInv = getContainerInventory(hopperBlock);
+        if (hopperInv != null) {
+            refund(hopperBlock, hopperInv, remaining);
+            syncContainer(hopperBlock);
+        }
+        return false;
+    }
+
+    /**
      * 优先将物品放入漏斗正下方容器；无容器或已满时回退填入漏斗。
      *
      * @return 是否全部交付到下方容器
