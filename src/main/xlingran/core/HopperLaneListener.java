@@ -27,8 +27,10 @@ import xlingran.HopperTemplateResolver;
 import xlingran.HopperTickService;
 import xlingran.XLRHopperConfig;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class HopperLaneListener implements Listener {
@@ -205,8 +207,16 @@ public final class HopperLaneListener implements Listener {
         int maxItem = lane != null ? lane.maxItem()
                 : HopperRedstoneTransferService.resolveMaxItem(hopperBlock, tickService.getKeys(),
                 tickService.getUpdateConfig());
-        HopperRedstoneTransferService.transferStep(hopperBlock, template, tickService.getKeys(),
-                pluginConfig, maxItem);
+        HopperKeys hopperKeys = tickService.getKeys();
+        HopperRedstoneTransferService.absorbStep(hopperBlock, template, hopperKeys, pluginConfig, maxItem);
+        tickService.runAutomationImmediate(hopperBlock);
+        Set<Integer> reserved = new HashSet<>();
+        reserved.addAll(tickService.getSmeltService().getActiveReservedSlots(hopperBlock.getLocation()));
+        reserved.addAll(tickService.getCraftService().getActiveReservedSlots(hopperBlock.getLocation()));
+        HopperRedstoneTransferService.RedstoneTransferContext ctx =
+                new HopperRedstoneTransferService.RedstoneTransferContext(
+                        tickService.getCraftService(), tickService.getSmeltService(), pluginConfig, reserved);
+        HopperRedstoneTransferService.pushStep(hopperBlock, template, hopperKeys, pluginConfig, maxItem, ctx);
     }
 
     private void runEvaluate(Block hopperBlock) {

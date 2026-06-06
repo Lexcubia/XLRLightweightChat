@@ -11,6 +11,7 @@ import xlingran.HopperAutoCraftService;
 import xlingran.HopperAutoSmeltService;
 import xlingran.HopperContainerUtil;
 import xlingran.HopperKeys;
+import xlingran.HopperRedstoneTransferService;
 import xlingran.Shan;
 import xlingran.XLRHopperConfig;
 
@@ -35,7 +36,11 @@ public final class HopperWorkEvaluator {
             return;
         }
         HopperLane lane = registry.getLane(block.getLocation());
-        if (lane == null || !lane.hasSnapshot() || !lane.hasAutomation()) {
+        if (lane == null || !lane.hasSnapshot()) {
+            return;
+        }
+        if (!lane.hasAutomation() && !hasRedstonePoweredWork(block, keys, config)
+                && !hasForwardTransferWork(block, lane, keys, config)) {
             return;
         }
         if (lane.sleepCooldownTicks() > 0) {
@@ -86,9 +91,49 @@ public final class HopperWorkEvaluator {
         lane.setSleepCooldownTicks(cooldown);
     }
 
+    private static boolean hasRedstonePoweredWork(Block block, HopperKeys keys, XLRHopperConfig config) {
+        return config != null && HopperRedstoneTransferService.isRedstonePoweredTransferActive(block, keys, config);
+    }
+
+    private static boolean hasForwardTransferWork(Block block, HopperLane lane, HopperKeys keys,
+                                                  XLRHopperConfig config) {
+        if (lane.isReverse() || hasRedstonePoweredWork(block, keys, config)) {
+            return false;
+        }
+        var template = lane.template();
+        if (template == null) {
+            return false;
+        }
+        if (!(block.getState() instanceof Container container)) {
+            return false;
+        }
+        Inventory inv = container.getInventory();
+        for (ItemStack stack : inv.getContents()) {
+            if (stack != null && !stack.getType().isAir() && template.allows(stack, block, keys)) {
+                return true;
+            }
+        }
+        Block above = block.getRelative(BlockFace.UP);
+        Inventory aboveInv = HopperContainerUtil.getContainerInventory(above);
+        if (aboveInv != null) {
+            for (ItemStack stack : aboveInv.getContents()) {
+                if (stack != null && !stack.getType().isAir() && template.allows(stack, block, keys)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private static boolean pendingWork(Block block, HopperLane lane, HopperKeys keys,
                                        HopperAutoSmeltService smeltService,
                                        HopperAutoCraftService craftService, XLRHopperConfig config) {
+        if (hasRedstonePoweredWork(block, keys, config)) {
+            return true;
+        }
+        if (hasForwardTransferWork(block, lane, keys, config)) {
+            return true;
+        }
         if (registryHasSmelt(smeltService, block.getLocation())) {
             return true;
         }

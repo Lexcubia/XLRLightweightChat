@@ -53,7 +53,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 - 占位符：`%Template%`、`%modename%`、`%toggle%`、`%filtermode%`、`%Durability%`、`%Enchant%` 等。
 - **开关文案（根节点顶格，与 `TemplateSet` 同级）**：
   - `%toggle%` ← `toggleon`（开启）/ `toggleoff`（关闭），如 `toggleon: "&a开启"`
-  - `%filtermode%` ← `filtermodeon` / `filtermodeoff`（模板过滤模式）；红石接管时可用 `filtermodedisabled`
+  - `%filtermode%` ← `filtermodeon` / `filtermodeoff`（模板过滤模式）
   - `%stonemode%` ← 红石功能**开启**时 `stonemodeon` / `stonemodeoff`；**关闭**时 `stonemodeodisabled`（不展示模板 filtermode）
   - 全息 `config.yml` → `%mode%`：未开红石功能用 `filtermodeon/off`；已开红石功能用 `stonemodeon/off`（`GuiConfig.displayMode()`）
   - 须修改服务端 **`plugins/XLRHopper/Gui.yml`**（非 jar 内文件）；`GuiConfig.toggle()` 每次打开 GUI 时实时读取
@@ -326,7 +326,7 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 ### 6.3 反向吸取（reverse-suction）
 
-- 单漏斗 PDC `reverse-suction` 为 true 时，`HopperReverseHandler` **取消原版四向冲突移动**；并 **`scheduleEvaluate`** 由事件侧决定是否入队，**不在** handler 内 `syncHopper` 或全量登记
+- 套用模板的漏斗：`HopperManagedTransferHandler` **取消原版上下方容器移动**，改由 tick 驱动（正向 `HopperTransferForward` / 反向 `HopperTransferReverse` / 红石充能 `HopperRedstoneTransferService`）；`scheduleEvaluate` 由事件侧入队
 - 每 **8 game tick**、每个**已在 workQueue 中**的 lane **最多 1 步**反向搬运（同上 push/pull 规则）
 - `HopperTransferReverse` 直接读写方块 `Container` 库存，扣减前后双向校验；写失败回滚漏斗与来源箱；相邻容器 `InventoryCloseEvent` 唤醒入队
 - 反向 push 前执行合成/熔炼 `shouldHoldOutbound`，避免原料从 push 路径漏传
@@ -343,13 +343,14 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 **阶段 B（每 8 tick，`HopperTickService.tickAll`）**
 
-- 仅对 `HopperLaneRegistry.workQueueSnapshot(256)` 中的 lane 执行：
-  1. `HopperAutoSmeltService.tick`
-  2. `HopperAutoCraftService.tryCraft`
-  3. `HopperTransferReverse.transferStep`（仅 `reverse-suction`）
-- 无剩余工作或目标满缓存则 **出队**；否则保留待下周期
+- 红石充能锁（`redstone-list-toggle` + powered）：每 8 tick `absorb` → `runAutomationImmediate` → `push`（不受 `transfer-tick` 门控）
+- 达 `transfer-tick` 后单步管线：
+  - **反向**：`pull` 下方 → `smelt/craft tick` → `push` 上方
+  - **正向**：`HopperTransferForward.pull` 上方 → `smelt/craft tick` → `push` 下方
+- 等级 `transfer-tick` / `max-item` 由插件 tick 驱动（`HopperManagedTransferHandler` 取消原版上下方移动）
+- 无剩余工作则 **出队**；红石充能漏斗持续保留在队
 
-合成在传输前执行；熔炼/合成预留槽位不参与反向搬运。入料即时路径与 8 tick 管线互补，确保原版漏斗向下输出不会早于自动化消耗原料。
+合成/熔炼在 pull 之后、push 之前执行，确保原料先进漏斗再合成，产物再下传。
 
 ### 6.3.2 自动销毁（auto-destroy）
 

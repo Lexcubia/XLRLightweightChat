@@ -37,9 +37,40 @@ public final class HopperTransferReverse {
         NO_WORK
     }
 
-    public static ReverseTransferResult transferStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
-                                                     HopperReservation reservation, int maxItem,
-                                                     ReverseTransferContext context) {
+    public static int pullStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                               HopperReservation reservation, int maxItem) {
+        if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER
+                || !HopperBlockConfig.isReverse(hopperBlock, keys) || template == null) {
+            return 0;
+        }
+        if (!(hopperBlock.getState() instanceof Container hopperContainer)) {
+            return 0;
+        }
+        Inventory hopperInv = hopperContainer.getInventory();
+        Set<Integer> reserved = reservation.getReserved(hopperBlock.getLocation());
+        Block belowBlock = hopperBlock.getRelative(BlockFace.DOWN);
+        Inventory belowInv = HopperContainerUtil.getContainerInventory(belowBlock);
+        if (belowInv == null) {
+            return 0;
+        }
+        int limit = Math.max(1, maxItem);
+        int moved = 0;
+        for (int i = 0; i < limit; i++) {
+            if (!tryPullOne(belowInv, belowBlock, hopperInv, hopperBlock, template, keys, reserved)) {
+                break;
+            }
+            moved++;
+        }
+        if (moved > 0) {
+            HopperContainerUtil.syncContainer(hopperBlock);
+            HopperContainerUtil.syncContainer(belowBlock);
+        }
+        return moved;
+    }
+
+    public static ReverseTransferResult pushStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                                 HopperReservation reservation, int maxItem,
+                                                 ReverseTransferContext context) {
         if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER
                 || !HopperBlockConfig.isReverse(hopperBlock, keys) || template == null) {
             return new ReverseTransferResult(0, false);
@@ -49,17 +80,15 @@ public final class HopperTransferReverse {
         }
         Inventory hopperInv = hopperContainer.getInventory();
         Set<Integer> reserved = reservation.getReserved(hopperBlock.getLocation());
-
+        Block aboveBlock = hopperBlock.getRelative(BlockFace.UP);
+        Inventory aboveInv = HopperContainerUtil.getContainerInventory(aboveBlock);
+        if (aboveInv == null) {
+            return new ReverseTransferResult(0, false);
+        }
         int limit = Math.max(1, maxItem);
         int moved = 0;
         PushAttempt lastPushAttempt = PushAttempt.NO_WORK;
         for (int i = 0; i < limit; i++) {
-            Block aboveBlock = hopperBlock.getRelative(BlockFace.UP);
-            Inventory aboveInv = HopperContainerUtil.getContainerInventory(aboveBlock);
-            if (aboveInv == null) {
-                lastPushAttempt = PushAttempt.NO_WORK;
-                break;
-            }
             PushAttempt attempt = tryPushOne(hopperInv, hopperBlock, aboveInv, aboveBlock, template, keys, reserved,
                     context);
             lastPushAttempt = attempt;
@@ -70,23 +99,10 @@ public final class HopperTransferReverse {
         }
         if (moved > 0) {
             HopperContainerUtil.syncContainer(hopperBlock);
+            HopperContainerUtil.syncContainer(aboveBlock);
             return new ReverseTransferResult(moved, false);
         }
-
-        boolean pushTargetFull = lastPushAttempt == PushAttempt.TARGET_FULL;
-        for (int i = 0; i < limit; i++) {
-            Block belowBlock = hopperBlock.getRelative(BlockFace.DOWN);
-            Inventory belowInv = HopperContainerUtil.getContainerInventory(belowBlock);
-            if (belowInv == null || !tryPullOne(belowInv, belowBlock, hopperInv, hopperBlock, template, keys, reserved)) {
-                break;
-            }
-            moved++;
-        }
-        if (moved > 0) {
-            HopperContainerUtil.syncContainer(hopperBlock);
-            return new ReverseTransferResult(moved, false);
-        }
-        return new ReverseTransferResult(0, pushTargetFull);
+        return new ReverseTransferResult(0, lastPushAttempt == PushAttempt.TARGET_FULL);
     }
 
     private static PushAttempt tryPushOne(Inventory hopperInv, Block hopperBlock, Inventory to, Block toBlock,

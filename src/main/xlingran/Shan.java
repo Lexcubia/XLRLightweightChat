@@ -169,7 +169,8 @@ public class Shan extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new HopperOverlayListener(this, overlayDisplayService, pluginConfig), this);
         getServer().getPluginManager().registerEvents(
-                new HopperReverseHandler(hopperKeys, hopperTickService, hopperLaneListener), this);
+                new HopperManagedTransferHandler(hopperKeys, hopperTickService, hopperLaneListener, pluginConfig),
+                this);
         getServer().getPluginManager().registerEvents(
                 new HopperReverseNeighborListener(hopperKeys, hopperLaneListener, pluginConfig), this);
         getServer().getPluginManager().registerEvents(

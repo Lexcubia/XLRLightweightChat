@@ -13,6 +13,7 @@ import xlingran.gui.UpdateConfig;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Set;
 
 /**
  * 红石名单漏斗被原版充能锁定时，由插件辅助完成过滤允许的吸取（地上物品 + 上方容器）。
@@ -22,26 +23,23 @@ public final class HopperRedstoneTransferService {
     private HopperRedstoneTransferService() {
     }
 
+    public record RedstoneTransferContext(HopperAutoCraftService craftService, HopperAutoSmeltService smeltService,
+                                          XLRHopperConfig pluginConfig, Set<Integer> reserved) {
+    }
+
     /**
-     * @return 本步是否移动了至少 1 件物品
+     * 吸取阶段：地上物品 + 上方容器（每 8 tick 执行，不受 transfer-tick 门控）。
      */
-    public static boolean transferStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
-                                       XLRHopperConfig pluginConfig, int maxItem) {
-        if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER || template == null
-                || pluginConfig == null || !pluginConfig.isRedstoneToggleEnabled()) {
-            return false;
+    public static int absorbStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                 XLRHopperConfig pluginConfig, int maxItem) {
+        if (!canRun(hopperBlock, template, keys, pluginConfig)) {
+            return 0;
         }
-        HopperBlockConfig config = HopperBlockConfig.read(hopperBlock, keys);
-        if (!config.isRedstoneListToggle() || !hopperBlock.isBlockPowered()) {
-            return false;
-        }
-        if (!(hopperBlock.getState() instanceof Container hopperContainer)) {
-            return false;
-        }
+        Container hopperContainer = (Container) hopperBlock.getState();
         Inventory hopperInv = hopperContainer.getInventory();
         int limit = Math.max(1, maxItem);
         int moved = 0;
-        if (tryPickupGround(hopperBlock, hopperInv, template, keys, limit - moved)) {
+        if (tryPickupGround(hopperBlock, hopperInv, template, keys)) {
             moved++;
         }
         for (int i = moved; i < limit; i++) {
@@ -53,12 +51,105 @@ public final class HopperRedstoneTransferService {
         if (moved > 0) {
             HopperContainerUtil.syncContainer(hopperBlock);
         }
-        return moved > 0;
+        return moved;
+    }
+
+    /**
+     * 下推阶段：过滤允许且非合成/熔炼 hold 的物品（充能锁时替代原版 push）。
+     */
+    public static int pushStep(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                               XLRHopperConfig pluginConfig, int maxItem, RedstoneTransferContext context) {
+        if (!canRun(hopperBlock, template, keys, pluginConfig)) {
+            return 0;
+        }
+        Container hopperContainer = (Container) hopperBlock.getState();
+        Inventory hopperInv = hopperContainer.getInventory();
+        int limit = Math.max(1, maxItem);
+        int moved = 0;
+        for (int i = 0; i < limit; i++) {
+            if (!tryPushBelow(hopperBlock, hopperInv, template, keys, context)) {
+                break;
+            }
+            moved++;
+        }
+        if (moved > 0) {
+            HopperContainerUtil.syncContainer(hopperBlock);
+        }
+        return moved;
+    }
+
+    private static boolean canRun(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                XLRHopperConfig pluginConfig) {
+        if (hopperBlock == null || hopperBlock.getType() != Material.HOPPER || template == null
+                || keys == null || pluginConfig == null || !pluginConfig.isRedstoneToggleEnabled()) {
+            return false;
+        }
+        HopperBlockConfig config = HopperBlockConfig.read(hopperBlock, keys);
+        return config.isRedstoneListToggle() && hopperBlock.isBlockPowered()
+                && hopperBlock.getState() instanceof Container;
+    }
+
+    public static boolean isRedstonePoweredTransferActive(Block hopperBlock, HopperKeys keys,
+                                                          XLRHopperConfig pluginConfig) {
+        if (hopperBlock == null || pluginConfig == null || !pluginConfig.isRedstoneToggleEnabled()) {
+            return false;
+        }
+        HopperBlockConfig config = HopperBlockConfig.read(hopperBlock, keys);
+        return config.isRedstoneListToggle() && hopperBlock.isBlockPowered();
+    }
+
+    private static boolean tryPushBelow(Block hopperBlock, Inventory hopperInv, HopperTemplate template,
+                                        HopperKeys keys, RedstoneTransferContext context) {
+        Block below = hopperBlock.getRelative(BlockFace.DOWN);
+        Inventory belowInv = HopperContainerUtil.getContainerInventory(below);
+        if (belowInv == null) {
+            return false;
+        }
+        Set<Integer> reserved = context != null && context.reserved() != null ? context.reserved() : Set.of();
+        for (int i = 0; i < hopperInv.getSize(); i++) {
+            if (reserved.contains(i)) {
+                continue;
+            }
+            ItemStack slot = hopperInv.getItem(i);
+            if (slot == null || slot.getType().isAir() || !template.allows(slot, hopperBlock, keys)) {
+                continue;
+            }
+            if (context != null && shouldHoldForAutomation(hopperBlock, template, keys, slot, context)) {
+                continue;
+            }
+            ItemStack one = slot.clone();
+            one.setAmount(1);
+            int amountBefore = slot.getAmount();
+            HashMap<Integer, ItemStack> leftover = belowInv.addItem(one);
+            if (!leftover.isEmpty()) {
+                continue;
+            }
+            int expectedAfter = amountBefore - 1;
+            if (expectedAfter <= 0) {
+                hopperInv.setItem(i, null);
+            } else {
+                ItemStack updated = slot.clone();
+                updated.setAmount(expectedAfter);
+                hopperInv.setItem(i, updated);
+            }
+            ItemStack verify = hopperInv.getItem(i);
+            int actualAfter = verify == null || verify.getType().isAir() ? 0 : verify.getAmount();
+            if (actualAfter != expectedAfter) {
+                hopperInv.setItem(i, slot);
+                belowInv.removeItem(one);
+                HopperContainerUtil.syncContainer(below);
+                HopperContainerUtil.syncContainer(hopperBlock);
+                continue;
+            }
+            HopperContainerUtil.syncContainer(below);
+            return true;
+        }
+        return false;
     }
 
     private static boolean tryPickupGround(Block hopperBlock, Inventory hopperInv, HopperTemplate template,
-                                           HopperKeys keys, int maxPickup) {
-        if (maxPickup <= 0 || !hasHopperSpace(hopperInv)) {
+                                           HopperKeys keys) {
+        if (!hasHopperSpace(hopperInv)) {
             return false;
         }
         Collection<Entity> nearby = hopperBlock.getWorld().getNearbyEntities(
@@ -150,6 +241,21 @@ public final class HopperRedstoneTransferService {
             }
         }
         return false;
+    }
+
+    private static boolean shouldHoldForAutomation(Block hopperBlock, HopperTemplate template, HopperKeys keys,
+                                                   ItemStack stack, RedstoneTransferContext context) {
+        if (context.pluginConfig() == null) {
+            return false;
+        }
+        if (template.isAutoCraftEnabled() && context.pluginConfig().isAutoCraftEnabled()
+                && context.craftService() != null
+                && context.craftService().shouldHoldOutbound(hopperBlock, template, keys, stack)) {
+            return true;
+        }
+        return template.isAutoSmeltEnabled() && context.pluginConfig().isAutoSmeltEnabled()
+                && context.smeltService() != null
+                && context.smeltService().shouldHoldOutbound(hopperBlock, template, keys, stack);
     }
 
     public static int resolveMaxItem(Block hopperBlock, HopperKeys keys, UpdateConfig updateConfig) {
