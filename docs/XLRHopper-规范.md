@@ -23,16 +23,17 @@ XLRHopper 为高级漏斗传输插件。玩家可创建**过滤模板**，在模
 
 | 指令 | 权限节点 | 说明 |
 |------|----------|------|
-| `/xlrhopper create mode <名称>` | `xlrhopper.create.mode` | 创建名为 `<名称>` 的模板（默认启用该模板、黑名单），并打开「模板设置」 |
-| `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode` | 编辑已有模板，打开「模板设置」 |
-| `/xlrhopper mode` | `xlrhopper.mode` | 打开「漏斗模板」列表 GUI |
-| `/xlrhopper give <玩家\|%player%> <等级ID> [数量]` | `xlrhopper.give` | 给予指定等级的漏斗物品（数量缺省 1）；`%player%` 表示执行者本人（仅玩家执行时） |
+| `/xlrhopper create mode <名称>` | `xlrhopper.create.mode`（**default: true**） | 创建名为 `<名称>` 的模板（默认启用该模板、黑名单），并打开「模板设置」 |
+| `/xlrhopper edit mode <名称>` | `xlrhopper.edit.mode`（**default: true**） | 编辑已有模板，打开「模板设置」 |
+| `/xlrhopper mode` | `xlrhopper.mode`（**default: true**） | 打开「漏斗模板」列表 GUI |
+| `/xlrhopper give <玩家\|%player%> <等级ID> [数量]` | `xlrhopper.give`（**default: op**） | 给予指定等级的漏斗物品（数量缺省 1）；`%player%` 表示执行者本人（仅玩家执行时） |
 | `/xlrhopper help` | `xlrhopper.help`（**default: true**） | 输出 `config.yml` → `Command.help` 多行文案（玩家与控制台均可） |
-| `/xlrhopper reload` | `xlrhopper.admin` | 重载 `config.yml` + `Gui.yml` + `Message.yml` + `Update.yml`、从 `shan.db` 重读模板、异步重登记已加载区块漏斗（玩家与控制台均可）；成功提示读 `Command.reload`（`%status%` = 等级种数） |
+| `/xlrhopper reload` | `xlrhopper.admin`（**default: op**） | 重载 `config.yml` + `Gui.yml` + `Message.yml` + `Update.yml`、从 `shan.db` 重读模板、异步重登记已加载区块漏斗（玩家与控制台均可）；成功提示读 `Command.reload`（`%status%` = 等级种数） |
 
 - 根命令 `xlrhopper` 在 `plugin.yml` 注册；子命令在代码内解析。已移除的 `box` / `create box` 子命令会提示新用法。
-- 各子命令在代码内分别校验权限。
-- 无权限时发送对应拒绝提示（硬编码）。
+- **`xlrhopper.admin`** 为父权限，`children` 包含 `help`、`mode`、`create.mode`、`edit.mode`、`give`；持有 admin 即拥有全部子权限（含 `reload`，代码直接校验 admin）。
+- 普通玩家默认拥有：`help`、`mode`、`create.mode`、`edit.mode`；`give` 与 `reload` 默认仅 OP / admin。
+- 各子命令在代码内分别校验权限；无权限时发送对应拒绝提示（硬编码）。
 
 ---
 

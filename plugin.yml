@@ -14,21 +14,27 @@ commands:
     usage: /xlrhopper <help|mode|create mode <名称>|edit mode <名称>|give <玩家|%player%> <等级> [数量]|reload>
 
 permissions:
+  xlrhopper.admin:
+    description: XLRHopper 管理员（拥有全部权限，含 reload / give）
+    default: op
+    children:
+      xlrhopper.help: true
+      xlrhopper.mode: true
+      xlrhopper.create.mode: true
+      xlrhopper.edit.mode: true
+      xlrhopper.give: true
   xlrhopper.help:
     description: 查看 XLRHopper 帮助 (help)
     default: true
-  xlrhopper.admin:
-    description: 重载插件配置（reload）
-    default: op
-  xlrhopper.create.mode:
-    description: 创建过滤模板 (create mode)
-    default: op
-  xlrhopper.edit.mode:
-    description: 编辑已有过滤模板 (edit mode)
-    default: op
   xlrhopper.mode:
     description: 打开漏斗模板列表 (mode)
-    default: op
+    default: true
+  xlrhopper.create.mode:
+    description: 创建过滤模板 (create mode)
+    default: true
+  xlrhopper.edit.mode:
+    description: 编辑已有过滤模板 (edit mode)
+    default: true
   xlrhopper.give:
     description: 给予等级漏斗 (give)
     default: op
