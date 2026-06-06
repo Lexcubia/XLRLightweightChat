@@ -324,6 +324,7 @@ public final class TemplateRepository {
             flushTask = null;
         }
         synchronized (saveLock) {
+            logger.info("[XLRHopper] flushSync 开始 force=" + force + " dataLoaded=" + dataLoaded);
             if (!force && !dataLoaded) {
                 logger.warning("[XLRHopper] flushSync 跳过：模板数据尚未加载完成");
                 logStorageDebug("flushSync 跳过：数据未加载");
@@ -333,7 +334,12 @@ public final class TemplateRepository {
             logStorageDebug("flushSync 开始" + (force ? "（强制）" : ""));
             dirty = false;
             try {
-                saveAllUnlocked(manager, force);
+                boolean saved = saveAllUnlocked(manager, force);
+                if (saved) {
+                    logger.info("[XLRHopper] flushSync 完成，已写入 shan.db");
+                } else {
+                    logger.warning("[XLRHopper] flushSync 未完成：saveAll 被跳过或失败");
+                }
                 logStorageDebug("flushSync 完成");
             } catch (Exception e) {
                 logger.severe("[XLRHopper] 保存 shan.db 失败: " + e.getMessage());

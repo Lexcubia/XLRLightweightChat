@@ -90,6 +90,10 @@ public class Shan extends JavaPlugin {
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
+        if (!getConfig().contains("XLRHopper.debug-template-storage")) {
+            getLogger().warning("[XLRHopper] config.yml 缺少 XLRHopper.debug-template-storage，"
+                    + "当前使用默认值 true；建议在 plugins/XLRHopper/config.yml 添加该项后执行 /xlrhopper reload");
+        }
         pluginConfig = new XLRHopperConfig(this);
         String configVersion = pluginConfig.getConfigVersion();
         String pluginVersion = getDescription().getVersion();
