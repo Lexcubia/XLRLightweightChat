@@ -10,34 +10,34 @@ levels:
     # 唯一名称
     copper:
         # 展示名称
-        name: "&a铜漏斗"
+        name: "&e铜漏斗"
         # 8的倍数
         transfer-tick: 16
         # 每次转移1个物品
         max-item: 1
         # 描述
         Lore:
-            - "&a传输间隔: 16 Tick"
-            - "&a传输速度: 1 个物品"
+            - "&2● &7传输间隔: &616 &7Tick"
+            - "&2● &7传输速度: &61 &7个物品"
     iron:
-        name: "&a铁漏斗"
+        name: "&e铁漏斗"
         transfer-tick: 16
         # 每次转移2个物品
         max-item: 2
         Lore:
-            - "&a传输间隔: 16 Tick"
-            - "&a传输速度: 2 个物品"
+            - "&2● &7传输间隔: &616 &7Tick"
+            - "&2● &7传输速度: &62 &7个物品"
     gold:
-        name: "&a金漏斗"
+        name: "&e金漏斗"
         transfer-tick: 16
         max-item: 4
         Lore:
-            - "&a传输间隔: 16 Tick"
-            - "&a传输速度: 4 个物品"
+            - "&2● &7传输间隔: &616 &7Tick"
+            - "&2● &7传输速度: &64 &7个物品"
     diamond:
-        name: "&a钻石漏斗"
+        name: "&e钻石漏斗"
         transfer-tick: 8
         max-item: 8
         Lore:
-            - "&a传输间隔: 8 Tick"
-            - "&a传输速度: 8 个物品"
+            - "&2● &7传输间隔: &68 &7Tick"
+            - "&2● &7传输速度: &68 &7个物品"

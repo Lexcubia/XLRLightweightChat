@@ -1,7 +1,7 @@
 # 模板设置Gui
 TemplateSet:
     # Gui标题名称
-    name: "&e模板设置: &b%modename%"
+    name: "&6模板设置: &f%modename%"
     # 没有被占用时填充物品
     Filler:
         # 填充物品ID
@@ -16,101 +16,126 @@ TemplateSet:
         name: "&e自动合成"
         # 该物品描述
         Lore:
-            - "&a当前状态: %toggle%"
-            - "&7左键 开/关"
-            - "&7右键 打开配置界面"
+            - "&3● &7左键点击 开启/关闭"
+            - "&3● &7右键打开 合成仓库"
+            - "&2● &7将你要合成的物品放入合成仓库里面"
+            - "&2● &7将自动合成你放置仓库里面的物品"
+            - "&2● &6自动合成&7和&6自动熔炼&7只能二选一"
+            - ""
+            - "&3● &7当前状态: %toggle%"
     Break:
         slot: 12
         material: GRASS_BLOCK
         name: "&e自动销毁"
         Lore:
-            - "&a当前状态: %toggle%"
-            - "&7左键或右键点击切换"
+            - "&3● &7左键点击 开启/关闭"
+            - "&2● &7漏斗会吸取所有的物品"
+            - "&2● &7不符合的物品将自动销毁"
+            - ""
+            - "&3● &7当前状态: %toggle%"
     FilterItem:
         slot: 14
         material: CHEST
         name: "&e过滤物品"
         Lore:
-            - "&a将过滤你添加的物品"
+            - "&3● &7左键点击 进入过滤仓库"
+            - "&2● &7将你要过滤的物品放进即可"
+            - "&2● &7此选项与&6过滤模式&7互相绑定"
     FilterMode:
         slot: 16
         material: REDSTONE_BLOCK
         name: "&e过滤模式"
         Lore:
-            - "&7仅作用于过滤物品"
-            - "&8当前模式: %filtermode%"
+            - "&3● &7左键点击 切换模式"
+            - "&3● &7白名单: &6过滤仓库添加以外的物品"
+            - "&3● &7黑名单: &6过滤仓库添加的物品"
+            - "&2● &7此选项与&6过滤物品&7互相绑定"
+            - ""
+            - "&3● &7当前模式: %filtermode%"
     FilterEnchant:
         slot: 28
         material: ENCHANTED_BOOK
         name: "&e附魔过滤"
         Lore:
-            - "&7点击进入附魔属性过滤"
+            - "&3● &7左键打开 过滤菜单"
+            - "&2● &7在里面选择你要过滤的附魔属性"
+            - "&2● &7低于设置的附魔属性都会被过滤"
     FilterDurability:
         slot: 30
         material: EMERALD
         name: "&e耐久过滤"
         # 物品未设置前描述
         Lore:
-            - "&7点击设置最低剩余耐久"
+            - "&2● &7点击设置最低剩余耐久"
+            - "&2● &7低于你设置的耐久度都会被过滤"
         # 物品设置好描述
         SetLore:
-            - "&7点击设置最低剩余耐久"
-            - "&a过滤耐久度: &b%Durability%"
+            - "&2● &7最低耐久度: &6%Durability%"
     AutoSmelt:
         slot: 32
         material: FURNACE
         name: "&e自动熔炼"
         Lore:
-            - "&a当前状态: %toggle%"
-            - "&7左键 开/关"
-            - "&7右键 打开配置界面"
+            - "&3● &7左键点击 开启/关闭"
+            - "&3● &7右键打开 熔炼界面"
+            - "&2● &7将你要熔炼的物品放入仓库里面"
+            - "&2● &7将自动熔炼成你放置仓库里面的物品"
+            - "&2● &6自动合成&7和&6自动熔炼&7只能二选一"
+            - ""
+            - "&3● &7当前状态: %toggle%"
     Batch:
         slot: 34
         material: ENDER_EYE
         name: "&e批量设置"
         Lore:
-            - "&7点击后为漏斗批量套用本模板"
+            - "&3● &7左键点击 批量设置模式"
+            - "&2● &7进人模式后，点击的漏斗会套用该模板"
 
 # 漏斗模板Gui
 HopperTemplateList:
-    name: "&6漏斗模板"
+    name: "&6漏斗模板仓库"
     # 未开启时显示
     Template:
         material: NAME_TAG
-        name: "&a%Template%"
+        name: "&6模板名称: &f%Template%"
         Lore:
-            - "&7左键 开/关"
-            - "&7右键 编辑"
-            - "&a当前模式: %toggle%"
+            - "&3● &7左键点击 开启/关闭"
+            - "&3● &7右键点击 编辑模式"
+            - ""
+            - "&3● &7当前模式: %toggle%"
     # 开启后显示
     SetTemplate:
         material: NAME_TAG
         enchant: true
-        name: "&a%Template%"
+        name: "&6模板名称: &f%Template%"
         Lore:
-            - "&7左键 开/关"
-            - "&7右键 编辑"
-            - "&a当前模式: %toggle%"
+            - "&3● &7左键点击 开启/关闭"
+            - "&3● &7右键点击 编辑模式"
+            - ""
+            - "&3● &7当前模式: %toggle%"
 # 过滤附魔属性Gui
 FilterEnchantGui:
-    name: "&6过滤附魔属性"
+    name: "&6附魔属性"
     # 未设置前显示Gui
     Enchant:
         material: BOOK
         name: "&e%Enchant%"
         Lore:
-            - "&7左键 设置最低等级"
+            - "&3● &7左键点击 设置最低属性"
     # 设置后显示Gui
     SetEnchant:
         material: ENCHANTED_BOOK
         name: "&e%Enchant%"
         Lore:
-            - "&a当前过滤: &e%Enchant% %EnchantLevel%"
-            - "&7左键 修改等级"
-            - "&7右键 清除过滤"
+            - "&3● &7左键点击 重新设置"
+            - "&3● &7右键点击 清除设置"
+            - ""
+            - "&3● &7过滤属性: &6%Enchant%"
+            - "&3● &7最低等级: &6%EnchantLevel%"
+            - "&2● &7低于设置等级的附魔都会被过滤"
 # 单独对漏斗设置Gui
 HopperSetting:
-    name: "&e漏斗设置"
+    name: "&6单漏斗设置"
     Filler:
         material: BLACK_STAINED_GLASS_PANE
     Redstone:
@@ -118,23 +143,29 @@ HopperSetting:
         material: REDSTONE
         name: "&e红石开关名单"
         Lore:
-            - "&a当前状态: %toggle%"
-            - "&7充能=白名单 未充能=黑名单"
-            - "&7左键或右键点击切换"
+            - "&3● &7左键点击 开启/关闭 此功能"
+            - "&3● &7红石激活: &6白名单模式"
+            - "&3● &7红石关闭: &6黑名单模式"
+            - ""
+            - "&3● &7当前状态: %toggle%"
     Reverse:
         slot: 12
         material: GOLD_INGOT
         name: "&e反向吸取"
         Lore:
-            - "&a当前状态: %toggle%"
-            - "&7左键或右键点击切换"
+            - "&3● &7左键点击 开启/关闭"
+            - "&2● &7开启后漏斗会从下往上传输"
+            - ""
+            - "&3● &7当前状态: %toggle%"
     FloatOverlay:
         slot: 14
         material: EMERALD
-        name: "&e悬浮开关"
+        name: "&e全息开关"
         Lore:
-            - "&a当前状态: %toggle%"
-            - "&7左键或右键点击切换"
+            - "&3● &7左键点击 开启/关闭"
+            - "&2● &7开启后会显示漏斗详细信息"
+            - ""
+            - "&3● &7当前状态: %toggle%"
 
 # 自动合成Gui
 Auto-Crafting:
@@ -147,14 +178,14 @@ Auto-Furnace:
 # 过滤的物品Gui
 Filter-Item:
     rows: 6
-    name: "&6过滤的物品"
+    name: "&6过滤物品"
 
 # 开和关变量（替换 Lore 中 %toggle%）
 toggleon: "&a开启"
 toggleoff: "&c关闭"
 # 白名单和黑名单切换变量（替换 Lore 中 %filtermode%）
-filtermodeon: "&a3名单模式"
-filtermodeoff: "&c4名单模式"
+filtermodeon: "&a白名单模式"
+filtermodeoff: "&c黑名单模式"
 
 # 附魔名称对照表
 enchant-names:

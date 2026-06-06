@@ -42,19 +42,18 @@ Hologram:
     # 全息显示间距
     line-height: 0.3
     # 全息显示高度
-    height: 1
+    height: 3.1
     # 玩家距离多少格内才会更新全息显示
     update-range: 48
     # 玩家距离多少格内才能看见全息显示
     display-range: 48
     # 全息显示文字
     hologram-lines:
-        - "%item1%%item2%%item3%%item4%%item5%"
-        - "&a漏斗等级: %hoppername%"
-        - "&a当前使用模板: %template%"
-        - "&7模式: %mode%"
-        - "&7过滤: %enchan% 种附魔"
-        - "&7最低耐久度: %durability%"
+        - "&7漏斗等级: &6%hoppername%"
+        - "&7使用模板: &6%template%"
+        - "&7过滤模式: &6%mode%"
+        - "&7过滤附魔: &6%enchan% &7种附魔"
+        - "&7最低耐久度: &6%durability%"
 
 # 模板开关 true为开启，false为关闭
 Gui:
@@ -92,8 +91,13 @@ Setting:
 # 命令相关
 Command:
     reload:
-        - "&a配置已重载"
-        - "&a加载了 %status% 种漏斗"
+        - "&7配置文件已重载"
+        - "&7加载了 &6%status% &7种漏斗"
     help:
-        - "&7=====&a[XLRHopper]&7====="
-        - "&7"
+        - "&6===============[XLRHopper]==============="
+        - "&7- /xlrhopper help &6帮助指令"
+        - "&7- /xlrhopper create mode <模板名> &6创建模板"
+        - "&7- /xlrhopper edit mode <模板名> &6编辑模板"
+        - "&7- /xlrhopper give <玩家> <漏斗名> <数量> &6给予玩家一个高级漏斗"
+        - "&7- /xlrhopper mode &6打开模板仓库"
+        - "&7- /xlrhopper reload &6重载插件"
