@@ -149,14 +149,19 @@ public class Shan extends JavaPlugin {
 
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
-                templateRepository.loadInto(templateManager);
+                TemplateRepository.LoadSnapshot snapshot = templateRepository.captureSnapshot();
+                Bukkit.getScheduler().runTask(this, () -> {
+                    try {
+                        templateRepository.applySnapshot(templateManager, snapshot);
+                    } catch (Exception e) {
+                        getLogger().severe("[XLRHopper] 加载 shan.db 失败: " + e.getMessage());
+                    }
+                    templateRepository.startPeriodicSave(templateManager);
+                    Bukkit.getConsoleSender().sendMessage(ChatColor.GREEN + "漏斗模板数据已加载完成");
+                });
             } catch (Exception e) {
-                getLogger().severe("[XLRHopper] 加载 shan.db 失败: " + e.getMessage());
+                getLogger().severe("[XLRHopper] 读取 shan.db 失败: " + e.getMessage());
             }
-            Bukkit.getScheduler().runTask(this, () -> {
-                templateRepository.startPeriodicSave(templateManager);
-                Bukkit.getConsoleSender().sendMessage(ChatColor.GREEN + "漏斗模板数据已加载完成");
-            });
         });
 
         PluginCommand cmd = getCommand("xlrhopper");
@@ -237,10 +242,24 @@ public class Shan extends JavaPlugin {
         });
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
-                templateRepository.loadInto(templateManager);
-                asyncReindexLoadedChunks();
+                TemplateRepository.LoadSnapshot snapshot = templateRepository.captureSnapshot();
+                Bukkit.getScheduler().runTask(this, () -> {
+                    try {
+                        templateRepository.applySnapshot(templateManager, snapshot);
+                        asyncReindexLoadedChunks();
+                    } catch (Exception e) {
+                        getLogger().severe("[XLRHopper] 模板数据库 reload 失败: " + e.getMessage());
+                        if (sender != null) {
+                            if (sender instanceof org.bukkit.entity.Player) {
+                                sender.sendMessage(messageConfig.message("reload-fail"));
+                            } else {
+                                sender.sendMessage(messageConfig.message("reload-console-only-fail"));
+                            }
+                        }
+                    }
+                });
             } catch (Exception e) {
-                getLogger().severe("[XLRHopper] 模板数据库 reload 失败: " + e.getMessage());
+                getLogger().severe("[XLRHopper] 模板数据库 reload 读取失败: " + e.getMessage());
                 Bukkit.getScheduler().runTask(this, () -> {
                     if (sender != null) {
                         if (sender instanceof org.bukkit.entity.Player) {

@@ -786,12 +786,24 @@ public class Gui implements Listener {
         int loaded = 0;
         HopperTemplate template = templateManager.getTemplate(player.getUniqueId(), templateName);
         if (template != null) {
+            int reloaded = switch (type) {
+                case FILTER_ITEMS -> templateRepository.reloadItemListIfEmpty(player.getUniqueId(), templateName,
+                        "filter", template.getFilterPrototypes());
+                case AUTO_CRAFT -> templateRepository.reloadItemListIfEmpty(player.getUniqueId(), templateName,
+                        "auto-craft", template.getAutoCraftTargets());
+                case AUTO_SMELT -> templateRepository.reloadItemListIfEmpty(player.getUniqueId(), templateName,
+                        "auto-smelt", template.getAutoSmeltOutputs());
+                default -> 0;
+            };
             loaded = switch (type) {
                 case FILTER_ITEMS -> template.getFilterPrototypes().size();
                 case AUTO_CRAFT -> template.getAutoCraftTargets().size();
                 case AUTO_SMELT -> template.getAutoSmeltOutputs().size();
                 default -> 0;
             };
+            if (reloaded > 0) {
+                logStorageTrace("打开前 DB 补载 type=" + type + " template=" + templateName + " 条数=" + reloaded);
+            }
             filler.fill(inv, template);
         }
         logStorageTrace("存储 GUI 打开 type=" + type + " player=" + player.getName()
