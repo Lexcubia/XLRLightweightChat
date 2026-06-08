@@ -304,22 +304,21 @@ public class Shan extends JavaPlugin implements Listener {
         
         // 取消默认消息
         event.setCancelled(true);
-        
-        String format = resolveChatFormat(player);
-        if (format == null) {
-            // 如果连默认格式都没有，直接发送原始消息
-            runOnMainThread(() -> broadcastMessage(player.getName(), message));
-            return;
-        }
 
-        final String chatFormat = format;
         runOnMainThread(() -> {
+            String format = resolveChatFormat(player);
+            if (format == null) {
+                // 没有任何授权格式时，回退为安全的普通聊天格式。
+                broadcastMessage(player.getName(), message);
+                return;
+            }
             try {
-                BaseComponent[] components = processFormatToComponent(chatFormat, player, message);
+                BaseComponent[] components = processFormatToComponent(format, player, message);
                 broadcastProcessedMessage(components);
             } catch (Throwable t) {
                 getLogger().severe("[XLRLightweightChat] 聊天发送失败: " + t.getMessage());
                 t.printStackTrace();
+                broadcastMessage(player.getName(), message);
             }
         });
     }
@@ -333,17 +332,7 @@ public class Shan extends JavaPlugin implements Listener {
     }
 
     private String resolveChatFormat(Player player) {
-        String format = findMatchingFormat(player);
-        if (format != null) {
-            return format;
-        }
-        if (player.hasPermission("xlr.chat.default")) {
-            format = config.getString("Chat.default");
-            if (format != null) {
-                return format;
-            }
-        }
-        return getDefaultFormat();
+        return PermissionGuards.resolveChatFormat(getConfiguredChatFormats(), player::hasPermission);
     }
 
     private static String colorize(String text) {
@@ -372,53 +361,24 @@ public class Shan extends JavaPlugin implements Listener {
         return result;
     }
 
-    /**
-     * 查找匹配的聊天格式（按优先级从上往下检查）
-     * 配置文件中位置靠上的格式优先级更高
-     * 找到第一个有权限的格式后立即返回，不再检查后续
-     */
-    private String findMatchingFormat(Player player) {
+    private Map<String, String> getConfiguredChatFormats() {
+        Map<String, String> formats = new LinkedHashMap<>();
         if (!config.contains("Chat")) {
-            return null;
+            return formats;
         }
         
         ConfigurationSection section = config.getConfigurationSection("Chat");
         if (section == null) {
-            return null;
+            return formats;
         }
         
-        Set<String> formats = section.getKeys(false);
-        for (String formatName : formats) {
-            String permission = "xlr.chat." + formatName;
-            if (player.hasPermission(permission)) {
-                return section.getString(formatName);
+        for (String formatName : section.getKeys(false)) {
+            String format = section.getString(formatName);
+            if (format != null) {
+                formats.put(formatName, format);
             }
         }
-        
-        return null;
-    }
-
-    /**
-     * 获取默认聊天格式（配置中的第一个格式）
-     */
-    private String getDefaultFormat() {
-        if (!config.contains("Chat")) {
-            return null;
-        }
-        
-        ConfigurationSection section = config.getConfigurationSection("Chat");
-        if (section == null) {
-            return null;
-        }
-        
-        Set<String> formats = section.getKeys(false);
-        if (formats.isEmpty()) {
-            return null;
-        }
-        
-        // 返回第一个格式
-        String firstFormat = formats.iterator().next();
-        return section.getString(firstFormat);
+        return formats;
     }
 
     public String getItemDisplayName(org.bukkit.Material material) {
@@ -844,17 +804,39 @@ public class Shan extends JavaPlugin implements Listener {
      * 获取玩家当前穿戴的称号
      */
     public String getPlayerCurrentTitle(Player player) {
-        return playerCurrentTitles.get(player.getUniqueId());
+        UUID uuid = player.getUniqueId();
+        String currentTitle = playerCurrentTitles.get(uuid);
+        String permittedTitle = PermissionGuards.resolvePermittedTitle(
+                currentTitle, playerTitles, this::processTitleColors,
+                permission -> player.hasPermission(permission));
+
+        if (permittedTitle == null) {
+            if (currentTitle != null) {
+                playerCurrentTitles.remove(uuid);
+                savePlayerData();
+            }
+            return null;
+        }
+        if (!permittedTitle.equals(currentTitle)) {
+            playerCurrentTitles.put(uuid, permittedTitle);
+            savePlayerData();
+        }
+        return permittedTitle;
     }
 
     /**
      * 设置玩家当前穿戴的称号
      */
     public void setPlayerCurrentTitle(Player player, String title) {
+        UUID uuid = player.getUniqueId();
+        String previousTitle;
         if (title == null) {
-            playerCurrentTitles.remove(player.getUniqueId());
+            previousTitle = playerCurrentTitles.remove(uuid);
         } else {
-            playerCurrentTitles.put(player.getUniqueId(), title);
+            previousTitle = playerCurrentTitles.put(uuid, title);
+        }
+        if (!Objects.equals(previousTitle, title)) {
+            savePlayerData();
         }
     }
 
@@ -870,16 +852,7 @@ public class Shan extends JavaPlugin implements Listener {
      * 根据玩家当前穿戴的称号文本解析配置 ID（需与配置名同样经过 {@link #processTitleColors} 再比较）。
      */
     private int resolveTitleId(String wornTitle) {
-        if (wornTitle == null || wornTitle.isEmpty()) {
-            return -1;
-        }
-        String wornDisplay = processTitleColors(wornTitle);
-        for (Map.Entry<Integer, String> entry : playerTitles.entrySet()) {
-            if (processTitleColors(entry.getValue()).equals(wornDisplay)) {
-                return entry.getKey();
-            }
-        }
-        return -1;
+        return PermissionGuards.resolveTitleId(wornTitle, playerTitles, this::processTitleColors);
     }
 
     private String applyGradientPlaceholders(String text) {
