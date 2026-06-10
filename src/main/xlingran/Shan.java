@@ -333,17 +333,7 @@ public class Shan extends JavaPlugin implements Listener {
     }
 
     private String resolveChatFormat(Player player) {
-        String format = findMatchingFormat(player);
-        if (format != null) {
-            return format;
-        }
-        if (player.hasPermission("xlr.chat.default")) {
-            format = config.getString("Chat.default");
-            if (format != null) {
-                return format;
-            }
-        }
-        return getDefaultFormat();
+        return PermissionGuards.resolveChatFormat(config.getConfigurationSection("Chat"), player::hasPermission);
     }
 
     private static String colorize(String text) {
@@ -370,55 +360,6 @@ public class Shan extends JavaPlugin implements Listener {
             result = result.replace(entry.getKey(), entry.getValue());
         }
         return result;
-    }
-
-    /**
-     * 查找匹配的聊天格式（按优先级从上往下检查）
-     * 配置文件中位置靠上的格式优先级更高
-     * 找到第一个有权限的格式后立即返回，不再检查后续
-     */
-    private String findMatchingFormat(Player player) {
-        if (!config.contains("Chat")) {
-            return null;
-        }
-        
-        ConfigurationSection section = config.getConfigurationSection("Chat");
-        if (section == null) {
-            return null;
-        }
-        
-        Set<String> formats = section.getKeys(false);
-        for (String formatName : formats) {
-            String permission = "xlr.chat." + formatName;
-            if (player.hasPermission(permission)) {
-                return section.getString(formatName);
-            }
-        }
-        
-        return null;
-    }
-
-    /**
-     * 获取默认聊天格式（配置中的第一个格式）
-     */
-    private String getDefaultFormat() {
-        if (!config.contains("Chat")) {
-            return null;
-        }
-        
-        ConfigurationSection section = config.getConfigurationSection("Chat");
-        if (section == null) {
-            return null;
-        }
-        
-        Set<String> formats = section.getKeys(false);
-        if (formats.isEmpty()) {
-            return null;
-        }
-        
-        // 返回第一个格式
-        String firstFormat = formats.iterator().next();
-        return section.getString(firstFormat);
     }
 
     public String getItemDisplayName(org.bukkit.Material material) {
@@ -844,18 +785,32 @@ public class Shan extends JavaPlugin implements Listener {
      * 获取玩家当前穿戴的称号
      */
     public String getPlayerCurrentTitle(Player player) {
-        return playerCurrentTitles.get(player.getUniqueId());
+        UUID playerId = player.getUniqueId();
+        String currentTitle = playerCurrentTitles.get(playerId);
+        String permittedTitle = PermissionGuards.resolvePermittedTitle(currentTitle, this::resolveTitleId,
+                player::hasPermission);
+        if (currentTitle != null && permittedTitle == null) {
+            playerCurrentTitles.remove(playerId);
+            savePlayerData();
+        }
+        return permittedTitle;
     }
 
     /**
      * 设置玩家当前穿戴的称号
      */
     public void setPlayerCurrentTitle(Player player, String title) {
-        if (title == null) {
-            playerCurrentTitles.remove(player.getUniqueId());
-        } else {
-            playerCurrentTitles.put(player.getUniqueId(), title);
+        UUID playerId = player.getUniqueId();
+        String previousTitle = playerCurrentTitles.get(playerId);
+        if (Objects.equals(previousTitle, title)) {
+            return;
         }
+        if (title == null) {
+            playerCurrentTitles.remove(playerId);
+        } else {
+            playerCurrentTitles.put(playerId, title);
+        }
+        savePlayerData();
     }
 
     /**
