@@ -315,7 +315,10 @@ public class GuiManager implements Listener {
 
         event.setCancelled(true); // 禁止拿取物品
 
-        int slot = event.getSlot();
+        int slot = event.getRawSlot();
+        if (!isTopInventorySlot(slot, topInventory.getSize())) {
+            return;
+        }
 
         // 1. 点击分页按钮（第6行第5格，索引49）
         if (slot == 49) {
@@ -447,7 +450,11 @@ public class GuiManager implements Listener {
     /**
      * 检查是否是称号槽位
      */
-    private boolean isTitleSlot(int slot) {
+    static boolean isTopInventorySlot(int rawSlot, int topInventorySize) {
+        return rawSlot >= 0 && rawSlot < topInventorySize;
+    }
+
+    static boolean isTitleSlot(int slot) {
         // 称号槽位范围：第2-5行，第2-8列（索引10-44，排除边框）
         int row = slot / 9;
         int col = slot % 9;
