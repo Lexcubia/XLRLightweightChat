@@ -675,41 +675,8 @@ public class Shan extends JavaPlugin implements Listener {
         ComponentBuilder builder = new ComponentBuilder();
         
         // 处理称号悬浮提示（在 %player% 之前，通过 TITLE_PART_MARKER 定位）
-        if (needTitleHover && titleId > 0 && title != null) {
-            int titleMarkerIndex = beforePlayer.indexOf(TITLE_PART_MARKER);
-            if (titleMarkerIndex != -1) {
-                String beforeTitle = beforePlayer.substring(0, titleMarkerIndex);
-                if (!beforeTitle.isEmpty()) {
-                    BaseComponent[] beforeComponents = ChatComponents.parseLegacyTextWithHexColors(beforeTitle);
-                    for (BaseComponent component : beforeComponents) {
-                        builder.append(component);
-                    }
-                }
-
-                BaseComponent[] titleComponents = ChatComponents.parseLegacyTextWithHexColors(title);
-                TextComponent titleComponent;
-                if (titleComponents.length > 0 && titleComponents[0] instanceof TextComponent) {
-                    titleComponent = (TextComponent) titleComponents[0];
-                } else {
-                    titleComponent = new TextComponent(title);
-                }
-                if (titleComponents.length > 1) {
-                    for (int i = 1; i < titleComponents.length; i++) {
-                        titleComponent.addExtra(titleComponents[i]);
-                    }
-                }
-
-                List<String> titleLore = playerTitleLore.get(titleId);
-                if (titleLore != null && !titleLore.isEmpty()) {
-                    BaseComponent[] titleHoverComponents = buildHoverComponents(titleLore);
-                    if (titleHoverComponents != null && titleHoverComponents.length > 0) {
-                        titleComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, titleHoverComponents));
-                    }
-                }
-                builder.append(titleComponent);
-                beforePlayer = beforePlayer.substring(titleMarkerIndex + TITLE_PART_MARKER.length());
-            }
-        }
+        beforePlayer = appendTitleMarkerSection(builder, beforePlayer, title, titleId,
+                needTitleHover, player, false);
         
         // 添加 %player% 前面的文本（需要正确解析 16 进制颜色代码）
         if (!beforePlayer.isEmpty()) {
@@ -768,26 +735,78 @@ public class Shan extends JavaPlugin implements Listener {
         builder.append(playerComponent);
         
         if (!afterPlayer.isEmpty()) {
-            appendAfterPlayerSection(builder, afterPlayer, player, chatComponents);
+            appendAfterPlayerSection(builder, afterPlayer, player, chatComponents, title, titleId, needTitleHover);
         }
 
         return builder.create();
     }
 
     private void appendAfterPlayerSection(ComponentBuilder builder, String afterPlayer, Player player,
-                                          BaseComponent[] chatComponents) {
+                                          BaseComponent[] chatComponents, String title, int titleId,
+                                          boolean needTitleHover) {
         int markerIndex = afterPlayer.indexOf(CHAT_PART_MARKER);
         if (markerIndex >= 0 && chatComponents != null) {
             String beforeChat = afterPlayer.substring(0, markerIndex);
             String afterChat = afterPlayer.substring(markerIndex + CHAT_PART_MARKER.length());
-            appendPlainSectionWithChatHover(builder, beforeChat, player);
+            appendPlainSectionWithOptionalTitle(builder, beforeChat, player, title, titleId, needTitleHover);
             for (BaseComponent chatComponent : chatComponents) {
                 builder.append(chatComponent);
             }
-            appendPlainSectionWithChatHover(builder, afterChat, player);
+            appendPlainSectionWithOptionalTitle(builder, afterChat, player, title, titleId, needTitleHover);
             return;
         }
-        appendPlainSectionWithChatHover(builder, afterPlayer, player);
+        appendPlainSectionWithOptionalTitle(builder, afterPlayer, player, title, titleId, needTitleHover);
+    }
+
+    private void appendPlainSectionWithOptionalTitle(ComponentBuilder builder, String section, Player player,
+                                                     String title, int titleId, boolean needTitleHover) {
+        String remaining = appendTitleMarkerSection(builder, section, title, titleId, needTitleHover, player, true);
+        appendPlainSectionWithChatHover(builder, remaining, player);
+    }
+
+    private String appendTitleMarkerSection(ComponentBuilder builder, String section, String title, int titleId,
+                                            boolean needTitleHover, Player player, boolean useChatHoverForPlainText) {
+        if (!needTitleHover || titleId <= 0 || title == null || section == null) {
+            return section;
+        }
+        int titleMarkerIndex = section.indexOf(TITLE_PART_MARKER);
+        if (titleMarkerIndex == -1) {
+            return section;
+        }
+        String beforeTitle = section.substring(0, titleMarkerIndex);
+        if (useChatHoverForPlainText) {
+            appendPlainSectionWithChatHover(builder, beforeTitle, player);
+        } else {
+            for (BaseComponent component : ChatComponents.parseLegacyTextWithHexColors(beforeTitle)) {
+                builder.append(component);
+            }
+        }
+        appendTitleComponentWithHover(builder, title, titleId);
+        return section.substring(titleMarkerIndex + TITLE_PART_MARKER.length());
+    }
+
+    private void appendTitleComponentWithHover(ComponentBuilder builder, String title, int titleId) {
+        BaseComponent[] titleComponents = ChatComponents.parseLegacyTextWithHexColors(title);
+        TextComponent titleComponent;
+        if (titleComponents.length > 0 && titleComponents[0] instanceof TextComponent) {
+            titleComponent = (TextComponent) titleComponents[0];
+        } else {
+            titleComponent = new TextComponent(title);
+        }
+        if (titleComponents.length > 1) {
+            for (int i = 1; i < titleComponents.length; i++) {
+                titleComponent.addExtra(titleComponents[i]);
+            }
+        }
+
+        List<String> titleLore = playerTitleLore.get(titleId);
+        if (titleLore != null && !titleLore.isEmpty()) {
+            BaseComponent[] titleHoverComponents = buildHoverComponents(titleLore);
+            if (titleHoverComponents != null && titleHoverComponents.length > 0) {
+                titleComponent.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, titleHoverComponents));
+            }
+        }
+        builder.append(titleComponent);
     }
 
     private void appendPlainSectionWithChatHover(ComponentBuilder builder, String section, Player player) {
