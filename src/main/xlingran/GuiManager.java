@@ -315,7 +315,10 @@ public class GuiManager implements Listener {
 
         event.setCancelled(true); // 禁止拿取物品
 
-        int slot = event.getSlot();
+        int slot = event.getRawSlot();
+        if (slot < 0 || slot >= topInventory.getSize()) {
+            return;
+        }
 
         // 1. 点击分页按钮（第6行第5格，索引49）
         if (slot == 49) {
